@@ -2,13 +2,23 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   approveLearningProposal,
+  captureActiveWindowScreenshot,
+  captureDesktopScreenshot,
+  captureDesktopAppWindowScreenshot,
+  captureGlobalSelectionScreenshot,
+  captureScreenRectScreenshot,
+  captureScreenRegionScreenshot,
+  controlDesktopAppWindow,
   createBuildHandoffArtifact,
   createNotionNote,
   createNotionTask,
+  extractImageOcrText,
   extractPdfText,
+  focusDesktopApp,
   generateLearningProposal,
   getBrowserAliases,
   getGoogleCalendarStatus,
+  getDesktopAppWindowStatus,
   getLearnedIntents,
   getExecutorStatus,
   getLocalSpeechOutputStatus,
@@ -29,7 +39,10 @@ import {
   getVoiceCorrections,
   getWakeModeStatus,
   interpretConversationWithOllama,
+  launchDesktopApp,
   launchStudySetup,
+  openNamedFolder,
+  openScreenshotsFolder,
   pingJarvis,
   rejectLearningProposal,
   saveBrowserAliasEntry,
@@ -43,6 +56,7 @@ import {
   saveSpotifyStatus,
   saveVoiceCorrectionEntry,
   saveWakeModeStatus,
+  runJarvisProjectChecks,
   searchGoogle,
   speakLocalText,
   transcribeLocalAudio,
@@ -50,6 +64,8 @@ import {
   updateLearningProposal,
   launchExecutorHandoff,
   getSpotifyStatus,
+  readClipboardText,
+  writeClipboardText,
 } from "./services/jarvisApi";
 import { startLocalAudioRecorder } from "./services/localAudioRecorder";
 import {
@@ -165,6 +181,11 @@ const skills: Skill[] = [
     description: "Read unread mail and search your inbox through Gmail.",
     status: "ready",
   },
+  {
+    name: "Desktop Control",
+    description: "Launch apps, open common folders, and capture screenshots.",
+    status: "ready",
+  },
 ];
 
 const quickPrompts = [
@@ -194,6 +215,24 @@ const quickPrompts = [
   "Reopen task 1",
   "Show done tasks",
   "Create daily brief",
+  "Open VS Code",
+  "Open downloads folder",
+  "Take a screenshot",
+  "Show clipboard",
+  "Copy meeting notes to clipboard",
+  "Search clipboard on Google",
+  "Save clipboard to Notion",
+  "Switch to Spotify",
+  "Create desktop project coding",
+  "Create coding workspace template",
+  "Create school workspace template",
+  "Open coding workspace",
+  "Select OCR area",
+  "Summarize screen",
+  "Explain this error",
+  "Turn this screen into flashcards",
+  "Show OCR watches",
+  "Show OCR history",
 ];
 
 const skillAutopilotAvailable = false;
@@ -217,6 +256,15 @@ type PersonMemoryRecord = {
   birthdayLabel: string;
   month: number;
   day: number;
+  age: number | null;
+  relationship: string | null;
+  giftNotes: string[];
+  contactNotes: string[];
+  lastContactLabel: string | null;
+  followUpDueLabel: string | null;
+  followUpReason: string | null;
+  reminderLeadDays: number;
+  calendarLinkedAt: string | null;
   source: "manual" | "gmail";
   createdAt: string;
   updatedAt: string;
@@ -226,12 +274,28 @@ type TravelMemoryRecord = {
   id: string;
   title: string;
   sourceEmailSubject: string;
+  transport: string | null;
+  departure: string | null;
+  arrival: string | null;
+  hotel: string | null;
+  checkIn: string | null;
+  checkOut: string | null;
+  confirmationCode: string | null;
+  calendarLinkedAt: string | null;
+  segmentCount: number;
+  timeline: string[];
+  checklist: string[];
   summary: string;
   createdAt: string;
 };
 
 type TravelExtraction = {
   transport: string[];
+  departures: string[];
+  arrivals: string[];
+  hotels: string[];
+  checkIns: string[];
+  checkOuts: string[];
   stays: string[];
   bookings: string[];
   addresses: string[];
@@ -245,6 +309,11 @@ type ExpenseMemoryRecord = {
   sourceEmailSubject: string;
   merchant: string | null;
   amount: string | null;
+  amountValue: number | null;
+  category: string | null;
+  expenseDate: string | null;
+  orderNumber: string | null;
+  recurringLikely: boolean;
   summary: string;
   createdAt: string;
 };
@@ -256,6 +325,10 @@ type ExpenseExtraction = {
   dates: string[];
   orderNumbers: string[];
   notes: string[];
+  normalizedCategory: string | null;
+  primaryAmountValue: number | null;
+  primaryDate: string | null;
+  recurringLikely: boolean;
 };
 
 type PackageMemoryRecord = {
@@ -263,14 +336,23 @@ type PackageMemoryRecord = {
   title: string;
   sourceEmailSubject: string;
   carrier: string | null;
+  merchant: string | null;
+  itemLabel: string | null;
   status: string | null;
   deliveryDate: string | null;
+  trackingNumber: string | null;
+  statusHistory: string[];
+  arrivingToday: boolean;
+  arrivingTomorrow: boolean;
   summary: string;
   createdAt: string;
+  updatedAt: string;
 };
 
 type PackageExtraction = {
   carriers: string[];
+  merchants: string[];
+  items: string[];
   statuses: string[];
   deliveryDates: string[];
   trackingNumbers: string[];
@@ -282,6 +364,10 @@ type MeetingPrepMemoryRecord = {
   id: string;
   eventTitle: string;
   summaryTitle: string;
+  focusSummary: string;
+  actionItems: string[];
+  relatedPeople: string[];
+  changesSinceLastPrep: string | null;
   summary: string;
   createdAt: string;
 };
@@ -289,19 +375,228 @@ type MeetingPrepMemoryRecord = {
 type SchoolPlanMemoryRecord = {
   id: string;
   title: string;
+  focusSummary: string;
+  subjects: string[];
+  sessions: string[];
+  assignments: string[];
+  examCountdowns: string[];
   summary: string;
   createdAt: string;
 };
 
+type DesktopProjectRecord = {
+  id: string;
+  name: string;
+  apps: string[];
+  folders: string[];
+  websites: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+type DesktopScheduleRecord = {
+  id: string;
+  projectName: string;
+  actionLabel: string;
+  dueAt: string;
+  createdAt: string;
+};
+
+type DesktopPermissionSettings = {
+  confirmProjectChecks: boolean;
+  confirmAppClose: boolean;
+  confirmExecutorLaunch: boolean;
+};
+
+type OcrScope = "screen" | "active_window" | "app_window" | "region" | "rect" | "global_selection";
+type OcrRegion =
+  | "selected"
+  | "center"
+  | "top"
+  | "bottom"
+  | "left"
+  | "right"
+  | "top left"
+  | "top right"
+  | "bottom left"
+  | "bottom right";
+
+type OcrWatchTarget = {
+  id: string;
+  name: string;
+  scope: OcrScope;
+  appName?: string;
+  region?: OcrRegion;
+  rect?: OcrRect;
+  status: "active" | "paused";
+  intervalMs: number;
+  logToNotion?: boolean;
+  createTaskOnMatch?: boolean;
+  action?: OcrWatchAction;
+  rule?: OcrWatchRule;
+  lastText?: string;
+  lastMatchKey?: string;
+  lastCheckedAt?: string;
+};
+
+type OcrWatchAction =
+  | { type: "open_app"; appName: string }
+  | { type: "open_workspace"; query: string }
+  | { type: "copy_text" };
+
+type OcrWatchRule = {
+  type: "any_change" | "keyword" | "error" | "price" | "price_below" | "price_above";
+  keyword?: string;
+  amount?: number;
+};
+
+type OcrRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type OcrHistoryRecord = {
+  id: string;
+  target: string;
+  text: string;
+  summary: string;
+  screenshotPath: string;
+  createdAt: string;
+  source?: string;
+  matchType?: string;
+};
+
+type OcrHistoryFilter = {
+  query?: string;
+  source?: string;
+  since?: Date;
+  label: string;
+};
+
+type OcrCorrectionRecord = {
+  from: string;
+  to: string;
+  createdAt: string;
+};
+
+type OcrWatchTemplate = {
+  name: string;
+  rule?: OcrWatchRule;
+  intervalMs: number;
+  logToNotion?: boolean;
+  createTaskOnMatch?: boolean;
+  action?: OcrWatchAction;
+};
+
+type OcrSelectionState = {
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
+  viewStartX: number;
+  viewStartY: number;
+  viewCurrentX: number;
+  viewCurrentY: number;
+} | null;
+
 type CommandIntent =
   | { kind: "study_setup" }
+  | { kind: "launch_desktop_app"; appName: string }
+  | { kind: "focus_desktop_app"; appName: string }
+  | { kind: "open_named_folder"; folderName: string }
+  | { kind: "capture_desktop_screenshot" }
+  | { kind: "open_screenshots_folder" }
+  | { kind: "read_clipboard_text" }
+  | { kind: "write_clipboard_text"; text: string }
+  | { kind: "open_clipboard_target" }
+  | { kind: "search_clipboard_on_google" }
+  | { kind: "save_clipboard_to_notion" }
+  | { kind: "create_desktop_project"; name: string }
+  | { kind: "create_desktop_project_template"; templateName: string; projectName: string }
+  | { kind: "list_desktop_projects" }
+  | { kind: "open_desktop_project"; query: string }
+  | { kind: "add_app_to_desktop_project"; projectQuery: string; appName: string }
+  | { kind: "add_folder_to_desktop_project"; projectQuery: string; folderName: string }
+  | { kind: "add_website_to_desktop_project"; projectQuery: string; url: string }
+  | { kind: "rename_desktop_project"; projectQuery: string; newName: string }
+  | { kind: "delete_desktop_project"; projectQuery: string }
+  | { kind: "remove_app_from_desktop_project"; projectQuery: string; appName: string }
+  | { kind: "remove_folder_from_desktop_project"; projectQuery: string; folderName: string }
+  | { kind: "remove_website_from_desktop_project"; projectQuery: string; url: string }
+  | { kind: "schedule_desktop_project"; query: string; whenLabel: string; dueAt: Date }
+  | { kind: "start_desktop_project_for_duration"; query: string; durationMinutes: number }
+  | { kind: "list_desktop_schedules" }
+  | { kind: "save_screenshot_to_notion" }
+  | { kind: "save_last_screenshot_to_notion" }
+  | { kind: "read_screen_text"; useLast?: boolean; scope?: OcrScope; appName?: string; region?: OcrRegion; rect?: OcrRect }
+  | { kind: "save_screen_text_to_notion"; scope?: OcrScope; appName?: string; region?: OcrRegion; rect?: OcrRect }
+  | { kind: "create_screen_task_list"; scope?: OcrScope; appName?: string; region?: OcrRegion; rect?: OcrRect; confirmed?: boolean; taskTitles?: string[] }
+  | { kind: "start_ocr_watch"; scope?: OcrScope; appName?: string; region?: OcrRegion; rect?: OcrRect; intervalMs: number; logToNotion?: boolean; createTaskOnMatch?: boolean; action?: OcrWatchAction; rule?: OcrWatchRule }
+  | { kind: "stop_ocr_watch" }
+  | { kind: "pause_ocr_watches" }
+  | { kind: "resume_ocr_watches" }
+  | { kind: "show_ocr_watches" }
+  | { kind: "name_latest_ocr_watch"; name: string }
+  | { kind: "pause_ocr_watch_by_name"; name: string }
+  | { kind: "resume_ocr_watch_by_name"; name: string }
+  | { kind: "delete_ocr_watch_by_name"; name: string }
+  | { kind: "save_latest_ocr_watch_template"; name: string }
+  | { kind: "start_ocr_watch_template"; templateName: string; appName: string }
+  | { kind: "begin_ocr_region_selection" }
+  | { kind: "begin_app_ocr_region_selection" }
+  | { kind: "show_ocr_history" }
+  | { kind: "search_ocr_history"; query?: string; source?: string; since?: Date; label: string }
+  | { kind: "save_ocr_history_to_notion" }
+  | { kind: "clear_ocr_history" }
+  | { kind: "export_ocr_history_to_clipboard" }
+  | { kind: "copy_latest_ocr_text" }
+  | { kind: "correct_ocr_text"; from: string; to: string }
+  | { kind: "remember_latest_ocr" }
+  | { kind: "summarize_screen"; mode: "brief" | "error" | "study_notes" | "flashcards"; scope?: OcrScope; appName?: string }
+  | { kind: "cleanup_clipboard"; mode: "clean" | "summarize" | "format" }
+  | { kind: "run_project_checks"; confirmed?: boolean }
+  | { kind: "open_project_in_vscode" }
+  | { kind: "minimize_jarvis_window" }
+  | { kind: "maximize_jarvis_window" }
+  | { kind: "restore_jarvis_window" }
+  | { kind: "control_desktop_app_window"; appName: string; action: "minimize" | "maximize" | "close"; confirmed?: boolean }
+  | { kind: "check_desktop_app_window_status"; appName: string }
+  | { kind: "show_desktop_permissions" }
+  | { kind: "set_desktop_permission"; permission: keyof DesktopPermissionSettings; enabled: boolean }
+  | { kind: "open_last_desktop_context" }
+  | { kind: "export_desktop_projects_to_clipboard" }
+  | { kind: "import_desktop_projects_from_clipboard" }
+  | { kind: "create_screen_task" }
+  | { kind: "create_builder_handoff"; request: string; launchExecutor: boolean; confirmed?: boolean }
   | { kind: "google_search"; query: string }
   | { kind: "open_url"; url: string }
   | { kind: "create_note"; content: string }
-  | { kind: "remember_person_birthday"; name: string; birthdayLabel: string; month: number; day: number }
+  | {
+      kind: "remember_person_birthday";
+      name: string;
+      birthdayLabel: string;
+      month: number;
+      day: number;
+      age?: number | null;
+      relationship?: string | null;
+      reminderLeadDays?: number | null;
+      addToCalendar?: boolean;
+    }
   | { kind: "list_birthdays" }
   | { kind: "list_upcoming_birthdays" }
   | { kind: "show_person_birthday"; query: string }
+  | { kind: "update_person_relationship"; query: string; relationship: string }
+  | { kind: "update_person_age"; query: string; age: number }
+  | { kind: "add_person_gift_note"; query: string; note: string }
+  | { kind: "add_person_contact_note"; query: string; note: string }
+  | { kind: "set_person_last_contact"; query: string; whenLabel: string }
+  | { kind: "set_person_follow_up"; query: string; dueLabel: string; reason: string | null }
+  | { kind: "list_people_follow_ups" }
+  | { kind: "list_people_check_ins" }
+  | { kind: "set_person_birthday_reminder"; query: string; daysBefore: number }
+  | { kind: "add_person_birthday_to_calendar"; query: string }
   | { kind: "create_task_note"; title: string; dueLabel: string | null }
   | { kind: "list_notes" }
   | { kind: "search_notes"; query: string }
@@ -362,12 +657,21 @@ type CommandIntent =
   | { kind: "save_current_email_travel_to_notion" }
   | { kind: "save_email_travel_to_notion_by_index"; index: number }
   | { kind: "save_email_travel_to_notion_by_query"; query: string }
+  | { kind: "save_current_email_travel_to_calendar" }
+  | { kind: "save_email_travel_to_calendar_by_index"; index: number }
+  | { kind: "save_email_travel_to_calendar_by_query"; query: string }
+  | { kind: "show_current_travel_checklist" }
+  | { kind: "show_current_travel_timeline" }
   | { kind: "extract_current_email_expense" }
   | { kind: "extract_email_expense"; index: number | null }
   | { kind: "extract_email_expense_by_query"; query: string }
   | { kind: "save_current_email_expense_to_notion" }
   | { kind: "save_email_expense_to_notion_by_index"; index: number }
   | { kind: "save_email_expense_to_notion_by_query"; query: string }
+  | { kind: "list_weekly_expenses" }
+  | { kind: "list_monthly_expenses" }
+  | { kind: "list_monthly_expenses_by_category"; category: string }
+  | { kind: "list_recurring_expenses" }
   | { kind: "extract_current_email_package" }
   | { kind: "extract_email_package"; index: number | null }
   | { kind: "extract_email_package_by_query"; query: string }
@@ -401,6 +705,8 @@ type CommandIntent =
   | { kind: "list_travel_memory" }
   | { kind: "list_expense_memory" }
   | { kind: "list_package_memory" }
+  | { kind: "list_packages_arriving_tomorrow" }
+  | { kind: "list_delayed_packages" }
   | { kind: "create_meeting_prep"; query: string | null }
   | { kind: "save_meeting_prep_to_notion"; query: string | null }
   | { kind: "list_meeting_prep_memory" }
@@ -490,6 +796,26 @@ type ActiveConversationContext =
       kind: "browser";
       url: string;
       label: string;
+    }
+  | {
+      kind: "desktop_app";
+      appName: string;
+      label: string;
+    }
+  | {
+      kind: "desktop_folder";
+      folderName: string;
+      label: string;
+    }
+  | {
+      kind: "desktop_workspace";
+      projectName: string;
+      label: string;
+    }
+  | {
+      kind: "screenshot";
+      path: string;
+      label: string;
     };
 
 type PresentedCollectionContext =
@@ -546,6 +872,14 @@ type WorkflowTemplateRecord = {
   description: string;
   triggerPhrase: string;
   steps: string[];
+};
+
+type CrossFeatureSuggestionRecord = {
+  id: string;
+  title: string;
+  detail: string;
+  intent?: CommandIntent;
+  intents?: CommandIntent[];
 };
 
 type WorkflowStepResolution =
@@ -626,6 +960,1138 @@ function cleanConversationalCommand(command: string) {
     .replace(/\bplease\b/gi, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+const desktopAppAliases = new Set([
+  "chrome",
+  "cmd",
+  "command prompt",
+  "edge",
+  "explorer",
+  "file explorer",
+  "google chrome",
+  "calc",
+  "calculator",
+  "microsoft edge",
+  "notepad",
+  "power shell",
+  "powershell",
+  "settings",
+  "spotify",
+  "task manager",
+  "taskmgr",
+  "visual studio code",
+  "vs code",
+  "vscode",
+  "windows settings",
+]);
+
+const namedFolderAliases = new Set([
+  "desktop",
+  "desktop folder",
+  "documents",
+  "documents folder",
+  "downloads",
+  "downloads folder",
+  "jarvis project",
+  "project",
+  "project folder",
+]);
+
+function normalizeDesktopTarget(target: string) {
+  return target
+    .trim()
+    .replace(/\b(app|application|program)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeDesktopProjectName(name: string) {
+  return name
+    .trim()
+    .replace(/\b(workspace|desktop project|project)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseWorkspaceScheduleDate(label: string) {
+  const normalized = label.trim().toLowerCase();
+  const now = new Date();
+  const relativeMatch = normalized.match(/^in\s+(\d{1,3})\s*(minutes?|mins?|hours?|hrs?)$/i);
+  if (relativeMatch) {
+    const amount = Number(relativeMatch[1]);
+    const unit = relativeMatch[2];
+    const minutes = /hour|hr/.test(unit) ? amount * 60 : amount;
+    return new Date(now.getTime() + minutes * 60 * 1000);
+  }
+
+  const timeMatch = normalized.match(/^(?:(today|tomorrow)\s+)?(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+  if (timeMatch) {
+    const date = new Date(now);
+    if (timeMatch[1] === "tomorrow") {
+      date.setDate(date.getDate() + 1);
+    }
+    let hours = Number(timeMatch[2]);
+    const minutes = timeMatch[3] ? Number(timeMatch[3]) : 0;
+    const meridiem = timeMatch[4]?.toLowerCase();
+    if (meridiem === "pm" && hours < 12) {
+      hours += 12;
+    }
+    if (meridiem === "am" && hours === 12) {
+      hours = 0;
+    }
+    date.setHours(hours, minutes, 0, 0);
+    if (!timeMatch[1] && date.getTime() < now.getTime()) {
+      date.setDate(date.getDate() + 1);
+    }
+    return date;
+  }
+
+  return null;
+}
+
+function parseDurationMinutesFromText(text: string) {
+  const match = text.trim().match(/^(\d{1,3})\s*(minutes?|mins?|hours?|hrs?)$/i);
+  if (!match) {
+    return null;
+  }
+  const amount = Number(match[1]);
+  return /hour|hr/.test(match[2].toLowerCase()) ? amount * 60 : amount;
+}
+
+function cleanupClipboardText(text: string, mode: "clean" | "summarize" | "format") {
+  const cleaned = text
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  if (mode === "summarize") {
+    const sentences = cleaned
+      .split(/(?<=[.!?])\s+/)
+      .map((sentence) => sentence.trim())
+      .filter(Boolean);
+    return sentences.slice(0, 3).join(" ");
+  }
+
+  if (mode === "format") {
+    return cleaned
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => (line.startsWith("- ") ? line : `- ${line}`))
+      .join("\n");
+  }
+
+  return cleaned;
+}
+
+function cleanupOcrText(text: string) {
+  const seen = new Set<string>();
+  return text
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[|_~`^©®•]{2,}/g, " ").replace(/\s+/g, " ").trim())
+    .filter((line) => {
+      if (line.length < 3) {
+        return false;
+      }
+      const lettersAndNumbers = line.replace(/[^a-z0-9]/gi, "").length;
+      if (lettersAndNumbers / Math.max(line.length, 1) < 0.35) {
+        return false;
+      }
+      const normalized = line.toLowerCase();
+      if (seen.has(normalized)) {
+        return false;
+      }
+      seen.add(normalized);
+      return true;
+    })
+    .join("\n")
+    .trim();
+}
+
+function applyOcrCorrections(text: string, corrections: OcrCorrectionRecord[]) {
+  return corrections.reduce((current, correction) => {
+    if (!correction.from.trim()) {
+      return current;
+    }
+    return current.split(correction.from).join(correction.to);
+  }, text);
+}
+
+function summarizeOcrText(text: string) {
+  const cleaned = cleanupOcrText(text);
+  const lines = cleaned
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) {
+    return "";
+  }
+  const taskLike = lines.filter((line) => /(^[-*□☐\d.)]+\s+|\b(todo|task|deadline|due|finish|submit|call|email|review|fix|add|make|create)\b)/i.test(line));
+  const chosen = taskLike.length >= 2 ? taskLike : lines;
+  return chosen.slice(0, 8).join("\n");
+}
+
+function buildOcrSummary(text: string, mode: "brief" | "error" | "study_notes" | "flashcards") {
+  const cleaned = cleanupOcrText(text);
+  const lines = cleaned.split("\n").map((line) => line.trim()).filter(Boolean);
+  if (mode === "error") {
+    const errorLines = lines.filter((line) => /\b(error|failed|exception|warning|denied|blocked|cannot|could not)\b/i.test(line));
+    return (errorLines.length > 0 ? errorLines : lines.slice(0, 5)).map((line) => `- ${line}`).join("\n");
+  }
+  if (mode === "study_notes") {
+    return lines.slice(0, 10).map((line) => `- ${line}`).join("\n");
+  }
+  if (mode === "flashcards") {
+    return lines.slice(0, 8).map((line, index) => `Q${index + 1}: What should I remember about "${line.slice(0, 80)}"?\nA${index + 1}: ${line}`).join("\n\n");
+  }
+  return summarizeOcrText(cleaned) || lines.slice(0, 5).join("\n");
+}
+
+function formatOcrResultDetail(rawText: string) {
+  const cleaned = cleanupOcrText(rawText);
+  const summary = summarizeOcrText(rawText);
+  if (!cleaned) {
+    return "";
+  }
+  if (summary && summary !== cleaned) {
+    return `Useful summary:\n${summary}\n\nCleaned OCR:\n${cleaned.slice(0, 3500)}`;
+  }
+  return cleaned.slice(0, 4000);
+}
+
+function extractOcrTaskTitles(text: string) {
+  const cleaned = cleanupOcrText(text);
+  const lines = cleaned
+    .split("\n")
+    .map((line) =>
+      line
+        .replace(/^[-*□☐✅\d.)\s]+/, "")
+        .replace(/\b(todo|task|deadline|due)\s*[:\-]\s*/i, "")
+        .trim(),
+    )
+    .filter((line) => line.length >= 5 && line.length <= 160);
+
+  const taskLike = lines.filter((line) =>
+    /\b(finish|submit|review|read|study|email|call|text|fix|add|make|create|schedule|prepare|pay|buy|send|complete|deadline|due)\b/i.test(line),
+  );
+  const candidates = taskLike.length > 0 ? taskLike : lines;
+  const seen = new Set<string>();
+  return candidates
+    .filter((line) => {
+      const key = line.toLowerCase();
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 8);
+}
+
+function normalizeOcrRegion(value: string): OcrRegion | null {
+  const normalized = value.trim().toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ");
+  if (normalized === "selected" || normalized === "selection") {
+    return "selected";
+  }
+  if (normalized === "center" || normalized === "middle") {
+    return "center";
+  }
+  if (normalized === "top" || normalized === "top half") {
+    return "top";
+  }
+  if (normalized === "bottom" || normalized === "bottom half") {
+    return "bottom";
+  }
+  if (normalized === "left" || normalized === "left half") {
+    return "left";
+  }
+  if (normalized === "right" || normalized === "right half") {
+    return "right";
+  }
+  if (["top left", "top right", "bottom left", "bottom right"].includes(normalized)) {
+    return normalized as OcrRegion;
+  }
+  return null;
+}
+
+function describeOcrTarget(scope: OcrScope = "screen", appName?: string, region?: OcrRegion, rect?: OcrRect) {
+  if (scope === "active_window") {
+    return "active window";
+  }
+  if (scope === "app_window" && appName) {
+    return appName;
+  }
+  if (scope === "region" && region) {
+    return region === "selected" ? "selected area" : `${region} area`;
+  }
+  if (scope === "rect" && rect) {
+    return `selected rectangle ${Math.round(rect.width)}x${Math.round(rect.height)}`;
+  }
+  if (scope === "global_selection") {
+    return "global selected area";
+  }
+  return "screen";
+}
+
+function describeOcrWatchRule(rule?: OcrWatchRule) {
+  if (!rule || rule.type === "any_change") {
+    return "any readable text change";
+  }
+  if (rule.type === "keyword") {
+    return `keyword "${rule.keyword ?? ""}"`;
+  }
+  if (rule.type === "error") {
+    return "error-like text";
+  }
+  if (rule.type === "price_below") {
+    return `price below ${rule.amount ?? ""}`;
+  }
+  if (rule.type === "price_above") {
+    return `price above ${rule.amount ?? ""}`;
+  }
+  return "price-like text";
+}
+
+function describeOcrWatchAction(action?: OcrWatchAction) {
+  if (!action) {
+    return "no automation action";
+  }
+  if (action.type === "open_app") {
+    return `open ${action.appName}`;
+  }
+  if (action.type === "open_workspace") {
+    return `open ${action.query} workspace`;
+  }
+  return "copy matched text";
+}
+
+function extractOcrPrices(text: string) {
+  return [...text.matchAll(/(?:[$₹€£]\s?(\d+(?:[.,]\d{1,2})?)|\b(\d+(?:[.,]\d{1,2})?)\s?(?:usd|inr|cad|eur|gbp)\b)/gi)]
+    .map((match) => Number((match[1] ?? match[2] ?? "").replace(",", ".")))
+    .filter((value) => Number.isFinite(value));
+}
+
+function getOcrMatchKey(rule: OcrWatchRule | undefined, text: string) {
+  const normalized = cleanupOcrText(text).toLowerCase();
+  if (!rule || rule.type === "any_change") {
+    return normalized.slice(0, 240);
+  }
+  if (rule.type === "keyword") {
+    return `keyword:${rule.keyword?.toLowerCase() ?? ""}:${normalized.slice(0, 160)}`;
+  }
+  if (rule.type === "error") {
+    const match = normalized.match(/\b(error|failed|failure|exception|crash|denied|blocked|warning|not responding|cannot|could not).{0,120}/i);
+    return `error:${match?.[0] ?? normalized.slice(0, 160)}`;
+  }
+  const prices = extractOcrPrices(text).sort((left, right) => left - right);
+  return `${rule.type}:${rule.amount ?? ""}:${prices.join(",")}`;
+}
+
+function ocrWatchRuleMatches(rule: OcrWatchRule | undefined, previousText: string | undefined, nextText: string) {
+  if (!nextText || previousText === nextText) {
+    return false;
+  }
+  if (!rule || rule.type === "any_change") {
+    return true;
+  }
+  if (rule.type === "keyword") {
+    const keyword = rule.keyword?.trim().toLowerCase();
+    return Boolean(keyword && nextText.toLowerCase().includes(keyword));
+  }
+  if (rule.type === "error") {
+    return /\b(error|failed|failure|exception|crash|denied|blocked|warning|not responding|cannot|could not)\b/i.test(nextText);
+  }
+  const prices = extractOcrPrices(nextText);
+  if (rule.type === "price_below") {
+    return prices.some((price) => price < (rule.amount ?? 0));
+  }
+  if (rule.type === "price_above") {
+    return prices.some((price) => price > (rule.amount ?? Number.POSITIVE_INFINITY));
+  }
+  if (rule.type === "price") {
+    return prices.length > 0;
+  }
+  return /(?:[$₹€£]\s?\d+(?:[.,]\d{2})?|\b\d+(?:[.,]\d{2})?\s?(?:usd|inr|cad|eur|gbp)\b)/i.test(nextText);
+}
+
+function getOcrSourceLabel(scope: OcrScope = "screen", appName?: string, region?: OcrRegion) {
+  if (scope === "app_window" && appName) {
+    return appName;
+  }
+  if (scope === "active_window") {
+    return "active window";
+  }
+  if (scope === "region" && region) {
+    return region;
+  }
+  if (scope === "global_selection") {
+    return "global selection";
+  }
+  if (scope === "rect") {
+    return "selected rectangle";
+  }
+  return "screen";
+}
+
+function getOcrHistorySince(label: string) {
+  const normalized = label.toLowerCase();
+  const since = new Date();
+  if (normalized.includes("last hour")) {
+    since.setHours(since.getHours() - 1);
+    return since;
+  }
+  if (normalized.includes("today")) {
+    since.setHours(0, 0, 0, 0);
+    return since;
+  }
+  if (normalized.includes("this week")) {
+    since.setDate(since.getDate() - 7);
+    return since;
+  }
+  return null;
+}
+
+function filterOcrHistory(history: OcrHistoryRecord[], filter: OcrHistoryFilter) {
+  const query = filter.query?.trim().toLowerCase();
+  const source = filter.source?.trim().toLowerCase();
+  return history.filter((entry) => {
+    if (filter.since && new Date(entry.createdAt).getTime() < filter.since.getTime()) {
+      return false;
+    }
+    if (source && !entry.target.toLowerCase().includes(source) && !entry.source?.toLowerCase().includes(source)) {
+      return false;
+    }
+    if (!query) {
+      return true;
+    }
+    return (
+      entry.target.toLowerCase().includes(query) ||
+      entry.summary.toLowerCase().includes(query) ||
+      entry.text.toLowerCase().includes(query)
+    );
+  });
+}
+
+function parseWatchIntervalMs(text?: string) {
+  if (!text) {
+    return 60_000;
+  }
+  const match = text.match(/(\d{1,3})\s*(seconds?|secs?|minutes?|mins?)/i);
+  if (!match) {
+    return 60_000;
+  }
+  const amount = Number(match[1]);
+  const unit = match[2].toLowerCase();
+  const ms = /min/.test(unit) ? amount * 60_000 : amount * 1000;
+  return Math.max(15_000, Math.min(ms, 30 * 60_000));
+}
+
+function parseDesktopProjectIntent(command: string): CommandIntent | null {
+  const trimmed = command.trim();
+  const normalized = trimmed.toLowerCase().replace(/[.!?]+$/g, "").trim();
+
+  if (
+    normalized === "show desktop projects" ||
+    normalized === "list desktop projects" ||
+    normalized === "show workspaces" ||
+    normalized === "list workspaces"
+  ) {
+    return { kind: "list_desktop_projects" };
+  }
+
+  const templateMatch = trimmed.match(
+    /^(?:create|make|add)\s+(?:a\s+)?(coding|code|school|study|focus|music)\s+(?:workspace|desktop project)\s+template$/i,
+  );
+  if (templateMatch) {
+    const templateName = normalizeDesktopProjectName(templateMatch[1]).toLowerCase();
+    const projectName =
+      templateName === "code" ? "coding" : templateName === "study" ? "school" : templateName;
+    return { kind: "create_desktop_project_template", templateName, projectName };
+  }
+
+  const namedTemplateMatch = trimmed.match(
+    /^(?:create|make|add)\s+(?:a\s+)?(coding|code|school|study|focus|music)\s+(?:workspace|desktop project)\s+(?:called|named)\s+(.+)$/i,
+  );
+  if (namedTemplateMatch) {
+    const templateName = normalizeDesktopProjectName(namedTemplateMatch[1]).toLowerCase();
+    const projectName = normalizeDesktopProjectName(namedTemplateMatch[2]);
+    if (projectName) {
+      return { kind: "create_desktop_project_template", templateName, projectName };
+    }
+  }
+
+  const createMatch = trimmed.match(/^(?:create|save|make)\s+(?:a\s+)?(?:desktop\s+project|workspace)\s+(?:called\s+|named\s+)?(.+)$/i);
+  if (createMatch) {
+    const name = normalizeDesktopProjectName(createMatch[1]);
+    if (name) {
+      return { kind: "create_desktop_project", name };
+    }
+  }
+
+  const openMatch = trimmed.match(/^(?:open|launch|start)\s+(?:my\s+)?(.+?)\s+(?:workspace|desktop project)$/i);
+  if (openMatch) {
+    const query = normalizeDesktopProjectName(openMatch[1]);
+    if (query) {
+      return { kind: "open_desktop_project", query };
+    }
+  }
+
+  const durationMatch = trimmed.match(/^(?:start|open|launch)\s+(?:my\s+)?(.+?)\s+(?:workspace|desktop project|mode)\s+for\s+(.+)$/i);
+  if (durationMatch) {
+    const query = normalizeDesktopProjectName(durationMatch[1]);
+    const durationMinutes = parseDurationMinutesFromText(durationMatch[2]);
+    if (query && durationMinutes) {
+      return { kind: "start_desktop_project_for_duration", query, durationMinutes };
+    }
+  }
+
+  const scheduleMatch = trimmed.match(/^(?:open|launch|start)\s+(?:my\s+)?(.+?)\s+(?:workspace|desktop project|mode)\s+(?:at|in)\s+(.+)$/i);
+  if (scheduleMatch) {
+    const query = normalizeDesktopProjectName(scheduleMatch[1]);
+    const whenLabel = scheduleMatch[2].trim();
+    const dueAt = parseWorkspaceScheduleDate(scheduleMatch[0].toLowerCase().includes(" in ") ? `in ${whenLabel}` : whenLabel);
+    if (query && dueAt) {
+      return { kind: "schedule_desktop_project", query, whenLabel, dueAt };
+    }
+  }
+
+  if (
+    normalized === "show workspace schedules" ||
+    normalized === "show scheduled workspaces" ||
+    normalized === "list workspace schedules" ||
+    normalized === "list scheduled workspaces"
+  ) {
+    return { kind: "list_desktop_schedules" };
+  }
+
+  const renameMatch = trimmed.match(/^rename\s+(?:my\s+)?(.+?)\s+(?:workspace|desktop project)\s+to\s+(.+)$/i);
+  if (renameMatch) {
+    const projectQuery = normalizeDesktopProjectName(renameMatch[1]);
+    const newName = normalizeDesktopProjectName(renameMatch[2]);
+    if (projectQuery && newName) {
+      return { kind: "rename_desktop_project", projectQuery, newName };
+    }
+  }
+
+  const deleteMatch = trimmed.match(/^(?:delete|remove|forget)\s+(?:my\s+)?(.+?)\s+(?:workspace|desktop project)$/i);
+  if (deleteMatch) {
+    const projectQuery = normalizeDesktopProjectName(deleteMatch[1]);
+    if (projectQuery) {
+      return { kind: "delete_desktop_project", projectQuery };
+    }
+  }
+
+  const addAppMatch = trimmed.match(/^add\s+(.+?)(?:\s+(?:app|application|program))?\s+to\s+(?:my\s+)?(.+?)\s+(?:workspace|desktop project)$/i);
+  if (addAppMatch) {
+    const appName = normalizeDesktopTarget(addAppMatch[1]);
+    const projectQuery = normalizeDesktopProjectName(addAppMatch[2]);
+    if (appName && projectQuery && desktopAppAliases.has(appName)) {
+      return { kind: "add_app_to_desktop_project", projectQuery, appName };
+    }
+  }
+
+  const addFolderMatch = trimmed.match(/^add\s+(.+?\s+folder|downloads|documents|desktop|jarvis project|project)\s+to\s+(?:my\s+)?(.+?)\s+(?:workspace|desktop project)$/i);
+  if (addFolderMatch) {
+    const folderName = normalizeDesktopTarget(addFolderMatch[1]);
+    const projectQuery = normalizeDesktopProjectName(addFolderMatch[2]);
+    if (folderName && projectQuery && namedFolderAliases.has(folderName)) {
+      return { kind: "add_folder_to_desktop_project", projectQuery, folderName };
+    }
+  }
+
+  const addWebsiteMatch = trimmed.match(/^add\s+(.+?)\s+to\s+(?:my\s+)?(.+?)\s+(?:workspace|desktop project)$/i);
+  if (addWebsiteMatch) {
+    const rawTarget = addWebsiteMatch[1].trim();
+    const projectQuery = normalizeDesktopProjectName(addWebsiteMatch[2]);
+    const normalizedTarget = normalizeDesktopTarget(rawTarget);
+    const resolvedAlias = builtInBrowserAliases[normalizedTarget] ?? null;
+    if (projectQuery && !desktopAppAliases.has(normalizedTarget) && !namedFolderAliases.has(normalizedTarget)) {
+      return {
+        kind: "add_website_to_desktop_project",
+        projectQuery,
+        url: resolvedAlias ?? normalizeUrlTarget(rawTarget),
+      };
+    }
+  }
+
+  const removeAppMatch = trimmed.match(/^(?:remove|delete)\s+(.+?)(?:\s+(?:app|application|program))?\s+from\s+(?:my\s+)?(.+?)\s+(?:workspace|desktop project)$/i);
+  if (removeAppMatch) {
+    const appName = normalizeDesktopTarget(removeAppMatch[1]);
+    const projectQuery = normalizeDesktopProjectName(removeAppMatch[2]);
+    if (appName && projectQuery && desktopAppAliases.has(appName)) {
+      return { kind: "remove_app_from_desktop_project", projectQuery, appName };
+    }
+  }
+
+  const removeFolderMatch = trimmed.match(/^(?:remove|delete)\s+(.+?\s+folder|downloads|documents|desktop|jarvis project|project)\s+from\s+(?:my\s+)?(.+?)\s+(?:workspace|desktop project)$/i);
+  if (removeFolderMatch) {
+    const folderName = normalizeDesktopTarget(removeFolderMatch[1]);
+    const projectQuery = normalizeDesktopProjectName(removeFolderMatch[2]);
+    if (folderName && projectQuery && namedFolderAliases.has(folderName)) {
+      return { kind: "remove_folder_from_desktop_project", projectQuery, folderName };
+    }
+  }
+
+  const removeWebsiteMatch = trimmed.match(/^(?:remove|delete)\s+(.+?)\s+from\s+(?:my\s+)?(.+?)\s+(?:workspace|desktop project)$/i);
+  if (removeWebsiteMatch) {
+    const rawTarget = removeWebsiteMatch[1].trim();
+    const projectQuery = normalizeDesktopProjectName(removeWebsiteMatch[2]);
+    const normalizedTarget = normalizeDesktopTarget(rawTarget);
+    const resolvedAlias = builtInBrowserAliases[normalizedTarget] ?? null;
+    if (projectQuery && !desktopAppAliases.has(normalizedTarget) && !namedFolderAliases.has(normalizedTarget)) {
+      return {
+        kind: "remove_website_from_desktop_project",
+        projectQuery,
+        url: resolvedAlias ?? normalizeUrlTarget(rawTarget),
+      };
+    }
+  }
+
+  return null;
+}
+
+function parseDesktopControlIntent(command: string): CommandIntent | null {
+  const trimmed = command.trim();
+  const normalized = trimmed.toLowerCase().replace(/[.!?]+$/g, "").trim();
+
+  const projectIntent = parseDesktopProjectIntent(trimmed);
+  if (projectIntent) {
+    return projectIntent;
+  }
+
+  if (
+    /\b(take|capture|grab)\s+(a\s+)?screenshot\b/i.test(normalized) ||
+    /\bscreenshot\s+(this|screen|desktop)\b/i.test(normalized)
+  ) {
+    return { kind: "capture_desktop_screenshot" };
+  }
+
+  if (
+    normalized === "open screenshots" ||
+    normalized === "open screenshots folder" ||
+    normalized === "show screenshots" ||
+    normalized === "show screenshots folder"
+  ) {
+    return { kind: "open_screenshots_folder" };
+  }
+
+  if (
+    normalized === "show clipboard" ||
+    normalized === "read clipboard" ||
+    normalized === "what is on my clipboard" ||
+    normalized === "what's on my clipboard"
+  ) {
+    return { kind: "read_clipboard_text" };
+  }
+
+  if (
+    normalized === "open clipboard" ||
+    normalized === "open clipboard target" ||
+    normalized === "open what is on my clipboard" ||
+    normalized === "open what's on my clipboard"
+  ) {
+    return { kind: "open_clipboard_target" };
+  }
+
+  if (
+    normalized === "search clipboard" ||
+    normalized === "search clipboard on google" ||
+    normalized === "search what is on my clipboard" ||
+    normalized === "search what's on my clipboard" ||
+    normalized === "google my clipboard"
+  ) {
+    return { kind: "search_clipboard_on_google" };
+  }
+
+  if (
+    normalized === "save clipboard to notion" ||
+    normalized === "save my clipboard to notion" ||
+    normalized === "make a notion note from clipboard" ||
+    normalized === "make a note from clipboard"
+  ) {
+    return { kind: "save_clipboard_to_notion" };
+  }
+
+  if (
+    normalized === "take screenshot and save to notion" ||
+    normalized === "take a screenshot and save to notion" ||
+    normalized === "screenshot to notion" ||
+    normalized === "capture screenshot to notion"
+  ) {
+    return { kind: "save_screenshot_to_notion" };
+  }
+
+  if (
+    normalized === "save last screenshot to notion" ||
+    normalized === "save the last screenshot to notion"
+  ) {
+    return { kind: "save_last_screenshot_to_notion" };
+  }
+
+  if (normalized === "read last screenshot") {
+    return { kind: "read_screen_text", useLast: true };
+  }
+
+  if (
+    normalized === "select ocr area" ||
+    normalized === "select global ocr area" ||
+    normalized === "select desktop ocr area" ||
+    normalized === "global ocr selection" ||
+    normalized === "select screen area" ||
+    normalized === "read selected box"
+  ) {
+    return { kind: "begin_ocr_region_selection" };
+  }
+
+  if (
+    normalized === "select app ocr area" ||
+    normalized === "select jarvis ocr area" ||
+    normalized === "drag select ocr"
+  ) {
+    return { kind: "begin_app_ocr_region_selection" };
+  }
+
+  if (
+    normalized === "show ocr history" ||
+    normalized === "show screen read history" ||
+    normalized === "show screen history"
+  ) {
+    return { kind: "show_ocr_history" };
+  }
+
+  const searchOcrHistoryMatch = trimmed.match(/^(?:find|search)\s+(?:ocr|screen read|screen|screen history)\s+(?:history\s+)?(?:for|about)\s+(.+)$/i);
+  if (searchOcrHistoryMatch) {
+    const query = searchOcrHistoryMatch[1].trim();
+    return { kind: "search_ocr_history", query, label: `matching "${query}"` };
+  }
+
+  const sourceOcrHistoryMatch = trimmed.match(/^show\s+(?:ocr|screen read|screen)\s+history\s+from\s+(.+)$/i);
+  if (sourceOcrHistoryMatch) {
+    const source = normalizeDesktopTarget(sourceOcrHistoryMatch[1]);
+    return { kind: "search_ocr_history", source, label: `from ${source}` };
+  }
+
+  const timeOcrHistoryMatch = trimmed.match(/^show\s+(?:ocr|screen read|screen)\s+history\s+(today|from last hour|this week)$/i);
+  if (timeOcrHistoryMatch) {
+    const label = timeOcrHistoryMatch[1];
+    const since = getOcrHistorySince(label);
+    if (since) {
+      return { kind: "search_ocr_history", since, label };
+    }
+  }
+
+  if (
+    normalized === "save ocr history to notion" ||
+    normalized === "save screen history to notion" ||
+    normalized === "save screen read history to notion"
+  ) {
+    return { kind: "save_ocr_history_to_notion" };
+  }
+
+  const readRegionMatch = trimmed.match(
+    /^read\s+(?:the\s+)?(selected|selection|center|middle|top|bottom|left|right|top left|top right|bottom left|bottom right)(?:\s+(?:area|region|half|corner))?$/i,
+  );
+  if (readRegionMatch) {
+    const region = normalizeOcrRegion(readRegionMatch[1]);
+    if (region) {
+      return { kind: "read_screen_text", scope: "region", region };
+    }
+  }
+
+  if (
+    normalized === "read active window" ||
+    normalized === "read focused window" ||
+    normalized === "ocr active window" ||
+    normalized === "extract text from active window"
+  ) {
+    return { kind: "read_screen_text", scope: "active_window" };
+  }
+
+  const readAppWindowMatch = trimmed.match(/^(?:read|ocr)\s+(?:the\s+)?(.+?)(?:\s+window|\s+app)?$/i);
+  if (readAppWindowMatch) {
+    const appName = normalizeDesktopTarget(readAppWindowMatch[1]);
+    if (desktopAppAliases.has(appName)) {
+      return { kind: "read_screen_text", scope: "app_window", appName };
+    }
+  }
+
+  if (
+    normalized === "read screen" ||
+    normalized === "read my screen" ||
+    normalized === "ocr screen" ||
+    normalized === "extract text from screen" ||
+    normalized === "extract screen text"
+  ) {
+    return { kind: "read_screen_text" };
+  }
+
+  if (
+    normalized === "save screen text to notion" ||
+    normalized === "save screenshot text to notion" ||
+    normalized === "ocr screen to notion" ||
+    normalized === "read screen and save to notion"
+  ) {
+    return { kind: "save_screen_text_to_notion" };
+  }
+
+  if (
+    normalized === "save active window text to notion" ||
+    normalized === "save focused window text to notion" ||
+    normalized === "read active window and save to notion"
+  ) {
+    return { kind: "save_screen_text_to_notion", scope: "active_window" };
+  }
+
+  const saveRegionTextMatch = trimmed.match(
+    /^save\s+(?:the\s+)?(selected|selection|center|middle|top|bottom|left|right|top left|top right|bottom left|bottom right)(?:\s+(?:area|region|half|corner))?\s+text\s+(?:to|in)\s+notion$/i,
+  );
+  if (saveRegionTextMatch) {
+    const region = normalizeOcrRegion(saveRegionTextMatch[1]);
+    if (region) {
+      return { kind: "save_screen_text_to_notion", scope: "region", region };
+    }
+  }
+
+  const saveAppWindowTextMatch = trimmed.match(
+    /^(?:save|read)\s+(?:the\s+)?(.+?)(?:\s+window|\s+app)?\s+text\s+(?:to|in)\s+notion$/i,
+  );
+  if (saveAppWindowTextMatch) {
+    const appName = normalizeDesktopTarget(saveAppWindowTextMatch[1]);
+    if (desktopAppAliases.has(appName)) {
+      return { kind: "save_screen_text_to_notion", scope: "app_window", appName };
+    }
+  }
+
+  if (
+    normalized === "screen to task list" ||
+    normalized === "make task list from screen" ||
+    normalized === "create tasks from screen" ||
+    normalized === "turn screen into tasks"
+  ) {
+    return { kind: "create_screen_task_list" };
+  }
+
+  const regionTaskListMatch = trimmed.match(
+    /^(?:make|create|turn)\s+(?:a\s+)?(?:task\s+list|tasks)\s+from\s+(?:the\s+)?(selected|selection|center|middle|top|bottom|left|right|top left|top right|bottom left|bottom right)(?:\s+(?:area|region|half|corner))?$/i,
+  );
+  if (regionTaskListMatch) {
+    const region = normalizeOcrRegion(regionTaskListMatch[1]);
+    if (region) {
+      return { kind: "create_screen_task_list", scope: "region", region };
+    }
+  }
+
+  if (
+    normalized === "active window to task list" ||
+    normalized === "make task list from active window" ||
+    normalized === "create tasks from active window" ||
+    normalized === "turn active window into tasks"
+  ) {
+    return { kind: "create_screen_task_list", scope: "active_window" };
+  }
+
+  const appWindowTaskListMatch = trimmed.match(
+    /^(?:make|create|turn)\s+(?:a\s+)?(?:task\s+list|tasks)\s+from\s+(?:the\s+)?(.+?)(?:\s+window|\s+app)?$/i,
+  );
+  if (appWindowTaskListMatch) {
+    const appName = normalizeDesktopTarget(appWindowTaskListMatch[1]);
+    if (desktopAppAliases.has(appName)) {
+      return { kind: "create_screen_task_list", scope: "app_window", appName };
+    }
+  }
+
+  if (normalized === "stop watching screen" || normalized === "stop screen watch" || normalized === "stop ocr watch") {
+    return { kind: "stop_ocr_watch" };
+  }
+
+  if (normalized === "pause ocr watches" || normalized === "pause screen watches" || normalized === "pause watching screen") {
+    return { kind: "pause_ocr_watches" };
+  }
+
+  if (normalized === "resume ocr watches" || normalized === "resume screen watches" || normalized === "resume watching screen") {
+    return { kind: "resume_ocr_watches" };
+  }
+
+  if (normalized === "show ocr watches" || normalized === "show screen watches" || normalized === "show watch dashboard") {
+    return { kind: "show_ocr_watches" };
+  }
+
+  const namedWatchControlMatch = trimmed.match(/^(pause|resume|delete|remove)\s+(?:ocr\s+)?watch\s+(.+)$/i);
+  if (namedWatchControlMatch) {
+    const action = namedWatchControlMatch[1].toLowerCase();
+    const name = namedWatchControlMatch[2].trim();
+    if (action === "pause") return { kind: "pause_ocr_watch_by_name", name };
+    if (action === "resume") return { kind: "resume_ocr_watch_by_name", name };
+    return { kind: "delete_ocr_watch_by_name", name };
+  }
+
+  const nameWatchMatch = trimmed.match(/^(?:save|name|rename)\s+(?:this|latest|current)\s+(?:ocr\s+)?watch\s+(?:as|to)\s+(.+)$/i);
+  if (nameWatchMatch) {
+    return { kind: "name_latest_ocr_watch", name: nameWatchMatch[1].trim() };
+  }
+
+  const saveWatchTemplateMatch = trimmed.match(/^save\s+(?:this|latest|current)\s+(?:ocr\s+)?watch\s+template\s+(?:as|to)\s+(.+)$/i);
+  if (saveWatchTemplateMatch) {
+    return { kind: "save_latest_ocr_watch_template", name: saveWatchTemplateMatch[1].trim() };
+  }
+
+  const startTemplateMatch = trimmed.match(/^start\s+(.+?)\s+(?:watch\s+)?(?:template\s+)?on\s+(.+)$/i);
+  if (startTemplateMatch) {
+    const templateName = startTemplateMatch[1].trim();
+    const appName = normalizeDesktopTarget(startTemplateMatch[2]);
+    if (desktopAppAliases.has(appName)) {
+      return { kind: "start_ocr_watch_template", templateName, appName };
+    }
+  }
+
+  if (normalized === "clear ocr history" || normalized === "clear screen read history") {
+    return { kind: "clear_ocr_history" };
+  }
+
+  if (normalized === "export ocr history" || normalized === "copy ocr history" || normalized === "copy ocr history to clipboard") {
+    return { kind: "export_ocr_history_to_clipboard" };
+  }
+
+  if (
+    normalized === "copy latest ocr" ||
+    normalized === "copy latest screen read" ||
+    normalized === "copy last ocr text"
+  ) {
+    return { kind: "copy_latest_ocr_text" };
+  }
+
+  if (normalized === "remember this from my screen" || normalized === "remember latest ocr") {
+    return { kind: "remember_latest_ocr" };
+  }
+
+  const correctOcrMatch = trimmed.match(/^correct\s+ocr\s+(.+?)\s+to\s+(.+)$/i);
+  if (correctOcrMatch) {
+    return { kind: "correct_ocr_text", from: correctOcrMatch[1].trim(), to: correctOcrMatch[2].trim() };
+  }
+
+  if (normalized === "summarize screen" || normalized === "briefly summarize this screen") {
+    return { kind: "summarize_screen", mode: "brief" };
+  }
+  if (normalized === "explain this error" || normalized === "explain screen error") {
+    return { kind: "summarize_screen", mode: "error" };
+  }
+  if (normalized === "make study notes from this screen") {
+    return { kind: "summarize_screen", mode: "study_notes" };
+  }
+  if (normalized === "turn this screen into flashcards") {
+    return { kind: "summarize_screen", mode: "flashcards" };
+  }
+
+  const watchMatch = trimmed.match(
+    /^watch\s+(?:the\s+)?(.+?)(?:\s+(?:for\s+changes|with\s+ocr))?(?:\s+(?:for|if)\s+(errors?|price|price\s+(?:below|under|above|over)\s+[$₹€£]?\s?\d+(?:[.,]\d{1,2})?|keyword\s+.+?))?(?:\s+(?:and\s+)?(?:log|save)\s+(?:to|in)\s+notion)?(?:\s+(?:and\s+)?create\s+(?:a\s+)?task)?(?:\s+and\s+open\s+(.+?))?(?:\s+and\s+copy\s+(?:text|ocr))?(?:\s+every\s+(.+))?$/i,
+  );
+  if (watchMatch) {
+    const target = watchMatch[1].trim();
+    const ruleLabel = watchMatch[2]?.trim();
+    const actionLabel = watchMatch[3]?.trim();
+    const intervalMs = parseWatchIntervalMs(watchMatch[4]);
+    const logToNotion = /\b(log|save)\s+(?:to|in)\s+notion\b/i.test(trimmed);
+    const createTaskOnMatch = /\bcreate\s+(?:a\s+)?task\b/i.test(trimmed);
+    const copyOnMatch = /\band\s+copy\s+(?:text|ocr)\b/i.test(trimmed);
+    const normalizedAction = actionLabel ? normalizeDesktopTarget(actionLabel.replace(/\b(workspace|desktop project)\b/gi, "").trim()) : "";
+    const action: OcrWatchAction | undefined = copyOnMatch
+      ? { type: "copy_text" }
+      : actionLabel && /\b(workspace|desktop project)\b/i.test(actionLabel)
+        ? { type: "open_workspace", query: normalizeDesktopProjectName(actionLabel) }
+        : normalizedAction && desktopAppAliases.has(normalizedAction)
+          ? { type: "open_app", appName: normalizedAction }
+          : undefined;
+    const rule: OcrWatchRule | undefined = ruleLabel
+      ? /^errors?$/i.test(ruleLabel)
+        ? { type: "error" }
+        : /^price$/i.test(ruleLabel)
+          ? { type: "price" }
+          : /^price\s+(?:below|under)\s+/i.test(ruleLabel)
+            ? { type: "price_below", amount: Number(ruleLabel.replace(/^price\s+(?:below|under)\s+[$₹€£]?\s?/i, "").replace(",", ".")) }
+            : /^price\s+(?:above|over)\s+/i.test(ruleLabel)
+              ? { type: "price_above", amount: Number(ruleLabel.replace(/^price\s+(?:above|over)\s+[$₹€£]?\s?/i, "").replace(",", ".")) }
+          : /^keyword\s+(.+)$/i.test(ruleLabel)
+            ? { type: "keyword", keyword: ruleLabel.replace(/^keyword\s+/i, "").trim() }
+            : undefined
+      : undefined;
+    const normalizedTarget = normalizeDesktopTarget(target);
+    if (normalizedTarget === "screen" || normalizedTarget === "my screen") {
+      return { kind: "start_ocr_watch", scope: "screen", intervalMs, logToNotion, createTaskOnMatch, action, rule };
+    }
+    if (normalizedTarget === "active window" || normalizedTarget === "focused window") {
+      return { kind: "start_ocr_watch", scope: "active_window", intervalMs, logToNotion, createTaskOnMatch, action, rule };
+    }
+    const region = normalizeOcrRegion(normalizedTarget);
+    if (region) {
+      return { kind: "start_ocr_watch", scope: "region", region, intervalMs, logToNotion, createTaskOnMatch, action, rule };
+    }
+    if (desktopAppAliases.has(normalizedTarget)) {
+      return { kind: "start_ocr_watch", scope: "app_window", appName: normalizedTarget, intervalMs, logToNotion, createTaskOnMatch, action, rule };
+    }
+  }
+
+  if (normalized === "clean clipboard" || normalized === "cleanup clipboard") {
+    return { kind: "cleanup_clipboard", mode: "clean" };
+  }
+
+  if (normalized === "summarize clipboard" || normalized === "summarise clipboard") {
+    return { kind: "cleanup_clipboard", mode: "summarize" };
+  }
+
+  if (normalized === "format clipboard" || normalized === "make clipboard a list") {
+    return { kind: "cleanup_clipboard", mode: "format" };
+  }
+
+  if (
+    normalized === "run project checks" ||
+    normalized === "run jarvis checks" ||
+    normalized === "check the project"
+  ) {
+    return { kind: "run_project_checks" };
+  }
+
+  if (normalized === "show desktop permissions" || normalized === "show desktop safety settings") {
+    return { kind: "show_desktop_permissions" };
+  }
+
+  const permissionMatch = trimmed.match(
+    /^(turn\s+on|turn\s+off|enable|disable)\s+(project\s+checks?|app\s+close|close\s+app|executor\s+launch|coding\s+agent)\s+confirmations?$/i,
+  );
+  if (permissionMatch) {
+    const enabled = /turn\s+on|enable/i.test(permissionMatch[1]);
+    const target = permissionMatch[2].toLowerCase();
+    const permission: keyof DesktopPermissionSettings = /project/.test(target)
+      ? "confirmProjectChecks"
+      : /executor|coding/.test(target)
+        ? "confirmExecutorLaunch"
+        : "confirmAppClose";
+    return { kind: "set_desktop_permission", permission, enabled };
+  }
+
+  if (
+    normalized === "open project in vs code" ||
+    normalized === "open jarvis in vs code" ||
+    normalized === "open repo in vs code"
+  ) {
+    return { kind: "open_project_in_vscode" };
+  }
+
+  if (normalized === "minimize jarvis" || normalized === "minimize jarvis window") {
+    return { kind: "minimize_jarvis_window" };
+  }
+
+  if (normalized === "maximize jarvis" || normalized === "maximize jarvis window") {
+    return { kind: "maximize_jarvis_window" };
+  }
+
+  if (
+    normalized === "restore jarvis" ||
+    normalized === "restore jarvis window" ||
+    normalized === "unmaximize jarvis"
+  ) {
+    return { kind: "restore_jarvis_window" };
+  }
+
+  const externalWindowMatch = trimmed.match(/^(minimize|maximize|close)\s+(?:the\s+)?(.+?)(?:\s+app|\s+window|\s+program)?$/i);
+  if (externalWindowMatch) {
+    const action = externalWindowMatch[1].toLowerCase() as "minimize" | "maximize" | "close";
+    const appName = normalizeDesktopTarget(externalWindowMatch[2]);
+    if (desktopAppAliases.has(appName)) {
+      return { kind: "control_desktop_app_window", appName, action };
+    }
+  }
+
+  const windowStatusMatch =
+    trimmed.match(/^(?:is)\s+(?:the\s+)?(.+?)(?:\s+app|\s+window|\s+program)?\s+(?:open|running)$/i) ??
+    trimmed.match(/^(?:check|show)\s+(?:the\s+)?(.+?)(?:\s+app|\s+window|\s+program)?$/i) ??
+    trimmed.match(/^(?:status of|show status of)\s+(?:the\s+)?(.+?)(?:\s+app|\s+window|\s+program)?$/i);
+  if (windowStatusMatch) {
+    const appName = normalizeDesktopTarget(windowStatusMatch[1]);
+    if (desktopAppAliases.has(appName)) {
+      return { kind: "check_desktop_app_window_status", appName };
+    }
+  }
+
+  if (
+    normalized === "make task from screen" ||
+    normalized === "create task from screen" ||
+    normalized === "turn screen into task"
+  ) {
+    return { kind: "create_screen_task" };
+  }
+
+  const builderMatch = trimmed.match(/^(?:build|change|add|fix|implement)\s+(.+?)\s+(?:in|for)\s+jarvis$/i);
+  if (builderMatch) {
+    return { kind: "create_builder_handoff", request: builderMatch[0], launchExecutor: true };
+  }
+
+  const handoffMatch = trimmed.match(/^(?:create|make|prepare)\s+(?:a\s+)?(?:build|coding)\s+handoff\s+(?:for\s+)?(.+)$/i);
+  if (handoffMatch) {
+    return { kind: "create_builder_handoff", request: handoffMatch[1].trim(), launchExecutor: false };
+  }
+
+  if (
+    normalized === "open that again" ||
+    normalized === "open it again" ||
+    normalized === "switch back" ||
+    normalized === "go back to that"
+  ) {
+    return { kind: "open_last_desktop_context" };
+  }
+
+  if (
+    normalized === "export workspaces" ||
+    normalized === "export desktop projects" ||
+    normalized === "copy workspaces to clipboard"
+  ) {
+    return { kind: "export_desktop_projects_to_clipboard" };
+  }
+
+  if (
+    normalized === "import workspaces" ||
+    normalized === "import desktop projects" ||
+    normalized === "import workspaces from clipboard"
+  ) {
+    return { kind: "import_desktop_projects_from_clipboard" };
+  }
+
+  const clipboardWriteMatch = trimmed.match(/^(?:copy|put|set)\s+(.+?)\s+(?:to|on|in)\s+(?:my\s+)?clipboard$/i);
+  if (clipboardWriteMatch) {
+    const text = clipboardWriteMatch[1].trim();
+    if (text) {
+      return { kind: "write_clipboard_text", text };
+    }
+  }
+
+  const folderMatch = trimmed.match(/^(?:open|show|launch)\s+(?:my\s+)?(.+?\s+folder|downloads|documents|desktop|jarvis project|project)$/i);
+  if (folderMatch) {
+    const folderName = normalizeDesktopTarget(folderMatch[1]);
+    if (namedFolderAliases.has(folderName)) {
+      return { kind: "open_named_folder", folderName };
+    }
+  }
+
+  const focusMatch = trimmed.match(/^(?:focus|switch to|bring up|bring forward|go to)\s+(?:the\s+)?(.+?)(?:\s+app|\s+application|\s+window|\s+program)?$/i);
+  if (focusMatch) {
+    const appName = normalizeDesktopTarget(focusMatch[1]);
+    if (desktopAppAliases.has(appName)) {
+      return { kind: "focus_desktop_app", appName };
+    }
+  }
+
+  const appMatch = trimmed.match(/^(?:open|launch|start|focus)\s+(?:the\s+)?(.+?)(?:\s+app|\s+application|\s+program)?$/i);
+  if (appMatch) {
+    const appName = normalizeDesktopTarget(appMatch[1]);
+    if (desktopAppAliases.has(appName)) {
+      return { kind: "launch_desktop_app", appName };
+    }
+  }
+
+  return null;
 }
 
 function normalizeControlCommand(command: string) {
@@ -1533,6 +2999,117 @@ function buildStudySetupReply() {
   return "Alright, getting your study setup ready.";
 }
 
+function buildDesktopAppReply(appName: string) {
+  return `Yeah, opening ${appName}.`;
+}
+
+function buildDesktopFocusReply(appName: string) {
+  return `Yeah, switching to ${appName}.`;
+}
+
+function buildNamedFolderReply(folderName: string) {
+  return `Yeah, opening your ${folderName}.`;
+}
+
+function buildScreenshotReply() {
+  return "I captured a screenshot.";
+}
+
+function buildScreenshotsFolderReply() {
+  return "Yeah, opening your screenshots folder.";
+}
+
+function buildClipboardReadReply(hasText: boolean) {
+  return hasText ? "Here is what is on your clipboard." : "Your clipboard looks empty.";
+}
+
+function buildClipboardWriteReply() {
+  return "Copied that to your clipboard.";
+}
+
+function buildClipboardOpenReply() {
+  return "I opened what was on your clipboard.";
+}
+
+function buildClipboardSearchReply() {
+  return "I searched Google for what was on your clipboard.";
+}
+
+function buildClipboardNotionReply(title: string) {
+  return `I saved your clipboard to Notion as ${title}.`;
+}
+
+function buildDesktopProjectCreatedReply(name: string) {
+  return `I created the ${name} workspace.`;
+}
+
+function buildDesktopProjectOpenedReply(name: string) {
+  return `I opened the ${name} workspace.`;
+}
+
+function buildDesktopProjectUpdatedReply(name: string) {
+  return `I updated the ${name} workspace.`;
+}
+
+function buildDesktopProjectDeletedReply(name: string) {
+  return `I deleted the ${name} workspace.`;
+}
+
+function buildDesktopProjectsListReply(count: number) {
+  return count === 0
+    ? "You do not have any desktop workspaces saved yet."
+    : `I found ${count} saved desktop workspace${count === 1 ? "" : "s"}.`;
+}
+
+function buildWorkspaceScheduledReply(name: string) {
+  return `I scheduled the ${name} workspace.`;
+}
+
+function buildScreenshotNotionReply(title: string) {
+  return `I saved the screenshot reference to Notion as ${title}.`;
+}
+
+function buildClipboardCleanupReply(mode: "clean" | "summarize" | "format") {
+  if (mode === "summarize") {
+    return "I summarized your clipboard and copied it back.";
+  }
+  if (mode === "format") {
+    return "I formatted your clipboard and copied it back.";
+  }
+  return "I cleaned up your clipboard and copied it back.";
+}
+
+function buildProjectChecksReply() {
+  return "I ran the JARVIS project checks.";
+}
+
+function createVoiceBuildRequest(request: string): SkillBuildRequest {
+  const cleanedRequest = request.trim();
+  return {
+    skillName: "Voice requested code change",
+    title: `Build Request: ${cleanedRequest.slice(0, 80)}`,
+    prompt: [
+      "Implement the following JARVIS code change request.",
+      "",
+      `User request: ${cleanedRequest}`,
+      "",
+      "Requirements:",
+      "- Inspect the existing code before editing.",
+      "- Preserve unrelated user changes.",
+      "- Keep changes scoped to the requested behavior.",
+      "- Run TypeScript and Rust checks when relevant.",
+      "- Report any manual setup needed.",
+    ].join("\n"),
+    safetyChecks: [
+      "Do not delete or overwrite unrelated files.",
+      "Ask for approval before destructive actions.",
+      "Keep secrets out of source code.",
+      "Verify with project checks before reporting success.",
+    ],
+    createdAt: new Date().toISOString(),
+  };
+}
+
 function buildGoogleSearchReply(query: string) {
   return `Sure, searching Google for ${query}.`;
 }
@@ -1786,14 +3363,78 @@ function buildBirthdaySavedReply(name: string, birthdayLabel: string) {
   return `Okay. I saved ${name}'s birthday as ${birthdayLabel}.`;
 }
 
-function buildBirthdayLookupReply(name: string, birthdayLabel: string) {
-  return `${name}'s birthday is saved as ${birthdayLabel}.`;
+function buildBirthdayLookupReply(person: PersonMemoryRecord) {
+  const details = [
+    `${person.name}'s birthday is saved as ${person.birthdayLabel}.`,
+    person.age ? `${person.name} is marked as turning ${person.age}.` : "",
+    person.relationship ? `Relationship: ${person.relationship}.` : "",
+    (person.giftNotes ?? []).length > 0 ? `Gift notes: ${(person.giftNotes ?? []).join(", ")}.` : "",
+    (person.contactNotes ?? []).length > 0 ? `Contact notes: ${(person.contactNotes ?? []).slice(0, 3).join(", ")}.` : "",
+    person.lastContactLabel ? `Last contact: ${person.lastContactLabel}.` : "",
+    person.followUpDueLabel
+      ? `Follow up: ${person.followUpDueLabel}${person.followUpReason ? ` for ${person.followUpReason}` : ""}.`
+      : "",
+    (person.reminderLeadDays ?? 0) > 0
+      ? `Reminder timing: ${person.reminderLeadDays} day${person.reminderLeadDays === 1 ? "" : "s"} before.`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return details;
 }
 
 function buildBirthdayImportReply(count: number) {
   return count === 0
     ? "I didn't find any clear birthdays to save from that email yet."
     : `Alright. I saved ${count} birthday${count === 1 ? "" : "s"} to people memory.`;
+}
+
+function buildBirthdayCalendarReply(name: string) {
+  return `Alright. I added ${name}'s birthday to your calendar.`;
+}
+
+function formatPersonAge(person: PersonMemoryRecord) {
+  return person.age ? `turning ${person.age}` : null;
+}
+
+function formatBirthdaySummary(person: PersonMemoryRecord) {
+  const meta = [
+    person.birthdayLabel,
+    formatPersonAge(person),
+    person.relationship,
+    person.followUpDueLabel
+      ? `follow up ${person.followUpDueLabel}${person.followUpReason ? ` (${person.followUpReason})` : ""}`
+      : "",
+    (person.reminderLeadDays ?? 0) > 0
+      ? `remind ${person.reminderLeadDays} day${person.reminderLeadDays === 1 ? "" : "s"} before`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return `${person.name} - ${meta}`;
+}
+
+function buildPeopleFollowUpReply(count: number) {
+  return count === 0
+    ? "I do not see any people follow-ups due soon."
+    : `I found ${count} people follow-up${count === 1 ? "" : "s"} due soon.`;
+}
+
+function buildPeopleCheckInReply(count: number) {
+  return count === 0
+    ? "I do not see anyone flagged for a check-in this week."
+    : `I found ${count} people to check in with this week.`;
+}
+
+function formatPersonFollowUp(person: PersonMemoryRecord) {
+  const details = [
+    person.followUpDueLabel ? `follow up ${person.followUpDueLabel}` : "",
+    person.followUpReason ? person.followUpReason : "",
+    person.relationship ? person.relationship : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return details ? `${person.name} - ${details}` : person.name;
 }
 
 function buildTravelExtractionReply(title: string) {
@@ -1804,6 +3445,18 @@ function buildTravelSavedReply(title: string) {
   return `Okay. I saved the travel summary from ${title} to Notion.`;
 }
 
+function buildTravelCalendarReply(title: string) {
+  return `Alright. I added a travel calendar item from ${title}.`;
+}
+
+function buildTravelChecklistReply(title: string) {
+  return `Alright. Here is what you likely need for ${title}.`;
+}
+
+function buildTravelTimelineReply(title: string) {
+  return `Alright. Here is the trip timeline I built for ${title}.`;
+}
+
 function buildExpenseExtractionReply(title: string) {
   return `Alright. I pulled the expense details I could find from ${title}.`;
 }
@@ -1812,12 +3465,95 @@ function buildExpenseSavedReply(title: string) {
   return `Okay. I saved the expense summary from ${title} to Notion.`;
 }
 
+function buildExpenseSummaryReply(windowLabel: "weekly" | "monthly", count: number, total: number | null) {
+  if (count === 0) {
+    return `I couldn't find any ${windowLabel} expenses yet.`;
+  }
+
+  if (total !== null) {
+    return `I found ${count} ${windowLabel} expense${count === 1 ? "" : "s"} totaling $${total.toFixed(2)}.`;
+  }
+
+  return `I found ${count} ${windowLabel} expense${count === 1 ? "" : "s"}.`;
+}
+
+function buildCategoryExpenseReply(category: string, count: number, total: number | null) {
+  if (count === 0) {
+    return `I couldn't find any ${category} expenses this month yet.`;
+  }
+
+  if (total !== null) {
+    return `I found ${count} ${category} expense${count === 1 ? "" : "s"} this month totaling $${total.toFixed(2)}.`;
+  }
+
+  return `I found ${count} ${category} expense${count === 1 ? "" : "s"} this month.`;
+}
+
+function buildRecurringExpenseReply(count: number, total: number | null) {
+  if (count === 0) {
+    return "I couldn't find any likely recurring subscriptions yet.";
+  }
+
+  if (total !== null) {
+    return `I found ${count} likely recurring charge${count === 1 ? "" : "s"} totaling $${total.toFixed(2)}.`;
+  }
+
+  return `I found ${count} likely recurring charge${count === 1 ? "" : "s"}.`;
+}
+
+function normalizeExpenseCategoryLabel(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return "";
+  }
+
+  const known: Array<[string, string]> = [
+    ["food", "Food"],
+    ["restaurant", "Food"],
+    ["coffee", "Food"],
+    ["travel", "Travel"],
+    ["trip", "Travel"],
+    ["shopping", "Shopping"],
+    ["shop", "Shopping"],
+    ["bill", "Bills"],
+    ["bills", "Bills"],
+    ["rent", "Bills"],
+    ["subscription", "Subscription"],
+    ["subscriptions", "Subscription"],
+    ["membership", "Subscription"],
+    ["education", "Education"],
+    ["school", "Education"],
+  ];
+
+  return known.find(([alias]) => alias === normalized)?.[1] ?? value.trim();
+}
+
 function buildPackageExtractionReply(title: string) {
   return `Alright. I pulled the package details I could find from ${title}.`;
 }
 
 function buildPackageSavedReply(title: string) {
   return `Okay. I saved the package summary from ${title} to Notion.`;
+}
+
+function buildPackageSummaryReply(arrivingTodayCount: number) {
+  if (arrivingTodayCount > 0) {
+    return `I found ${arrivingTodayCount} package${arrivingTodayCount === 1 ? "" : "s"} arriving today.`;
+  }
+
+  return "I checked your saved package updates.";
+}
+
+function buildPackageTomorrowReply(count: number) {
+  return count === 0
+    ? "I do not see any packages arriving tomorrow."
+    : `I found ${count} package${count === 1 ? "" : "s"} arriving tomorrow.`;
+}
+
+function buildDelayedPackageReply(count: number) {
+  return count === 0
+    ? "I do not see any delayed packages right now."
+    : `I found ${count} delayed package${count === 1 ? "" : "s"}.`;
 }
 
 function buildMeetingPrepReply(title: string) {
@@ -2052,6 +3788,7 @@ type BirthdayCandidate = {
   birthdayLabel: string;
   month: number;
   day: number;
+  age: number | null;
 };
 
 function extractBirthdayCandidatesFromText(text: string) {
@@ -2082,8 +3819,28 @@ function extractBirthdayCandidatesFromText(text: string) {
         birthdayLabel: parsed.birthdayLabel,
         month: parsed.month,
         day: parsed.day,
+        age: null,
       });
     }
+  }
+
+  for (const match of normalized.matchAll(
+    /([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}) turns?\s+(\d{1,3})\s+on ((?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}|\d{1,2}\/\d{1,2})/gi,
+  )) {
+    const name = match[1]?.trim();
+    const age = Number(match[2]);
+    const parsed = parseBirthdayMonthDay(match[3]?.trim() ?? "");
+    if (!name || !parsed || !Number.isFinite(age) || age <= 0) {
+      continue;
+    }
+
+    candidates.set(name.toLowerCase(), {
+      name,
+      birthdayLabel: parsed.birthdayLabel,
+      month: parsed.month,
+      day: parsed.day,
+      age,
+    });
   }
 
   return Array.from(candidates.values());
@@ -2092,6 +3849,23 @@ function extractBirthdayCandidatesFromText(text: string) {
 function extractBirthdayCandidatesFromEmail(email: EmailRecord) {
   return extractBirthdayCandidatesFromText(`${email.subject}\n${email.snippet}\n${email.body ?? ""}`);
 }
+
+type PersonBirthdaySaveInput = {
+  name: string;
+  birthdayLabel: string;
+  month: number;
+  day: number;
+  age?: number | null;
+  relationship?: string | null;
+  giftNotes?: string[];
+  contactNotes?: string[];
+  lastContactLabel?: string | null;
+  followUpDueLabel?: string | null;
+  followUpReason?: string | null;
+  reminderLeadDays?: number;
+  calendarLinkedAt?: string | null;
+  source: "manual" | "gmail";
+};
 
 function extractTravelDetails(email: EmailRecord): TravelExtraction {
   const text = `${email.subject}\n${email.snippet}\n${email.body ?? ""}`.replace(/\s+/g, " ").trim();
@@ -2104,6 +3878,40 @@ function extractTravelDetails(email: EmailRecord): TravelExtraction {
   const stays = extractSentenceMatches(
     text,
     /\b(hotel|check-in|check in|check-out|check out|reservation|stay|room|lodging|hostel)\b/i,
+  );
+
+  const departures = extractSentenceMatches(
+    text,
+    /\b(depart|departure|leav(?:e|ing)|flight to|takeoff|boarding)\b/i,
+  );
+
+  const arrivals = extractSentenceMatches(
+    text,
+    /\b(arriv(?:e|al|ing)|landing|landed|destination|return flight)\b/i,
+  );
+
+  const hotels = Array.from(
+    new Set(
+      extractUniqueMatches(
+        text,
+        /\b([A-Z][A-Za-z0-9&.' -]{2,40}(?:Hotel|Inn|Resort|Suites|Lodge|Hostel))\b/g,
+      ).concat(
+        extractUniqueMatches(
+          text,
+          /\bhotel[:\s-]*([A-Z][A-Za-z0-9&.' -]{2,40})\b/gi,
+        ),
+      ),
+    ),
+  ).slice(0, 6);
+
+  const checkIns = extractSentenceMatches(
+    text,
+    /\b(check-in|check in|arrival date)\b/i,
+  );
+
+  const checkOuts = extractSentenceMatches(
+    text,
+    /\b(check-out|check out|departure date)\b/i,
   );
 
   const bookings = extractSentenceMatches(
@@ -2143,6 +3951,11 @@ function extractTravelDetails(email: EmailRecord): TravelExtraction {
 
   return {
     transport: transport.slice(0, 6),
+    departures: departures.slice(0, 6),
+    arrivals: arrivals.slice(0, 6),
+    hotels: hotels.slice(0, 6),
+    checkIns: checkIns.slice(0, 6),
+    checkOuts: checkOuts.slice(0, 6),
     stays: stays.slice(0, 6),
     bookings: bookings.slice(0, 6),
     addresses: addresses.slice(0, 6),
@@ -2152,13 +3965,22 @@ function extractTravelDetails(email: EmailRecord): TravelExtraction {
 }
 
 function formatTravelExtraction(email: EmailRecord, details: TravelExtraction) {
+  const timeline = buildTravelTimeline(details);
+  const checklist = buildTravelChecklist(details);
   const sections: Array<[string, string[]]> = [
     ["Transport", details.transport],
+    ["Departure", details.departures],
+    ["Arrival", details.arrivals],
+    ["Hotels", details.hotels],
+    ["Check-in", details.checkIns],
+    ["Check-out", details.checkOuts],
     ["Stays", details.stays],
     ["Bookings", details.bookings],
     ["Dates", details.dates],
     ["Addresses", details.addresses],
     ["Confirmation codes", details.confirmationCodes],
+    ["Trip timeline", timeline],
+    ["Trip checklist", checklist],
   ];
 
   return [
@@ -2177,6 +3999,8 @@ function formatTravelExtraction(email: EmailRecord, details: TravelExtraction) {
 }
 
 function formatTravelForNotion(email: EmailRecord, details: TravelExtraction) {
+  const timeline = buildTravelTimeline(details);
+  const checklist = buildTravelChecklist(details);
   return [
     `Travel Summary: ${email.subject}`,
     "",
@@ -2185,6 +4009,21 @@ function formatTravelForNotion(email: EmailRecord, details: TravelExtraction) {
     "",
     "Transport",
     ...(details.transport.length > 0 ? details.transport.map((item) => `- ${item}`) : ["- None detected"]),
+    "",
+    "Departure",
+    ...(details.departures.length > 0 ? details.departures.map((item) => `- ${item}`) : ["- None detected"]),
+    "",
+    "Arrival",
+    ...(details.arrivals.length > 0 ? details.arrivals.map((item) => `- ${item}`) : ["- None detected"]),
+    "",
+    "Hotels",
+    ...(details.hotels.length > 0 ? details.hotels.map((item) => `- ${item}`) : ["- None detected"]),
+    "",
+    "Check-in",
+    ...(details.checkIns.length > 0 ? details.checkIns.map((item) => `- ${item}`) : ["- None detected"]),
+    "",
+    "Check-out",
+    ...(details.checkOuts.length > 0 ? details.checkOuts.map((item) => `- ${item}`) : ["- None detected"]),
     "",
     "Stays",
     ...(details.stays.length > 0 ? details.stays.map((item) => `- ${item}`) : ["- None detected"]),
@@ -2203,11 +4042,110 @@ function formatTravelForNotion(email: EmailRecord, details: TravelExtraction) {
       ? details.confirmationCodes.map((item) => `- ${item}`)
       : ["- None detected"]),
     "",
+    "Trip timeline",
+    ...(timeline.length > 0 ? timeline.map((item) => `- ${item}`) : ["- No timeline cues detected"]),
+    "",
+    "Trip checklist",
+    ...(checklist.length > 0 ? checklist.map((item) => `- ${item}`) : ["- No checklist items suggested"]),
+    "",
     "Email preview",
     email.body ? email.body.slice(0, 2500) : email.snippet || "No email preview available.",
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function getPrimaryTravelSummary(details: TravelExtraction) {
+  return {
+    transport: details.transport[0] ?? details.bookings[0] ?? null,
+    departure: details.departures[0] ?? details.dates[0] ?? null,
+    arrival: details.arrivals[0] ?? null,
+    hotel: details.hotels[0] ?? details.stays[0] ?? null,
+    checkIn: details.checkIns[0] ?? null,
+    checkOut: details.checkOuts[0] ?? null,
+    confirmationCode: details.confirmationCodes[0] ?? null,
+  };
+}
+
+function buildTravelTimeline(details: TravelExtraction) {
+  const timeline = [
+    ...details.departures.map((item) => `Departure: ${item}`),
+    ...details.arrivals.map((item) => `Arrival: ${item}`),
+    ...details.checkIns.map((item) => `Hotel check-in: ${item}`),
+    ...details.checkOuts.map((item) => `Hotel check-out: ${item}`),
+    ...details.dates.map((item) => `Date cue: ${item}`),
+  ];
+
+  return Array.from(new Set(timeline)).slice(0, 12);
+}
+
+function buildTravelChecklist(details: TravelExtraction) {
+  const checklist: string[] = [];
+
+  if (details.confirmationCodes.length > 0) {
+    checklist.push("Keep your booking or confirmation code ready.");
+  }
+  if (details.transport.length > 0 || details.departures.length > 0) {
+    checklist.push("Double-check your departure time, terminal, gate, or platform.");
+  }
+  if (details.arrivals.length > 0) {
+    checklist.push("Review your arrival details and onward transport.");
+  }
+  if (details.hotels.length > 0 || details.checkIns.length > 0) {
+    checklist.push("Have your hotel check-in details ready.");
+  }
+  if (details.checkOuts.length > 0) {
+    checklist.push("Plan for hotel check-out timing before you leave.");
+  }
+  if (details.addresses.length > 0) {
+    checklist.push("Save the destination or hotel address for quick access.");
+  }
+
+  if (checklist.length === 0) {
+    checklist.push("Review the full itinerary and save any important trip details.");
+  }
+
+  return checklist.slice(0, 8);
+}
+
+function estimateTravelSegmentCount(details: TravelExtraction) {
+  return Math.max(
+    1,
+    details.departures.length,
+    details.arrivals.length,
+    details.hotels.length > 0 ? 1 : 0,
+  );
+}
+
+function buildTravelCalendarIntent(email: EmailRecord, details: TravelExtraction) {
+  const combined = [
+    details.departures[0] ?? "",
+    details.checkIns[0] ?? "",
+    details.dates[0] ?? "",
+    email.subject,
+    email.snippet,
+    email.body ?? "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const start =
+    parseDateFromFlexibleText(details.dates[0] ?? "") ??
+    parseDateFromEmailText(combined);
+  if (!start) {
+    return null;
+  }
+
+  const end = addMinutes(start, 60);
+  const travelLabel =
+    getPrimaryTravelSummary(details).transport ??
+    getPrimaryTravelSummary(details).hotel ??
+    "Trip";
+
+  return {
+    title: `Trip: ${travelLabel} - ${email.subject}`,
+    start,
+    end,
+  };
 }
 
 function extractExpenseDetails(email: EmailRecord): ExpenseExtraction {
@@ -2267,13 +4205,45 @@ function extractExpenseDetails(email: EmailRecord): ExpenseExtraction {
     /\b(receipt|invoice|order|paid|charged|total|subtotal|tax|delivery fee|subscription|renewal)\b/i,
   ).slice(0, 6);
 
+  const categorySignals: Array<[string, RegExp]> = [
+    ["Travel", /\b(flight|hotel|booking|trip|uber|lyft|airline|train)\b/i],
+    ["Food", /\b(restaurant|cafe|coffee|meal|food|doordash|ubereats|grubhub)\b/i],
+    ["Shopping", /\b(order|amazon|store|purchase|retail|shop)\b/i],
+    ["Bills", /\b(utility|electric|water|internet|phone|rent|bill)\b/i],
+    ["Subscription", /\b(subscription|renewal|monthly plan|membership|netflix|spotify|prime)\b/i],
+    ["Education", /\b(course|tuition|school|class|exam|udemy|coursera)\b/i],
+  ];
+
+  const normalizedCategory =
+    categorySignals.find(([, pattern]) => pattern.test(text))?.[0] ??
+    (categories[0] ? "General" : null);
+
+  const recurringLikely = /\b(subscription|renewal|monthly plan|membership|autopay|recurring|billed monthly|renews on)\b/i.test(
+    text,
+  );
+
+  const primaryAmountValue = (() => {
+    const value = amounts[0]?.replace(/USD/gi, "").replace(/\$/g, "").replace(/,/g, "").trim();
+    if (!value) {
+      return null;
+    }
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  })();
+
+  const primaryDate = dates[0] ?? null;
+
   return {
     merchants,
     amounts,
     categories,
     dates,
-    orderNumbers,
-    notes,
+      orderNumbers,
+      notes,
+      normalizedCategory,
+      primaryAmountValue,
+      primaryDate,
+      recurringLikely,
   };
 }
 
@@ -2281,6 +4251,8 @@ function formatExpenseExtraction(email: EmailRecord, details: ExpenseExtraction)
   const sections: Array<[string, string[]]> = [
     ["Merchants", details.merchants],
     ["Amounts", details.amounts],
+    ["Detected category", details.normalizedCategory ? [details.normalizedCategory] : []],
+    ["Recurring subscription", details.recurringLikely ? ["Yes"] : []],
     ["Dates", details.dates],
     ["Order numbers", details.orderNumbers],
     ["Receipt notes", details.notes],
@@ -2315,6 +4287,12 @@ function formatExpenseForNotion(email: EmailRecord, details: ExpenseExtraction) 
     "Amounts",
     ...(details.amounts.length > 0 ? details.amounts.map((item) => `- ${item}`) : ["- None detected"]),
     "",
+    "Detected category",
+    ...(details.normalizedCategory ? [`- ${details.normalizedCategory}`] : ["- None detected"]),
+    "",
+    "Recurring subscription",
+    ...(details.recurringLikely ? ["- Likely recurring charge"] : ["- Not clearly recurring"]),
+    "",
     "Dates",
     ...(details.dates.length > 0 ? details.dates.map((item) => `- ${item}`) : ["- None detected"]),
     "",
@@ -2323,6 +4301,9 @@ function formatExpenseForNotion(email: EmailRecord, details: ExpenseExtraction) 
     "",
     "Receipt notes",
     ...(details.notes.length > 0 ? details.notes.map((item) => `- ${item}`) : ["- None detected"]),
+    "",
+    "Category cleanup hint",
+    ...(details.normalizedCategory ? [`- Use ${details.normalizedCategory} as the default category for this expense.`] : ["- No strong category hint yet."]),
     "",
     "Email preview",
     email.body ? email.body.slice(0, 2500) : email.snippet || "No email preview available.",
@@ -2347,6 +4328,24 @@ function extractPackageDetails(email: EmailRecord): PackageExtraction {
       ],
     ),
   ).slice(0, 5);
+
+  const merchants = Array.from(
+    new Set(
+      extractUniqueMatches(
+        text,
+        /\b(?:from|seller|merchant|store)[:\s-]*([A-Z][A-Za-z0-9&.' -]{2,40})\b/gi,
+      ),
+    ),
+  ).slice(0, 4);
+
+  const items = Array.from(
+    new Set(
+      extractUniqueMatches(
+        text,
+        /\b(?:item|order|package)[:\s-]*([A-Z][A-Za-z0-9&.' -]{2,60})\b/gi,
+      ),
+    ),
+  ).slice(0, 4);
 
   const statuses = Array.from(
     new Set(
@@ -2395,6 +4394,8 @@ function extractPackageDetails(email: EmailRecord): PackageExtraction {
 
   return {
     carriers,
+    merchants,
+    items,
     statuses,
     deliveryDates,
     trackingNumbers,
@@ -2406,6 +4407,8 @@ function extractPackageDetails(email: EmailRecord): PackageExtraction {
 function formatPackageExtraction(email: EmailRecord, details: PackageExtraction) {
   const sections: Array<[string, string[]]> = [
     ["Carriers", details.carriers],
+    ["Merchants", details.merchants],
+    ["Items", details.items],
     ["Statuses", details.statuses],
     ["Delivery dates", details.deliveryDates],
     ["Tracking numbers", details.trackingNumbers],
@@ -2438,6 +4441,12 @@ function formatPackageForNotion(email: EmailRecord, details: PackageExtraction) 
     "Carriers",
     ...(details.carriers.length > 0 ? details.carriers.map((item) => `- ${item}`) : ["- None detected"]),
     "",
+    "Merchants",
+    ...(details.merchants.length > 0 ? details.merchants.map((item) => `- ${item}`) : ["- None detected"]),
+    "",
+    "Items",
+    ...(details.items.length > 0 ? details.items.map((item) => `- ${item}`) : ["- None detected"]),
+    "",
     "Statuses",
     ...(details.statuses.length > 0 ? details.statuses.map((item) => `- ${item}`) : ["- None detected"]),
     "",
@@ -2462,6 +4471,52 @@ function formatPackageForNotion(email: EmailRecord, details: PackageExtraction) 
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function isTodayDeliveryLabel(label: string | null) {
+  if (!label) {
+    return false;
+  }
+
+  return /\b(arriving today|today)\b/i.test(label);
+}
+
+function isTomorrowDeliveryLabel(label: string | null) {
+  if (!label) {
+    return false;
+  }
+
+  return /\b(arriving tomorrow|tomorrow)\b/i.test(label);
+}
+
+function hasTravelSignal(details: TravelExtraction) {
+  return (
+    details.transport.length > 0 ||
+    details.departures.length > 0 ||
+    details.arrivals.length > 0 ||
+    details.hotels.length > 0 ||
+    details.stays.length > 0 ||
+    details.bookings.length > 0 ||
+    details.confirmationCodes.length > 0
+  );
+}
+
+function hasExpenseSignal(details: ExpenseExtraction) {
+  return (
+    details.merchants.length > 0 ||
+    details.amounts.length > 0 ||
+    details.orderNumbers.length > 0 ||
+    details.notes.length > 0
+  );
+}
+
+function hasPackageSignal(details: PackageExtraction) {
+  return (
+    details.carriers.length > 0 ||
+    details.statuses.length > 0 ||
+    details.deliveryDates.length > 0 ||
+    details.trackingNumbers.length > 0
+  );
 }
 
 function tokenizePrepQuery(value: string) {
@@ -2524,12 +4579,153 @@ function findRelatedMeetingTasks(event: GoogleCalendarEventRecord, tasks: Planne
   }).slice(0, 4);
 }
 
-function buildMeetingPrepContent(
+function extractMeetingAgendaCandidates(
+  emails: EmailRecord[],
+  notes: NoteRecord[],
+  tasks: PlannerTaskRecord[],
+) {
+  const candidates = new Set<string>();
+
+  for (const email of emails) {
+    for (const sentence of extractSentenceMatches(
+      `${email.subject}. ${email.snippet}. ${email.body ?? ""}`,
+      /\b(agenda|discuss|review|update|decision|plan|next step|topic|goal|question)\b/i,
+    )) {
+      candidates.add(sentence);
+    }
+  }
+
+  for (const note of notes) {
+    const summary = `${note.title}. ${note.summary}`;
+    for (const sentence of extractSentenceMatches(
+      summary,
+      /\b(agenda|discuss|review|update|decision|plan|next step|topic|goal|question)\b/i,
+    )) {
+      candidates.add(sentence);
+    }
+  }
+
+  for (const task of tasks) {
+    candidates.add(`${task.title}${task.dueLabel ? ` (${task.dueLabel})` : ""}`);
+  }
+
+  return Array.from(candidates).slice(0, 6);
+}
+
+function buildMeetingFocusSummary(
   event: GoogleCalendarEventRecord,
   emails: EmailRecord[],
   notes: NoteRecord[],
   tasks: PlannerTaskRecord[],
 ) {
+  const parts: string[] = [];
+  if (tasks.length > 0) {
+    parts.push(`clear ${tasks.length} related task${tasks.length === 1 ? "" : "s"}`);
+  }
+  if (emails.length > 0) {
+    parts.push(`scan ${emails.length} related email${emails.length === 1 ? "" : "s"}`);
+  }
+  if (notes.length > 0) {
+    parts.push(`review ${notes.length} note${notes.length === 1 ? "" : "s"}`);
+  }
+
+  if (parts.length === 0) {
+    return `Focus: review the calendar entry for ${event.summary} directly because I could not find supporting context yet.`;
+  }
+
+  return `Focus: before ${event.summary}, ${parts.join(", ")}.`;
+}
+
+function buildMeetingActionItems(
+  emails: EmailRecord[],
+  notes: NoteRecord[],
+  tasks: PlannerTaskRecord[],
+) {
+  const items: string[] = [];
+
+  if (tasks.length > 0) {
+    items.push(...tasks.map((task) => `Review task: ${task.title}${task.dueLabel ? ` (${task.dueLabel})` : ""}`));
+  }
+  if (emails.length > 0) {
+    items.push(...emails.slice(0, 2).map((email) => `Check email: ${email.subject}`));
+  }
+  if (notes.length > 0) {
+    items.push(...notes.slice(0, 2).map((note) => `Open note: ${note.title}`));
+  }
+
+  if (items.length === 0) {
+    items.push("Open the calendar event and add your own agenda if needed.");
+  }
+
+  return items.slice(0, 6);
+}
+
+function findMeetingRelatedPeople(
+  event: GoogleCalendarEventRecord,
+  emails: EmailRecord[],
+  people: PersonMemoryRecord[],
+) {
+  const related = new Set<string>();
+  const summary = event.summary.toLowerCase();
+
+  for (const person of people) {
+    if (summary.includes(person.name.toLowerCase())) {
+      related.add(person.name);
+    }
+  }
+
+  for (const email of emails) {
+    const sender = email.from.split("<")[0]?.trim();
+    if (sender) {
+      related.add(sender);
+    }
+  }
+
+  return Array.from(related).slice(0, 5);
+}
+
+function buildMeetingChangeSummary(
+  event: GoogleCalendarEventRecord,
+  emails: EmailRecord[],
+  tasks: PlannerTaskRecord[],
+  previous: MeetingPrepMemoryRecord | null,
+) {
+  if (!previous) {
+    return "This is your first saved prep snapshot for this meeting.";
+  }
+
+  const parts: string[] = [];
+  if (emails.length > 0) {
+    parts.push(`${emails.length} related email${emails.length === 1 ? "" : "s"} are in view now`);
+  }
+  if (tasks.length > 0) {
+    parts.push(`${tasks.length} related task${tasks.length === 1 ? "" : "s"} are active`);
+  }
+  if (previous.actionItems.length > 0) {
+    parts.push(`the last prep had ${previous.actionItems.length} saved action item${previous.actionItems.length === 1 ? "" : "s"}`);
+  }
+
+  if (parts.length === 0) {
+    return `No major context changes were detected for ${event.summary} since the last prep.`;
+  }
+
+  return `Since the last prep for ${event.summary}, ${parts.join(", ")}.`;
+}
+
+function buildMeetingPrepContent(
+  event: GoogleCalendarEventRecord,
+  emails: EmailRecord[],
+  notes: NoteRecord[],
+  tasks: PlannerTaskRecord[],
+  people: PersonMemoryRecord[],
+  previous: MeetingPrepMemoryRecord | null,
+) {
+  const focusSummary = buildMeetingFocusSummary(event, emails, notes, tasks);
+  const agendaCandidates = extractMeetingAgendaCandidates(emails, notes, tasks);
+  const actionItems = buildMeetingActionItems(emails, notes, tasks);
+  const relatedPeople = findMeetingRelatedPeople(event, emails, people);
+  const changeSummary = buildMeetingChangeSummary(event, emails, tasks, previous);
+
   return [
     `Meeting Prep: ${event.summary}`,
     "",
@@ -2537,6 +4733,15 @@ function buildMeetingPrepContent(
       event.end ? ` to ${formatCalendarEventTimeLabel(event.end)}` : ""
     }`,
     event.htmlLink ? `Calendar link: ${event.htmlLink}` : "",
+    "",
+    focusSummary,
+    "",
+    changeSummary,
+    "",
+    "Likely agenda",
+    ...(agendaCandidates.length > 0
+      ? agendaCandidates.map((item) => `- ${item}`)
+      : ["- No explicit agenda cues were detected yet."]),
     "",
     "Related email",
     ...(emails.length > 0
@@ -2548,15 +4753,18 @@ function buildMeetingPrepContent(
       ? notes.map((note) => `- ${note.title}`)
       : ["- No related notes found."]),
     "",
+    "People context",
+    ...(relatedPeople.length > 0
+      ? relatedPeople.map((person) => `- ${person}`)
+      : ["- No specific people context detected yet."]),
+    "",
     "Related tasks",
     ...(tasks.length > 0
       ? tasks.map((task) => `- ${task.title}${task.dueLabel ? ` (${task.dueLabel})` : ""}`)
       : ["- No related tasks found."]),
     "",
-    "Prep focus",
-    emails.length > 0 || notes.length > 0 || tasks.length > 0
-      ? "- Review the related items above before the meeting."
-      : "- No linked context was found yet, so review the calendar event details directly.",
+    "Action items",
+    ...actionItems.map((item) => `- ${item}`),
   ]
     .filter(Boolean)
     .join("\n");
@@ -2602,6 +4810,141 @@ function buildSchoolFocusSummary(
   return `School mode focus: ${focusPoints.join(", ")}.`;
 }
 
+function detectSchoolSubjects(
+  emails: EmailRecord[],
+  tasks: PlannerTaskRecord[],
+  files: FileRecord[],
+) {
+  const text = [
+    ...emails.map((email) => `${email.subject} ${email.snippet} ${email.body}`),
+    ...tasks.map((task) => `${task.title} ${task.sourceNote.summary}`),
+    ...files.map((file) => file.name),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  const subjectSignals: Array<[string, RegExp]> = [
+    ["Calculus", /\b(calculus|calc|derivative|integral)\b/i],
+    ["Math", /\b(math|algebra|geometry|statistics)\b/i],
+    ["Physics", /\b(physics|mechanics|thermodynamics)\b/i],
+    ["Chemistry", /\b(chemistry|organic chem|lab report)\b/i],
+    ["Biology", /\b(biology|bio|anatomy|genetics)\b/i],
+    ["Computer Science", /\b(computer science|cs\b|programming|coding|react|python|java)\b/i],
+    ["English", /\b(english|essay|literature|reading)\b/i],
+    ["History", /\b(history|historical|research paper)\b/i],
+    ["Economics", /\b(economics|microeconomics|macroeconomics|finance)\b/i],
+  ];
+
+  return subjectSignals
+    .filter(([, pattern]) => pattern.test(text))
+    .map(([label]) => label)
+    .slice(0, 6);
+}
+
+function buildSchoolSessions(
+  subjects: string[],
+  loadedPdfs: FileRecord[],
+  studyTasks: PlannerTaskRecord[],
+  urgentEmails: Array<{ email: EmailRecord; signals: EmailSignals; score: number }>,
+) {
+  const sessions: string[] = [];
+  const topSubjects = subjects.length > 0 ? subjects : ["General study"];
+  const dayLabels = ["Today", "Tomorrow", "Next day"];
+
+  for (const [index, subject] of topSubjects.slice(0, 3).entries()) {
+    const matchingPdf = loadedPdfs.find((file) => file.name.toLowerCase().includes(subject.toLowerCase().split(" ")[0]));
+    const matchingTask = studyTasks.find((task) =>
+      `${task.title} ${task.sourceNote.summary}`.toLowerCase().includes(subject.toLowerCase().split(" ")[0]),
+    );
+
+    sessions.push(
+      `${dayLabels[index] ?? `Day ${index + 1}`} - ${subject}: ${matchingPdf ? `review ${matchingPdf.name}` : "review your most relevant notes"}${
+        matchingTask ? ` and finish ${matchingTask.title}` : ""
+      }`,
+    );
+  }
+
+  if (urgentEmails.length > 0) {
+    sessions.push(`Inbox check: review ${urgentEmails[0].email.subject} for deadline or schedule changes.`);
+  }
+
+  return sessions.slice(0, 5);
+}
+
+function extractSchoolAssignments(
+  urgentEmails: Array<{ email: EmailRecord; signals: EmailSignals; score: number }>,
+  studyTasks: PlannerTaskRecord[],
+) {
+  const assignments = new Set<string>();
+
+  for (const task of studyTasks) {
+    assignments.add(task.dueLabel ? `${task.title} (${task.dueLabel})` : task.title);
+  }
+
+  for (const { email } of urgentEmails) {
+    if (/\b(assignment|project|exam|quiz|homework|paper|lab)\b/i.test(`${email.subject} ${email.snippet} ${email.body}`)) {
+      assignments.add(email.subject);
+    }
+  }
+
+  return Array.from(assignments).slice(0, 8);
+}
+
+function buildExamCountdowns(
+  urgentEmails: Array<{ email: EmailRecord; signals: EmailSignals; score: number }>,
+  studyTasks: PlannerTaskRecord[],
+) {
+  const countdowns: string[] = [];
+  const now = new Date();
+
+  for (const task of studyTasks) {
+    if (!/\b(exam|quiz|midterm|final|test)\b/i.test(task.title)) {
+      continue;
+    }
+    const parsed = task.dueDate;
+    if (!parsed) {
+      continue;
+    }
+    const days = Math.max(0, Math.round((startOfDay(parsed).getTime() - startOfDay(now).getTime()) / (1000 * 60 * 60 * 24)));
+    countdowns.push(`${task.title} - in ${days} day${days === 1 ? "" : "s"}`);
+  }
+
+  for (const { email, signals } of urgentEmails) {
+    if (!/\b(exam|quiz|midterm|final|test)\b/i.test(`${email.subject} ${email.snippet}`)) {
+      continue;
+    }
+    const parsed = parseDateFromFlexibleText(signals.deadlines[0] ?? "");
+    if (!parsed) {
+      continue;
+    }
+    const days = Math.max(0, Math.round((startOfDay(parsed).getTime() - startOfDay(now).getTime()) / (1000 * 60 * 60 * 24)));
+    countdowns.push(`${email.subject} - in ${days} day${days === 1 ? "" : "s"}`);
+  }
+
+  return Array.from(new Set(countdowns)).slice(0, 6);
+}
+
+function collectSchoolDeadlines(
+  urgentEmails: Array<{ email: EmailRecord; signals: EmailSignals; score: number }>,
+  studyTasks: PlannerTaskRecord[],
+) {
+  const deadlines = new Set<string>();
+
+  for (const task of studyTasks) {
+    if (task.dueLabel) {
+      deadlines.add(`${task.title} - ${task.dueLabel}`);
+    }
+  }
+
+  for (const { email, signals } of urgentEmails) {
+    for (const deadline of signals.deadlines.slice(0, 2)) {
+      deadlines.add(`${email.subject} - ${deadline}`);
+    }
+  }
+
+  return Array.from(deadlines).slice(0, 8);
+}
+
 function buildSchoolPlanContent(
   emails: EmailRecord[],
   tasks: PlannerTaskRecord[],
@@ -2625,11 +4968,19 @@ function buildSchoolPlanContent(
     ) || task.status === "today" || task.status === "overdue",
   );
   const focusSummary = buildSchoolFocusSummary(urgentStudyEmails, studyTasks, loadedPdfs);
+  const subjects = detectSchoolSubjects(emails, studyTasks, loadedPdfs);
+  const sessions = buildSchoolSessions(subjects, loadedPdfs, studyTasks, urgentStudyEmails);
+  const deadlines = collectSchoolDeadlines(urgentStudyEmails, studyTasks);
+  const assignments = extractSchoolAssignments(urgentStudyEmails, studyTasks);
+  const examCountdowns = buildExamCountdowns(urgentStudyEmails, studyTasks);
 
   return [
     `School Mode Plan: ${new Date().toLocaleString()}`,
     "",
     focusSummary,
+    "",
+    "Subjects",
+    ...(subjects.length > 0 ? subjects.map((subject) => `- ${subject}`) : ["- No clear subject detected yet."]),
     "",
     "Loaded study PDFs",
     ...(loadedPdfs.length > 0
@@ -2653,6 +5004,18 @@ function buildSchoolPlanContent(
           return `- ${email.subject} - ${email.from}${cues ? ` (${cues})` : ""}`;
         })
       : ["- No school-related loaded emails right now."]),
+    "",
+    "Deadlines",
+    ...(deadlines.length > 0 ? deadlines.map((deadline) => `- ${deadline}`) : ["- No explicit school deadlines detected."]),
+    "",
+    "Assignments",
+    ...(assignments.length > 0 ? assignments.map((assignment) => `- ${assignment}`) : ["- No school assignments detected yet."]),
+    "",
+    "Exam countdowns",
+    ...(examCountdowns.length > 0 ? examCountdowns.map((item) => `- ${item}`) : ["- No exam countdowns detected yet."]),
+    "",
+    "Study sessions",
+    ...(sessions.length > 0 ? sessions.map((session) => `- ${session}`) : ["- No study sessions suggested yet."]),
     "",
     "Suggested next moves",
     studyTasks.filter((task) => task.status === "overdue").length > 0
@@ -2689,7 +5052,62 @@ function formatUpcomingBirthday(person: PersonMemoryRecord, now = new Date()) {
   );
   const suffix =
     diffDays === 0 ? "today" : diffDays === 1 ? "tomorrow" : `in ${diffDays} days`;
-  return `${person.name} - ${person.birthdayLabel} (${suffix})`;
+  const extras = [
+    formatPersonAge(person),
+    person.relationship,
+    (person.reminderLeadDays ?? 0) > 0
+      ? `remind ${person.reminderLeadDays} day${person.reminderLeadDays === 1 ? "" : "s"} before`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return `${person.name} - ${person.birthdayLabel} (${suffix})${extras ? ` - ${extras}` : ""}`;
+}
+
+function findPersonByQuery(people: PersonMemoryRecord[], query: string) {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  return people.find((entry) => entry.name.toLowerCase().includes(normalized)) ?? null;
+}
+
+function getNextBirthdayCalendarWindow(person: PersonMemoryRecord, now = new Date()) {
+  const nextBirthday = getNextBirthdayDate(person, now);
+  const start = new Date(nextBirthday.getFullYear(), nextBirthday.getMonth(), nextBirthday.getDate(), 9, 0, 0, 0);
+  const end = new Date(nextBirthday.getFullYear(), nextBirthday.getMonth(), nextBirthday.getDate(), 10, 0, 0, 0);
+  return { start, end };
+}
+
+function parseOptionalDateLabel(label: string | null | undefined) {
+  if (!label) {
+    return null;
+  }
+
+  return parseDateFromFlexibleText(label);
+}
+
+function getUpcomingPeopleFollowUps(people: PersonMemoryRecord[], now = new Date()) {
+  const weekAhead = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const start = startOfDay(now);
+
+  return people
+    .filter((person) => {
+      const parsed = parseOptionalDateLabel(person.followUpDueLabel);
+      if (!parsed) {
+        return false;
+      }
+      return parsed.getTime() >= start.getTime() && parsed.getTime() <= weekAhead.getTime();
+    })
+    .sort((left, right) => {
+      const leftDate = parseOptionalDateLabel(left.followUpDueLabel);
+      const rightDate = parseOptionalDateLabel(right.followUpDueLabel);
+      if (!leftDate || !rightDate) {
+        return 0;
+      }
+      return leftDate.getTime() - rightDate.getTime();
+    });
 }
 
 function formatEmailSignals(email: EmailRecord, signals: EmailSignals) {
@@ -2860,6 +5278,38 @@ function createActiveBrowserContext(url: string): ActiveConversationContext {
     kind: "browser",
     url,
     label: formatBrowserTargetLabel(url),
+  };
+}
+
+function createActiveDesktopAppContext(appName: string): ActiveConversationContext {
+  return {
+    kind: "desktop_app",
+    appName,
+    label: appName,
+  };
+}
+
+function createActiveDesktopFolderContext(folderName: string): ActiveConversationContext {
+  return {
+    kind: "desktop_folder",
+    folderName,
+    label: folderName,
+  };
+}
+
+function createActiveDesktopWorkspaceContext(projectName: string): ActiveConversationContext {
+  return {
+    kind: "desktop_workspace",
+    projectName,
+    label: projectName,
+  };
+}
+
+function createActiveScreenshotContext(path: string): ActiveConversationContext {
+  return {
+    kind: "screenshot",
+    path,
+    label: path.split(/[\\/]/).pop() ?? "screenshot",
   };
 }
 
@@ -3241,6 +5691,66 @@ function buildFocusSummary(
   return `Focus today: ${focusPoints.join(", ")}.`;
 }
 
+function buildTopPriorities(
+  urgentEmails: Array<{ email: EmailRecord; signals: EmailSignals; score: number }>,
+  overdueTasks: PlannerTaskRecord[],
+  packages: PackageMemoryRecord[],
+  people: PersonMemoryRecord[],
+) {
+  const items: string[] = [];
+
+  if (overdueTasks.length > 0) {
+    items.push(`Clear overdue task: ${overdueTasks[0].title}`);
+  }
+  if (urgentEmails.length > 0) {
+    items.push(`Review urgent email: ${urgentEmails[0].email.subject}`);
+  }
+  const arrivingToday = packages.find((item) => item.arrivingToday);
+  if (arrivingToday) {
+    items.push(`Watch delivery: ${arrivingToday.title}`);
+  }
+  const followUp = getUpcomingPeopleFollowUps(people)[0];
+  if (followUp) {
+    items.push(`Check in with ${followUp.name}`);
+  }
+
+  return items.slice(0, 3);
+}
+
+function buildProactiveSuggestions(
+  schoolPlans: SchoolPlanMemoryRecord[],
+  packages: PackageMemoryRecord[],
+  meetingPrep: MeetingPrepMemoryRecord[],
+  expenses: ExpenseMemoryRecord[],
+) {
+  const suggestions: string[] = [];
+  const tomorrowPackage = packages.find((item) => item.arrivingTomorrow);
+  const delayedPackage = packages.find((item) => /\bdelayed\b/i.test(item.status ?? ""));
+  const recurringExpense = expenses.find((item) => item.recurringLikely);
+
+  if (tomorrowPackage) {
+    suggestions.push(`Watch for ${tomorrowPackage.title} tomorrow.`);
+  }
+  if (delayedPackage) {
+    suggestions.push(`Recheck the delayed shipment for ${delayedPackage.title}.`);
+  }
+  if (meetingPrep.length > 0) {
+    suggestions.push(`Open your latest prep note for ${meetingPrep[0].eventTitle}.`);
+  }
+  if (schoolPlans.length > 0) {
+    suggestions.push(`Use your latest school plan for ${schoolPlans[0].subjects[0] ?? "today's study block"}.`);
+  }
+  if (recurringExpense) {
+    suggestions.push(`Review the recurring charge from ${recurringExpense.merchant ?? recurringExpense.title}.`);
+  }
+
+  if (suggestions.length === 0) {
+    suggestions.push("Keep the day simple and only open the next item when you need it.");
+  }
+
+  return suggestions.slice(0, 4);
+}
+
 function buildDailyBriefContent(
   emails: EmailRecord[],
   tasks: PlannerTaskRecord[],
@@ -3279,10 +5789,16 @@ function buildDailyBriefContent(
   ].join("\n");
 }
 
-function buildDailyBriefContentV2(
+function buildDailyBriefContentV4(
   emails: EmailRecord[],
   tasks: PlannerTaskRecord[],
   events: GoogleCalendarEventRecord[],
+  people: PersonMemoryRecord[],
+  travel: TravelMemoryRecord[],
+  expenses: ExpenseMemoryRecord[],
+  packages: PackageMemoryRecord[],
+  meetingPrep: MeetingPrepMemoryRecord[],
+  schoolPlans: SchoolPlanMemoryRecord[],
 ) {
   const overdueTasks = tasks.filter((task) => task.status === "overdue");
   const todayTasks = tasks.filter((task) => task.status === "today");
@@ -3298,11 +5814,62 @@ function buildDailyBriefContentV2(
     Evening: events.filter((event) => getEventBucketLabel(event.start) === "Evening"),
   };
   const focusSummary = buildFocusSummary(urgentEmails, overdueTasks, todayTasks, events);
+  const upcomingBirthdays = [...people]
+    .sort((left, right) => getNextBirthdayDate(left).getTime() - getNextBirthdayDate(right).getTime())
+    .slice(0, 3);
+  const arrivingToday = packages.filter((item) => item.arrivingToday).slice(0, 5);
+  const arrivingTomorrow = packages.filter((item) => item.arrivingTomorrow).slice(0, 3);
+  const recentTrips = travel.slice(0, 3);
+  const monthlyExpenseTotal = expenses.reduce<number | null>((sum, item) => {
+    if (item.amountValue === null) {
+      return sum;
+    }
+    return (sum ?? 0) + item.amountValue;
+  }, 0);
+  const recurringExpenses = expenses.filter((item) => item.recurringLikely).slice(0, 3);
+  const recentMeetingPrep = meetingPrep.slice(0, 2);
+  const recentSchoolPlans = schoolPlans.slice(0, 2);
+  const topPriorities = buildTopPriorities(urgentEmails, overdueTasks, packages, people);
+  const proactiveSuggestions = buildProactiveSuggestions(schoolPlans, packages, meetingPrep, expenses);
 
   return [
     `Daily Brief: ${new Date().toLocaleString()}`,
     "",
     focusSummary,
+    "",
+    "Top 3 priorities",
+    ...(topPriorities.length > 0
+      ? topPriorities.map((item, index) => `- ${index + 1}. ${item}`)
+      : ["- No top priorities detected right now."]),
+    "",
+    "Upcoming birthdays",
+    ...(upcomingBirthdays.length > 0
+      ? upcomingBirthdays.map((person) => `- ${formatUpcomingBirthday(person)}`)
+      : ["- No saved birthdays coming up soon."]),
+    "",
+    "Packages arriving today",
+    ...(arrivingToday.length > 0
+      ? arrivingToday.map(
+          (item) =>
+            `- ${item.title}${item.status ? ` (${item.status})` : ""}${item.deliveryDate ? ` - ${item.deliveryDate}` : ""}`,
+        )
+      : ["- No packages marked as arriving today."]),
+    "",
+    "Packages arriving tomorrow",
+    ...(arrivingTomorrow.length > 0
+      ? arrivingTomorrow.map(
+          (item) =>
+            `- ${item.title}${item.itemLabel ? ` - ${item.itemLabel}` : ""}${item.deliveryDate ? ` - ${item.deliveryDate}` : ""}`,
+        )
+      : ["- No packages marked as arriving tomorrow."]),
+    "",
+    "Travel in motion",
+    ...(recentTrips.length > 0
+      ? recentTrips.map(
+          (item) =>
+            `- ${item.title}${item.departure ? ` - ${item.departure}` : ""}${item.hotel ? ` - ${item.hotel}` : ""}`,
+        )
+      : ["- No saved travel plans yet."]),
     "",
     "Urgent email",
     ...(prioritizedEmails.length > 0
@@ -3354,6 +5921,41 @@ function buildDailyBriefContentV2(
     ...(upcomingTasks.length > 0
       ? upcomingTasks.map((task) => `- ${task.title}${task.dueLabel ? ` (${task.dueLabel})` : ""}`)
       : ["- No upcoming tasks loaded."]),
+    "",
+    "Expense snapshot",
+    ...(expenses.length > 0
+      ? [
+          monthlyExpenseTotal !== null
+            ? `- Saved expense total in memory: $${monthlyExpenseTotal.toFixed(2)}`
+            : "- Saved expenses do not have enough amount data yet.",
+          ...(recurringExpenses.length > 0
+            ? recurringExpenses.map(
+                (item) => `- Recurring: ${item.title}${item.amount ? ` (${item.amount})` : ""}${item.category ? ` - ${item.category}` : ""}`,
+              )
+            : []),
+          ...expenses.slice(0, 3).map(
+            (item) => `- ${item.title}${item.amount ? ` (${item.amount})` : ""}${item.category ? ` - ${item.category}` : ""}`,
+          ),
+        ]
+      : ["- No saved expenses yet."]),
+    "",
+    "Meeting prep memory",
+    ...(recentMeetingPrep.length > 0
+      ? recentMeetingPrep.map((item) => `- ${item.summaryTitle}${item.focusSummary ? ` - ${item.focusSummary}` : ""}`)
+      : ["- No recent meeting prep summaries yet."]),
+    "",
+    "School mode memory",
+    ...(recentSchoolPlans.length > 0
+      ? recentSchoolPlans.map(
+          (item) =>
+            `- ${item.title}${item.subjects.length > 0 ? ` - ${item.subjects.join(", ")}` : ""}${
+              item.examCountdowns.length > 0 ? ` - exams: ${item.examCountdowns.join(", ")}` : ""
+            }`,
+        )
+      : ["- No recent school mode plans yet."]),
+    "",
+    "Proactive suggestions",
+    ...proactiveSuggestions.map((item) => `- ${item}`),
   ].join("\n");
 }
 
@@ -3438,6 +6040,11 @@ function parseExplicitCommandIntent(
     return { kind: "study_setup" };
   }
 
+  const desktopIntent = parseDesktopControlIntent(trimmed);
+  if (desktopIntent) {
+    return desktopIntent;
+  }
+
   if (normalized.startsWith("search ")) {
     const query = trimmed.slice(7).trim();
     if (query) {
@@ -3494,6 +6101,40 @@ function parseExplicitCommandIntent(
     }
   }
 
+  const rememberBirthdayWithCalendarMatch = trimmed.match(
+    /^remember(?: that)?\s+(.+?)['â€™]s birthday is\s+(.+?)\s+and add it to calendar$/i,
+  );
+  if (rememberBirthdayWithCalendarMatch) {
+    const parsed = parseBirthdayMonthDay(rememberBirthdayWithCalendarMatch[2]);
+    if (parsed) {
+      return {
+        kind: "remember_person_birthday",
+        name: rememberBirthdayWithCalendarMatch[1].trim(),
+        birthdayLabel: parsed.birthdayLabel,
+        month: parsed.month,
+        day: parsed.day,
+        addToCalendar: true,
+      };
+    }
+  }
+
+  const saveBirthdayWithCalendarMatch = trimmed.match(
+    /^save\s+(.+?)['â€™]s birthday as\s+(.+?)\s+and add it to calendar$/i,
+  );
+  if (saveBirthdayWithCalendarMatch) {
+    const parsed = parseBirthdayMonthDay(saveBirthdayWithCalendarMatch[2]);
+    if (parsed) {
+      return {
+        kind: "remember_person_birthday",
+        name: saveBirthdayWithCalendarMatch[1].trim(),
+        birthdayLabel: parsed.birthdayLabel,
+        month: parsed.month,
+        day: parsed.day,
+        addToCalendar: true,
+      };
+    }
+  }
+
   const rememberBirthdayMatch = trimmed.match(
     /^remember(?: that)?\s+(.+?)['’]s birthday is\s+(.+)$/i,
   );
@@ -3547,6 +6188,104 @@ function parseExplicitCommandIntent(
   );
   if (lookupBirthdayMatch) {
     return { kind: "show_person_birthday", query: lookupBirthdayMatch[1].trim() };
+  }
+
+  const setRelationshipMatch = trimmed.match(/^set\s+(.+?)\s+relationship\s+to\s+(.+)$/i);
+  if (setRelationshipMatch) {
+    return {
+      kind: "update_person_relationship",
+      query: setRelationshipMatch[1].trim(),
+      relationship: setRelationshipMatch[2].trim(),
+    };
+  }
+
+  const setAgeMatch = trimmed.match(/^set\s+(.+?)\s+age\s+to\s+(\d{1,3})$/i);
+  if (setAgeMatch) {
+    return {
+      kind: "update_person_age",
+      query: setAgeMatch[1].trim(),
+      age: Number(setAgeMatch[2]),
+    };
+  }
+
+  const giftNoteMatch = trimmed.match(/^add gift note for\s+(.+?)\s+(.+)$/i);
+  if (giftNoteMatch) {
+    return {
+      kind: "add_person_gift_note",
+      query: giftNoteMatch[1].trim(),
+      note: giftNoteMatch[2].trim(),
+    };
+  }
+
+  const contactNoteMatch = trimmed.match(/^add (?:contact )?note for\s+(.+?)\s+(.+)$/i);
+  if (contactNoteMatch) {
+    return {
+      kind: "add_person_contact_note",
+      query: contactNoteMatch[1].trim(),
+      note: contactNoteMatch[2].trim(),
+    };
+  }
+
+  const lastContactMatch = trimmed.match(/^i last talked to\s+(.+?)\s+(.+)$/i);
+  if (lastContactMatch) {
+    return {
+      kind: "set_person_last_contact",
+      query: lastContactMatch[1].trim(),
+      whenLabel: lastContactMatch[2].trim(),
+    };
+  }
+
+  const followUpMatch = trimmed.match(/^remind me to check in with\s+(.+?)\s+(.+)$/i);
+  if (followUpMatch) {
+    return {
+      kind: "set_person_follow_up",
+      query: followUpMatch[1].trim(),
+      dueLabel: followUpMatch[2].trim(),
+      reason: "check in",
+    };
+  }
+
+  if (
+    normalized === "show people follow ups" ||
+    normalized === "show people followups" ||
+    normalized === "show follow ups" ||
+    normalized === "show followups"
+  ) {
+    return { kind: "list_people_follow_ups" };
+  }
+
+  if (
+    normalized === "who should i check in with this week" ||
+    normalized === "who do i need to check in with this week" ||
+    normalized === "show people to check in with"
+  ) {
+    return { kind: "list_people_check_ins" };
+  }
+
+  const reminderMatch = trimmed.match(/^set birthday reminder for\s+(.+?)\s+to\s+(\d+)\s+days?\s+before$/i);
+  if (reminderMatch) {
+    return {
+      kind: "set_person_birthday_reminder",
+      query: reminderMatch[1].trim(),
+      daysBefore: Number(reminderMatch[2]),
+    };
+  }
+
+  const remindMeBirthdayMatch = trimmed.match(/^remind me\s+(\d+)\s+days?\s+before\s+(.+?)['â€™]s birthday$/i);
+  if (remindMeBirthdayMatch) {
+    return {
+      kind: "set_person_birthday_reminder",
+      query: remindMeBirthdayMatch[2].trim(),
+      daysBefore: Number(remindMeBirthdayMatch[1]),
+    };
+  }
+
+  const birthdayCalendarMatch = trimmed.match(/^add\s+(.+?)['â€™]s birthday\s+to\s+calendar$/i);
+  if (birthdayCalendarMatch) {
+    return {
+      kind: "add_person_birthday_to_calendar",
+      query: birthdayCalendarMatch[1].trim(),
+    };
   }
 
   if (normalized.startsWith("make me a note ")) {
@@ -3766,6 +6505,22 @@ function parseExplicitCommandIntent(
   }
 
   if (
+    normalized === "show travel checklist" ||
+    normalized === "what do i need for this trip" ||
+    normalized === "what do i need for this travel"
+  ) {
+    return { kind: "show_current_travel_checklist" };
+  }
+
+  if (
+    normalized === "show trip timeline" ||
+    normalized === "show travel timeline" ||
+    normalized === "what is the trip timeline"
+  ) {
+    return { kind: "show_current_travel_timeline" };
+  }
+
+  if (
     normalized === "show expense memory" ||
     normalized === "list expense memory" ||
     normalized === "show my expenses"
@@ -3774,11 +6529,51 @@ function parseExplicitCommandIntent(
   }
 
   if (
+    normalized === "show weekly expenses" ||
+    normalized === "list weekly expenses" ||
+    normalized === "what did i spend this week"
+  ) {
+    return { kind: "list_weekly_expenses" };
+  }
+
+  if (
+    normalized === "show monthly expenses" ||
+    normalized === "list monthly expenses" ||
+    normalized === "what did i spend this month"
+  ) {
+    return { kind: "list_monthly_expenses" };
+  }
+
+  const monthlyCategoryExpenseMatch = trimmed.match(/^how much did i spend on\s+(.+?)\s+this month\??$/i);
+  if (monthlyCategoryExpenseMatch) {
+    return {
+      kind: "list_monthly_expenses_by_category",
+      category: monthlyCategoryExpenseMatch[1].trim(),
+    };
+  }
+
+  if (
+    normalized === "show subscriptions" ||
+    normalized === "show recurring expenses" ||
+    normalized === "list subscriptions"
+  ) {
+    return { kind: "list_recurring_expenses" };
+  }
+
+  if (
     normalized === "show package memory" ||
     normalized === "list package memory" ||
     normalized === "show my packages"
   ) {
     return { kind: "list_package_memory" };
+  }
+
+  if (normalized === "what's arriving tomorrow" || normalized === "what is arriving tomorrow") {
+    return { kind: "list_packages_arriving_tomorrow" };
+  }
+
+  if (normalized === "show delayed packages" || normalized === "list delayed packages") {
+    return { kind: "list_delayed_packages" };
   }
 
   if (
@@ -3791,7 +6586,8 @@ function parseExplicitCommandIntent(
   if (
     normalized === "start school mode" ||
     normalized === "school mode" ||
-    normalized === "what should i study today"
+    normalized === "what should i study today" ||
+    normalized === "build my study plan for next 3 days"
   ) {
     return { kind: "create_school_plan" };
   }
@@ -3963,6 +6759,14 @@ function parseExplicitCommandIntent(
   }
 
   if (
+    normalized === "add this travel to calendar" ||
+    normalized === "save this travel to calendar" ||
+    normalized === "add travel from this email to calendar"
+  ) {
+    return { kind: "save_current_email_travel_to_calendar" };
+  }
+
+  if (
     normalized === "save this expense to notion" ||
     normalized === "save expense from this email to notion"
   ) {
@@ -3981,6 +6785,13 @@ function parseExplicitCommandIntent(
   );
   if (saveTravelIndexedEmailMatch) {
     return { kind: "save_email_travel_to_notion_by_index", index: Number(saveTravelIndexedEmailMatch[1]) };
+  }
+
+  const saveTravelCalendarIndexedEmailMatch = normalized.match(
+    /^(?:add|save) travel from email (\d+) to calendar$/i,
+  );
+  if (saveTravelCalendarIndexedEmailMatch) {
+    return { kind: "save_email_travel_to_calendar_by_index", index: Number(saveTravelCalendarIndexedEmailMatch[1]) };
   }
 
   const saveExpenseIndexedEmailMatch = normalized.match(
@@ -4002,6 +6813,13 @@ function parseExplicitCommandIntent(
   );
   if (saveTravelQueriedEmailMatch) {
     return { kind: "save_email_travel_to_notion_by_query", query: saveTravelQueriedEmailMatch[1].trim() };
+  }
+
+  const saveTravelCalendarQueriedEmailMatch = normalized.match(
+    /^(?:add|save) travel from (?:the )?email about (.+) to calendar$/i,
+  );
+  if (saveTravelCalendarQueriedEmailMatch) {
+    return { kind: "save_email_travel_to_calendar_by_query", query: saveTravelCalendarQueriedEmailMatch[1].trim() };
   }
 
   const saveExpenseQueriedEmailMatch = normalized.match(
@@ -5320,6 +8138,18 @@ const EXPENSE_MEMORY_STORAGE_KEY = "jarvis_expense_memory_v1";
 const PACKAGE_MEMORY_STORAGE_KEY = "jarvis_package_memory_v1";
 const MEETING_PREP_MEMORY_STORAGE_KEY = "jarvis_meeting_prep_memory_v1";
 const SCHOOL_PLAN_MEMORY_STORAGE_KEY = "jarvis_school_plan_memory_v1";
+const DESKTOP_PROJECTS_STORAGE_KEY = "jarvis_desktop_projects_v1";
+const DESKTOP_SCHEDULES_STORAGE_KEY = "jarvis_desktop_schedules_v1";
+const DESKTOP_PERMISSION_SETTINGS_STORAGE_KEY = "jarvis_desktop_permissions_v1";
+const OCR_HISTORY_STORAGE_KEY = "jarvis_ocr_history_v1";
+const OCR_WATCHES_STORAGE_KEY = "jarvis_ocr_watches_v1";
+const OCR_CORRECTIONS_STORAGE_KEY = "jarvis_ocr_corrections_v1";
+const OCR_WATCH_TEMPLATES_STORAGE_KEY = "jarvis_ocr_watch_templates_v1";
+const DEFAULT_DESKTOP_PERMISSION_SETTINGS: DesktopPermissionSettings = {
+  confirmProjectChecks: true,
+  confirmAppClose: true,
+  confirmExecutorLaunch: true,
+};
 
 const workflowTemplates: WorkflowTemplateRecord[] = [
   {
@@ -5619,6 +8449,20 @@ function App() {
   const [spotifyAccessToken, setSpotifyAccessToken] = useState<string | null>(null);
   const [spotifyPlaybackState, setSpotifyPlaybackState] = useState<SpotifyPlaybackState | null>(null);
   const [recentFiles, setRecentFiles] = useState<FileRecord[]>([]);
+  const [desktopProjects, setDesktopProjects] = useState<DesktopProjectRecord[]>([]);
+  const [desktopSchedules, setDesktopSchedules] = useState<DesktopScheduleRecord[]>([]);
+  const [desktopPermissionSettings, setDesktopPermissionSettings] = useState<DesktopPermissionSettings>(
+    DEFAULT_DESKTOP_PERMISSION_SETTINGS,
+  );
+  const [lastScreenshotPath, setLastScreenshotPath] = useState<string | null>(null);
+  const [ocrWatchTargets, setOcrWatchTargets] = useState<OcrWatchTarget[]>([]);
+  const [ocrHistory, setOcrHistory] = useState<OcrHistoryRecord[]>([]);
+  const [ocrWatchMatches, setOcrWatchMatches] = useState<OcrHistoryRecord[]>([]);
+  const [lastOcrText, setLastOcrText] = useState("");
+  const [ocrCorrections, setOcrCorrections] = useState<OcrCorrectionRecord[]>([]);
+  const [ocrWatchTemplates, setOcrWatchTemplates] = useState<OcrWatchTemplate[]>([]);
+  const [isOcrSelecting, setIsOcrSelecting] = useState(false);
+  const [ocrSelection, setOcrSelection] = useState<OcrSelectionState>(null);
   const [activeConversationContext, setActiveConversationContext] =
     useState<ActiveConversationContext | null>(null);
   const [presentedCollectionContext, setPresentedCollectionContext] =
@@ -5644,6 +8488,8 @@ function App() {
   const [pendingWorkflowExecution, setPendingWorkflowExecution] =
     useState<PendingWorkflowExecution | null>(null);
   const [workflowImportText, setWorkflowImportText] = useState("");
+  const [crossFeatureSuggestions, setCrossFeatureSuggestions] = useState<CrossFeatureSuggestionRecord[]>([]);
+  const [proactiveCrossSuggestion, setProactiveCrossSuggestion] = useState<CrossFeatureSuggestionRecord | null>(null);
   const [autonomousSkillBuildingEnabled, setAutonomousSkillBuildingEnabled] = useState(false);
   const [autonomousBuildStatus, setAutonomousBuildStatus] =
     useState<AutonomousBuildStatus>("idle");
@@ -5840,6 +8686,167 @@ function App() {
     }
   }, [schoolPlanMemory]);
 
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(DESKTOP_PROJECTS_STORAGE_KEY);
+      if (saved) {
+        setDesktopProjects(JSON.parse(saved) as DesktopProjectRecord[]);
+      }
+    } catch {
+      setDesktopProjects([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        DESKTOP_PROJECTS_STORAGE_KEY,
+        JSON.stringify(desktopProjects),
+      );
+    } catch {
+      setStatusMessage("JARVIS could not persist desktop projects locally.");
+    }
+  }, [desktopProjects]);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(DESKTOP_SCHEDULES_STORAGE_KEY);
+      if (saved) {
+        setDesktopSchedules(JSON.parse(saved) as DesktopScheduleRecord[]);
+      }
+    } catch {
+      setDesktopSchedules([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        DESKTOP_SCHEDULES_STORAGE_KEY,
+        JSON.stringify(desktopSchedules),
+      );
+    } catch {
+      setStatusMessage("JARVIS could not persist desktop schedules locally.");
+    }
+  }, [desktopSchedules]);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(DESKTOP_PERMISSION_SETTINGS_STORAGE_KEY);
+      if (saved) {
+        setDesktopPermissionSettings({
+          ...DEFAULT_DESKTOP_PERMISSION_SETTINGS,
+          ...(JSON.parse(saved) as Partial<DesktopPermissionSettings>),
+        });
+      }
+    } catch {
+      setDesktopPermissionSettings(DEFAULT_DESKTOP_PERMISSION_SETTINGS);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        DESKTOP_PERMISSION_SETTINGS_STORAGE_KEY,
+        JSON.stringify(desktopPermissionSettings),
+      );
+    } catch {
+      setStatusMessage("JARVIS could not persist desktop permission settings locally.");
+    }
+  }, [desktopPermissionSettings]);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(OCR_HISTORY_STORAGE_KEY);
+      if (saved) {
+        setOcrHistory(JSON.parse(saved) as OcrHistoryRecord[]);
+      }
+    } catch {
+      setOcrHistory([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(OCR_HISTORY_STORAGE_KEY, JSON.stringify(ocrHistory.slice(0, 20)));
+    } catch {
+      setStatusMessage("JARVIS could not persist OCR history locally.");
+    }
+  }, [ocrHistory]);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(OCR_WATCHES_STORAGE_KEY);
+      if (saved) {
+        setOcrWatchTargets(JSON.parse(saved) as OcrWatchTarget[]);
+      }
+    } catch {
+      setOcrWatchTargets([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(OCR_WATCHES_STORAGE_KEY, JSON.stringify(ocrWatchTargets));
+    } catch {
+      setStatusMessage("JARVIS could not persist OCR watches locally.");
+    }
+  }, [ocrWatchTargets]);
+
+  useEffect(() => {
+    try {
+      const savedCorrections = window.localStorage.getItem(OCR_CORRECTIONS_STORAGE_KEY);
+      const savedTemplates = window.localStorage.getItem(OCR_WATCH_TEMPLATES_STORAGE_KEY);
+      if (savedCorrections) setOcrCorrections(JSON.parse(savedCorrections) as OcrCorrectionRecord[]);
+      if (savedTemplates) setOcrWatchTemplates(JSON.parse(savedTemplates) as OcrWatchTemplate[]);
+    } catch {
+      setOcrCorrections([]);
+      setOcrWatchTemplates([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(OCR_CORRECTIONS_STORAGE_KEY, JSON.stringify(ocrCorrections.slice(0, 50)));
+    } catch {
+      setStatusMessage("JARVIS could not persist OCR corrections locally.");
+    }
+  }, [ocrCorrections]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(OCR_WATCH_TEMPLATES_STORAGE_KEY, JSON.stringify(ocrWatchTemplates.slice(0, 20)));
+    } catch {
+      setStatusMessage("JARVIS could not persist OCR watch templates locally.");
+    }
+  }, [ocrWatchTemplates]);
+
+  useEffect(() => {
+    const timers = desktopSchedules
+      .map((schedule) => {
+        const delay = new Date(schedule.dueAt).getTime() - Date.now();
+        if (delay <= 0) {
+          void executeIntent({ kind: "open_desktop_project", query: schedule.projectName });
+          setDesktopSchedules((current) => current.filter((item) => item.id !== schedule.id));
+          return null;
+        }
+
+        if (delay > 24 * 60 * 60 * 1000) {
+          return null;
+        }
+
+        return window.setTimeout(() => {
+          void executeIntent({ kind: "open_desktop_project", query: schedule.projectName });
+          setDesktopSchedules((current) => current.filter((item) => item.id !== schedule.id));
+        }, delay);
+      })
+      .filter(Boolean) as number[];
+
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [desktopSchedules]);
+
   function appendConversationTurn(role: "user" | "jarvis", text: string) {
     setConversationTurns((current) => [
       ...current.slice(-7),
@@ -5851,9 +8858,148 @@ function App() {
     ]);
   }
 
-  function rememberPersonBirthday(
-    candidate: Omit<PersonMemoryRecord, "id" | "createdAt" | "updatedAt">,
-  ) {
+  function findDesktopProject(query: string) {
+    const normalizedQuery = query.trim().toLowerCase();
+    return (
+      desktopProjects.find((project) => project.name.trim().toLowerCase() === normalizedQuery) ??
+      desktopProjects.find((project) => project.name.toLowerCase().includes(normalizedQuery)) ??
+      null
+    );
+  }
+
+  function createDesktopProject(name: string): DesktopProjectRecord | null {
+    const normalizedName = normalizeDesktopProjectName(name);
+    if (!normalizedName) {
+      return null;
+    }
+
+    const nowIso = new Date().toISOString();
+    const existing = desktopProjects.find(
+      (project) => project.name.trim().toLowerCase() === normalizedName.toLowerCase(),
+    );
+    if (existing) {
+      return existing;
+    }
+
+    const savedProject: DesktopProjectRecord = {
+      id: `${Date.now()}-${normalizedName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+      name: normalizedName,
+      apps: [],
+      folders: [],
+      websites: [],
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+    setDesktopProjects((current) => [savedProject, ...current]);
+
+    return savedProject;
+  }
+
+  function createDesktopProjectFromTemplate(
+    templateName: string,
+    projectName: string,
+  ): DesktopProjectRecord | null {
+    const normalizedTemplate = templateName.trim().toLowerCase();
+    const normalizedName = normalizeDesktopProjectName(projectName);
+    if (!normalizedName) {
+      return null;
+    }
+
+    const template = (() => {
+      switch (normalizedTemplate) {
+        case "coding":
+        case "code":
+          return {
+            apps: ["vs code", "powershell"],
+            folders: ["jarvis project"],
+            websites: ["https://github.com"],
+          };
+        case "school":
+        case "study":
+          return {
+            apps: ["vs code"],
+            folders: ["documents", "downloads"],
+            websites: [
+              "https://calendar.google.com",
+              "https://docs.google.com",
+              "https://drive.google.com",
+              "https://www.notion.so",
+            ],
+          };
+        case "focus":
+          return {
+            apps: ["vs code", "notepad"],
+            folders: ["documents"],
+            websites: ["https://calendar.google.com", "https://www.notion.so"],
+          };
+        case "music":
+          return {
+            apps: ["spotify"],
+            folders: [],
+            websites: ["https://open.spotify.com"],
+          };
+        default:
+          return null;
+      }
+    })();
+
+    if (!template) {
+      return null;
+    }
+
+    const nowIso = new Date().toISOString();
+    const existing = desktopProjects.find(
+      (project) => project.name.trim().toLowerCase() === normalizedName.toLowerCase(),
+    );
+    const savedProject: DesktopProjectRecord = {
+      id: existing?.id ?? `${Date.now()}-${normalizedName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+      name: normalizedName,
+      apps: Array.from(new Set([...(existing?.apps ?? []), ...template.apps])),
+      folders: Array.from(new Set([...(existing?.folders ?? []), ...template.folders])),
+      websites: Array.from(new Set([...(existing?.websites ?? []), ...template.websites])),
+      createdAt: existing?.createdAt ?? nowIso,
+      updatedAt: nowIso,
+    };
+
+    setDesktopProjects((current) =>
+      existing
+        ? current.map((project) => (project.id === existing.id ? savedProject : project))
+        : [savedProject, ...current],
+    );
+
+    return savedProject;
+  }
+
+  function updateDesktopProject(
+    query: string,
+    updater: (project: DesktopProjectRecord) => DesktopProjectRecord,
+  ): DesktopProjectRecord | null {
+    const existingProject = findDesktopProject(query);
+    if (!existingProject) {
+      return null;
+    }
+
+    const updatedProject = updater(existingProject);
+    setDesktopProjects((current) =>
+      current.map((project) => (project.id === existingProject.id ? updatedProject : project)),
+    );
+
+    return updatedProject;
+  }
+
+  function deleteDesktopProject(query: string): DesktopProjectRecord | null {
+    const existingProject = findDesktopProject(query);
+    if (!existingProject) {
+      return null;
+    }
+
+    setDesktopProjects((current) =>
+      current.filter((project) => project.id !== existingProject.id),
+    );
+    return existingProject;
+  }
+
+  function rememberPersonBirthday(candidate: PersonBirthdaySaveInput): PersonMemoryRecord | null {
     const nowIso = new Date().toISOString();
     let savedRecord: PersonMemoryRecord | null = null;
 
@@ -5868,6 +9014,15 @@ function App() {
           birthdayLabel: candidate.birthdayLabel,
           month: candidate.month,
           day: candidate.day,
+          age: candidate.age ?? existing.age,
+          relationship: candidate.relationship ?? existing.relationship,
+          giftNotes: candidate.giftNotes ?? existing.giftNotes,
+          contactNotes: candidate.contactNotes ?? existing.contactNotes,
+          lastContactLabel: candidate.lastContactLabel ?? existing.lastContactLabel,
+          followUpDueLabel: candidate.followUpDueLabel ?? existing.followUpDueLabel,
+          followUpReason: candidate.followUpReason ?? existing.followUpReason,
+          reminderLeadDays: candidate.reminderLeadDays ?? existing.reminderLeadDays,
+          calendarLinkedAt: candidate.calendarLinkedAt ?? existing.calendarLinkedAt,
           source: candidate.source,
           updatedAt: nowIso,
         };
@@ -5883,6 +9038,15 @@ function App() {
         birthdayLabel: candidate.birthdayLabel,
         month: candidate.month,
         day: candidate.day,
+        age: candidate.age ?? null,
+        relationship: candidate.relationship ?? null,
+        giftNotes: candidate.giftNotes ?? [],
+        contactNotes: candidate.contactNotes ?? [],
+        lastContactLabel: candidate.lastContactLabel ?? null,
+        followUpDueLabel: candidate.followUpDueLabel ?? null,
+        followUpReason: candidate.followUpReason ?? null,
+        reminderLeadDays: candidate.reminderLeadDays ?? 7,
+        calendarLinkedAt: candidate.calendarLinkedAt ?? null,
         source: candidate.source,
         createdAt: nowIso,
         updatedAt: nowIso,
@@ -5894,11 +9058,51 @@ function App() {
     return savedRecord;
   }
 
-  function rememberTravelSummary(title: string, sourceEmailSubject: string, summary: string) {
+  function updatePersonMemory(
+    query: string,
+    updater: (person: PersonMemoryRecord) => PersonMemoryRecord,
+  ) {
+    const existing = findPersonByQuery(peopleMemory, query);
+    if (!existing) {
+      return null;
+    }
+
+    const updated = {
+      ...updater(existing),
+      updatedAt: new Date().toISOString(),
+    };
+
+    setPeopleMemory((current) =>
+      [updated, ...current.filter((entry) => entry.id !== existing.id)],
+    );
+    return updated;
+  }
+
+  function rememberTravelSummary(
+    title: string,
+    sourceEmailSubject: string,
+    details: TravelExtraction,
+    summary: string,
+    calendarLinkedAt: string | null = null,
+  ) {
+    const primary = getPrimaryTravelSummary(details);
+    const timeline = buildTravelTimeline(details);
+    const checklist = buildTravelChecklist(details);
     const record: TravelMemoryRecord = {
       id: `travel-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       title,
       sourceEmailSubject,
+      transport: primary.transport,
+      departure: primary.departure,
+      arrival: primary.arrival,
+      hotel: primary.hotel,
+      checkIn: primary.checkIn,
+      checkOut: primary.checkOut,
+      confirmationCode: primary.confirmationCode,
+      calendarLinkedAt,
+      segmentCount: estimateTravelSegmentCount(details),
+      timeline,
+      checklist,
       summary,
       createdAt: new Date().toISOString(),
     };
@@ -5912,6 +9116,11 @@ function App() {
     sourceEmailSubject: string,
     merchant: string | null,
     amount: string | null,
+    amountValue: number | null,
+    category: string | null,
+    expenseDate: string | null,
+    orderNumber: string | null,
+    recurringLikely: boolean,
     summary: string,
   ) {
     const record: ExpenseMemoryRecord = {
@@ -5920,6 +9129,11 @@ function App() {
       sourceEmailSubject,
       merchant,
       amount,
+      amountValue,
+      category,
+      expenseDate,
+      orderNumber,
+      recurringLikely,
       summary,
       createdAt: new Date().toISOString(),
     };
@@ -5932,30 +9146,88 @@ function App() {
     title: string,
     sourceEmailSubject: string,
     carrier: string | null,
+    merchant: string | null,
+    itemLabel: string | null,
     status: string | null,
     deliveryDate: string | null,
+    trackingNumber: string | null,
     summary: string,
   ) {
-    const record: PackageMemoryRecord = {
-      id: `package-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      title,
-      sourceEmailSubject,
-      carrier,
-      status,
-      deliveryDate,
-      summary,
-      createdAt: new Date().toISOString(),
-    };
+    const nowIso = new Date().toISOString();
+    let savedRecord: PackageMemoryRecord | null = null;
 
-    setPackageMemory((current) => [record, ...current].slice(0, 20));
-    return record;
+    setPackageMemory((current) => {
+      const existing =
+        current.find((entry) => trackingNumber && entry.trackingNumber === trackingNumber) ??
+        current.find((entry) => entry.sourceEmailSubject.toLowerCase() === sourceEmailSubject.toLowerCase());
+
+      if (existing) {
+        savedRecord = {
+          ...existing,
+          title,
+          sourceEmailSubject,
+          carrier: carrier ?? existing.carrier,
+          merchant: merchant ?? existing.merchant,
+          itemLabel: itemLabel ?? existing.itemLabel,
+          status: status ?? existing.status,
+          deliveryDate: deliveryDate ?? existing.deliveryDate,
+          trackingNumber: trackingNumber ?? existing.trackingNumber,
+          statusHistory: Array.from(
+            new Set(
+              [status, ...existing.statusHistory, existing.status]
+                .filter(Boolean)
+                .map((value) => value as string),
+            ),
+          ),
+          arrivingToday: isTodayDeliveryLabel(deliveryDate ?? existing.deliveryDate),
+          arrivingTomorrow: isTomorrowDeliveryLabel(deliveryDate ?? existing.deliveryDate),
+          summary,
+          updatedAt: nowIso,
+        };
+        return [savedRecord, ...current.filter((entry) => entry.id !== existing.id)].slice(0, 20);
+      }
+
+      savedRecord = {
+        id: `package-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        title,
+        sourceEmailSubject,
+        carrier,
+        merchant,
+        itemLabel,
+        status,
+        deliveryDate,
+        trackingNumber,
+        statusHistory: status ? [status] : [],
+        arrivingToday: isTodayDeliveryLabel(deliveryDate),
+        arrivingTomorrow: isTomorrowDeliveryLabel(deliveryDate),
+        summary,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+
+      return [savedRecord, ...current].slice(0, 20);
+    });
+
+    return savedRecord;
   }
 
-  function rememberMeetingPrepSummary(eventTitle: string, summaryTitle: string, summary: string) {
+  function rememberMeetingPrepSummary(
+    eventTitle: string,
+    summaryTitle: string,
+    focusSummary: string,
+    actionItems: string[],
+    relatedPeople: string[],
+    changesSinceLastPrep: string | null,
+    summary: string,
+  ) {
     const record: MeetingPrepMemoryRecord = {
       id: `meeting-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       eventTitle,
       summaryTitle,
+      focusSummary,
+      actionItems,
+      relatedPeople,
+      changesSinceLastPrep,
       summary,
       createdAt: new Date().toISOString(),
     };
@@ -5964,16 +9236,192 @@ function App() {
     return record;
   }
 
-  function rememberSchoolPlan(title: string, summary: string) {
+  function rememberSchoolPlan(
+    title: string,
+    focusSummary: string,
+    subjects: string[],
+    sessions: string[],
+    assignments: string[],
+    examCountdowns: string[],
+    summary: string,
+  ) {
     const record: SchoolPlanMemoryRecord = {
       id: `school-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       title,
+      focusSummary,
+      subjects,
+      sessions,
+      assignments,
+      examCountdowns,
       summary,
       createdAt: new Date().toISOString(),
     };
 
     setSchoolPlanMemory((current) => [record, ...current].slice(0, 12));
     return record;
+  }
+
+  function buildCrossFeatureSuggestionsForEmail(email: EmailRecord) {
+    const suggestions: CrossFeatureSuggestionRecord[] = [];
+    const birthdayCandidates = extractBirthdayCandidatesFromEmail(email);
+    const travelDetails = extractTravelDetails(email);
+    const expenseDetails = extractExpenseDetails(email);
+    const packageDetails = extractPackageDetails(email);
+    const emailSignals = extractEmailSignals(email);
+
+    if (birthdayCandidates.length > 0) {
+      suggestions.push({
+        id: `birthday-${email.id}`,
+        title: "Save birthday details",
+        detail: `I found ${birthdayCandidates.length} birthday cue${birthdayCandidates.length === 1 ? "" : "s"} in this email. I can move them into people memory.`,
+        intent: { kind: "save_birthdays_from_current_email" },
+      });
+      suggestions.push({
+        id: `birthday-brief-${email.id}`,
+        title: "Save birthdays and refresh the brief",
+        detail: "I can save the birthday details from this email and then refresh your daily brief so they show up there too.",
+        intents: [{ kind: "save_birthdays_from_current_email" }, { kind: "create_daily_brief" }],
+      });
+    }
+
+    if (hasTravelSignal(travelDetails)) {
+      suggestions.push({
+        id: `travel-note-${email.id}`,
+        title: "Save travel summary",
+        detail: "This email looks travel-related. I can save the trip summary into Notion.",
+        intent: { kind: "save_current_email_travel_to_notion" },
+      });
+
+      if (travelDetails.dates.length > 0 || travelDetails.departures.length > 0 || travelDetails.checkIns.length > 0) {
+        suggestions.push({
+          id: `travel-calendar-${email.id}`,
+          title: "Add trip to calendar",
+          detail: "I found enough trip timing cues to try creating a calendar item from this travel email.",
+          intent: { kind: "save_current_email_travel_to_calendar" },
+        });
+        suggestions.push({
+          id: `travel-bundle-${email.id}`,
+          title: "Capture the whole trip",
+          detail: "I can save the travel summary to Notion and add the trip to Calendar in one pass.",
+          intents: [
+            { kind: "save_current_email_travel_to_notion" },
+            { kind: "save_current_email_travel_to_calendar" },
+          ],
+        });
+      }
+    }
+
+    if (hasExpenseSignal(expenseDetails)) {
+      suggestions.push({
+        id: `expense-${email.id}`,
+        title: "Capture expense",
+        detail: "This looks like a receipt or invoice. I can save it into your expense memory and Notion.",
+        intent: { kind: "save_current_email_expense_to_notion" },
+      });
+      if (expenseDetails.normalizedCategory) {
+        suggestions.push({
+          id: `expense-bundle-${email.id}`,
+          title: "Capture and total this category",
+          detail: `I can save this expense and then show your ${expenseDetails.normalizedCategory.toLowerCase()} spending for this month.`,
+          intents: [
+            { kind: "save_current_email_expense_to_notion" },
+            { kind: "list_monthly_expenses_by_category", category: expenseDetails.normalizedCategory },
+          ],
+        });
+      }
+    }
+
+    if (hasPackageSignal(packageDetails)) {
+      suggestions.push({
+        id: `package-${email.id}`,
+        title: "Track package",
+        detail: "This looks like a shipping update. I can save it into package memory and Notion.",
+        intent: { kind: "save_current_email_package_to_notion" },
+      });
+      suggestions.push({
+        id: `package-bundle-${email.id}`,
+        title: "Track and check package status",
+        detail: "I can save this package update and then show the next most relevant shipping view.",
+        intents: [
+          { kind: "save_current_email_package_to_notion" },
+          packageDetails.statuses.some((status) => /delayed/i.test(status))
+            ? { kind: "list_delayed_packages" }
+            : packageDetails.deliveryDates.some((label) => isTomorrowDeliveryLabel(label))
+              ? { kind: "list_packages_arriving_tomorrow" }
+              : { kind: "list_package_memory" },
+        ],
+      });
+    }
+
+    if (emailSignals.meetings.length > 0) {
+      suggestions.push({
+        id: `calendar-${email.id}`,
+        title: "Turn email into calendar item",
+        detail: "I spotted meeting-like details in this email. I can turn it into a calendar action.",
+        intent: { kind: "create_calendar_event_from_current_email" },
+      });
+    }
+
+    return suggestions.slice(0, 6);
+  }
+
+  function buildCrossFeatureSuggestionsForState() {
+    const suggestions: CrossFeatureSuggestionRecord[] = [];
+    const upcomingFollowUps = getUpcomingPeopleFollowUps(peopleMemory);
+    const arrivingTomorrow = packageMemory.filter((item) => item.arrivingTomorrow);
+    const delayedPackages = packageMemory.filter((item) => /\bdelayed\b/i.test(item.status ?? ""));
+    const recurringExpenses = expenseMemory.filter((item) => item.recurringLikely);
+
+    if (upcomingFollowUps.length > 0) {
+      suggestions.push({
+        id: "people-followups",
+        title: "Review people follow-ups",
+        detail: `You have ${upcomingFollowUps.length} person-related follow-up${upcomingFollowUps.length === 1 ? "" : "s"} due soon.`,
+        intent: { kind: "list_people_check_ins" },
+      });
+    }
+
+    if (arrivingTomorrow.length > 0) {
+      suggestions.push({
+        id: "packages-tomorrow",
+        title: "Check tomorrow's deliveries",
+        detail: `You have ${arrivingTomorrow.length} package${arrivingTomorrow.length === 1 ? "" : "s"} arriving tomorrow.`,
+        intent: { kind: "list_packages_arriving_tomorrow" },
+      });
+    }
+
+    if (delayedPackages.length > 0) {
+      suggestions.push({
+        id: "packages-delayed",
+        title: "Review delayed packages",
+        detail: `You have ${delayedPackages.length} delayed package${delayedPackages.length === 1 ? "" : "s"} that may need attention.`,
+        intent: { kind: "list_delayed_packages" },
+      });
+    }
+
+    if (recurringExpenses.length > 0) {
+      suggestions.push({
+        id: "expenses-recurring",
+        title: "Review recurring charges",
+        detail: `I found ${recurringExpenses.length} likely recurring charge${recurringExpenses.length === 1 ? "" : "s"} in your saved expenses.`,
+        intent: { kind: "list_recurring_expenses" },
+      });
+    }
+
+    if (meetingPrepMemory.length > 0 && schoolPlanMemory.length > 0) {
+      suggestions.push({
+        id: "planner-bundle",
+        title: "Refresh your planning stack",
+        detail: "I can rebuild your daily brief and school plan together so your planning context stays fresh.",
+        intents: [{ kind: "create_school_plan" }, { kind: "create_daily_brief" }],
+      });
+    }
+
+    return suggestions.slice(0, 5);
+  }
+
+  function pickProactiveCrossSuggestion(suggestions: CrossFeatureSuggestionRecord[]) {
+    return suggestions.find((suggestion) => (suggestion.intents?.length ?? 0) > 1) ?? suggestions[0] ?? null;
   }
 
   function clearWakeRestartTimeout() {
@@ -7803,6 +11251,86 @@ function App() {
     triggerVoiceAutoRoute(transcript);
   }, [voiceTranscript, voiceSessionPhase, shouldAutoRouteVoice, isRoutingCommand]);
 
+  useEffect(() => {
+    const activeWatches = ocrWatchTargets.filter((target) => target.status === "active");
+    if (activeWatches.length === 0) {
+      return;
+    }
+
+    const runWatchCheck = async (watch: OcrWatchTarget) => {
+      try {
+        const snapshot = await captureOcrSnapshot(watch);
+        const cleaned = cleanupOcrText(snapshot.ocrText);
+        if (!cleaned) {
+          return;
+        }
+        setOcrWatchTargets((currentTargets) =>
+          currentTargets.map((current) => {
+          if (current.id !== watch.id) {
+            return current;
+          }
+          if (!ocrWatchRuleMatches(current.rule, current.lastText, cleaned)) {
+            return { ...current, lastCheckedAt: new Date().toISOString() };
+          }
+          const matchKey = getOcrMatchKey(current.rule, cleaned);
+          if (current.lastMatchKey === matchKey) {
+            return { ...current, lastText: cleaned, lastCheckedAt: new Date().toISOString() };
+          }
+          const targetLabel = describeOcrTarget(current.scope, current.appName, current.region, current.rect);
+          const summary = summarizeOcrText(cleaned) || cleaned.slice(0, 800);
+          setCommandResult({
+            title: "Screen watch changed",
+            detail: `Detected ${describeOcrWatchRule(current.rule)} on ${targetLabel}.\n\n${formatOcrResultDetail(cleaned)}`,
+          });
+          setStatusMessage(`OCR watch noticed a change on ${targetLabel}.`);
+          appendConversationTurn("jarvis", `I noticed the watched ${targetLabel} changed.`);
+          speakIfEnabled(`I noticed the watched ${targetLabel} changed.`);
+          const source = getOcrSourceLabel(current.scope, current.appName, current.region);
+          rememberOcrHistory(targetLabel, cleaned, snapshot.screenshotPath, {
+            source,
+            matchType: describeOcrWatchRule(current.rule),
+            watchMatch: true,
+          });
+          if (current.logToNotion) {
+            void createNotionNote(
+              `OCR Watch Change\n\nTarget: ${targetLabel}\nDetected: ${new Date().toLocaleString()}\nScreenshot: ${snapshot.screenshotPath}\n\nSummary\n${summary}\n\nCleaned OCR\n${cleaned}`,
+            )
+              .then((note) => setRecentNotes((notes) => [note, ...notes].slice(0, 5)))
+              .catch(() => setStatusMessage("OCR watch changed, but Notion logging failed."));
+          }
+          if (current.createTaskOnMatch) {
+            void createNotionTask(`Review OCR match on ${targetLabel}: ${summary.slice(0, 120)}`, null, null)
+              .then((task) => setRecentNotes((notes) => [task, ...notes].slice(0, 5)))
+              .catch(() => setStatusMessage("OCR watch matched, but task creation failed."));
+          }
+          if (current.action?.type === "open_app") {
+            void launchDesktopApp(current.action.appName).catch(() => setStatusMessage("OCR watch matched, but app launch failed."));
+          } else if (current.action?.type === "open_workspace") {
+            void executeIntent({ kind: "open_desktop_project", query: current.action.query }).catch(() =>
+              setStatusMessage("OCR watch matched, but workspace launch failed."),
+            );
+          } else if (current.action?.type === "copy_text") {
+            void writeClipboardText(cleaned).catch(() => setStatusMessage("OCR watch matched, but clipboard copy failed."));
+          }
+          return { ...current, lastText: cleaned, lastMatchKey: matchKey, lastCheckedAt: new Date().toISOString() };
+          }),
+        );
+      } catch (error) {
+        setStatusMessage(getErrorDetail(error, "OCR watch could not read the watched target."));
+      }
+    };
+
+    const timers = activeWatches.map((watch) =>
+      window.setInterval(() => {
+        void runWatchCheck(watch);
+      }, watch.intervalMs),
+    );
+
+    return () => {
+      timers.forEach((timer) => window.clearInterval(timer));
+    };
+  }, [ocrWatchTargets]);
+
   async function pingCore() {
     try {
       const response = await pingJarvis();
@@ -7833,6 +11361,80 @@ function App() {
     void routeCommandFromVoice(normalizedTranscript);
   }
 
+  async function captureOcrSnapshot(target: {
+    scope?: OcrScope;
+    appName?: string;
+    region?: OcrRegion;
+    rect?: OcrRect;
+    useLast?: boolean;
+  }) {
+    if (target.useLast && !lastScreenshotPath) {
+      throw new Error("There is no last screenshot yet. Ask JARVIS to take a screenshot first.");
+    }
+
+    const screenshotPath = target.useLast
+      ? lastScreenshotPath!
+      : target.scope === "active_window"
+        ? await captureActiveWindowScreenshot()
+        : target.scope === "app_window" && target.appName
+          ? await captureDesktopAppWindowScreenshot(target.appName)
+          : target.scope === "region" && target.region
+            ? await captureScreenRegionScreenshot(target.region)
+          : target.scope === "rect" && target.rect
+            ? await captureScreenRectScreenshot(
+                Math.round(target.rect.x),
+                Math.round(target.rect.y),
+                Math.round(target.rect.width),
+                Math.round(target.rect.height),
+              )
+            : target.scope === "global_selection"
+              ? await captureGlobalSelectionScreenshot()
+            : await captureDesktopScreenshot();
+    setLastScreenshotPath(screenshotPath);
+    setActiveConversationContext(createActiveScreenshotContext(screenshotPath));
+    const ocrText = applyOcrCorrections((await extractImageOcrText(screenshotPath)).trim(), ocrCorrections);
+    return { screenshotPath, ocrText };
+  }
+
+  function rememberOcrHistory(target: string, text: string, screenshotPath: string, options?: { source?: string; matchType?: string; watchMatch?: boolean }) {
+    const cleaned = cleanupOcrText(text);
+    if (!cleaned) {
+      return null;
+    }
+    const record: OcrHistoryRecord = {
+      id: `ocr-${Date.now()}`,
+      target,
+      text: cleaned.slice(0, 5000),
+      summary: (summarizeOcrText(cleaned) || cleaned).slice(0, 1000),
+      screenshotPath,
+      createdAt: new Date().toISOString(),
+      source: options?.source,
+      matchType: options?.matchType,
+    };
+    setLastOcrText(record.text);
+    setOcrHistory((current) => [record, ...current].slice(0, 20));
+    if (options?.watchMatch) {
+      setOcrWatchMatches((current) => [record, ...current].slice(0, 10));
+    }
+    return record;
+  }
+
+  function beginOcrSelection() {
+    setIsOcrSelecting(true);
+    setOcrSelection(null);
+    setCommandResult({
+      title: "Select OCR area",
+      detail: "Drag a box over the area you want JARVIS to read. Press Escape or Cancel to stop.",
+    });
+    setStatusMessage("OCR selection mode active.");
+  }
+
+  async function completeOcrSelection(rect: OcrRect) {
+    setIsOcrSelecting(false);
+    setOcrSelection(null);
+    await executeIntent({ kind: "read_screen_text", scope: "rect", rect });
+  }
+
   async function executeIntent(intent: CommandIntent) {
     setIsRoutingCommand(true);
     setVoiceSessionPhase("processing");
@@ -7851,6 +11453,1127 @@ function App() {
         setVoiceSessionPhase("ready");
         appendConversationTurn("jarvis", reply);
         speakIfEnabled(reply);
+      } else if (intent.kind === "launch_desktop_app") {
+        const response = await launchDesktopApp(intent.appName);
+        const reply = buildDesktopAppReply(intent.appName);
+        setActiveConversationContext(createActiveDesktopAppContext(intent.appName));
+        setCommandResult({
+          title: "Desktop app opened",
+          detail: response,
+        });
+        setStatusMessage("Desktop app launched through the native bridge.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "focus_desktop_app") {
+        const response = await focusDesktopApp(intent.appName);
+        const reply = buildDesktopFocusReply(intent.appName);
+        setActiveConversationContext(createActiveDesktopAppContext(intent.appName));
+        setCommandResult({
+          title: "Desktop app focused",
+          detail: response,
+        });
+        setStatusMessage("Desktop app focused through the native bridge.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "open_named_folder") {
+        const response = await openNamedFolder(intent.folderName);
+        const reply = buildNamedFolderReply(intent.folderName);
+        setActiveConversationContext(createActiveDesktopFolderContext(intent.folderName));
+        setCommandResult({
+          title: "Folder opened",
+          detail: response,
+        });
+        setStatusMessage("Folder opened through the native bridge.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "capture_desktop_screenshot") {
+        const screenshotPath = await captureDesktopScreenshot();
+        const reply = buildScreenshotReply();
+        setLastScreenshotPath(screenshotPath);
+        setActiveConversationContext(createActiveScreenshotContext(screenshotPath));
+        setCommandResult({
+          title: "Screenshot captured",
+          detail: `Saved screenshot to ${screenshotPath}.`,
+        });
+        setStatusMessage("Screenshot captured through the native bridge.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "open_screenshots_folder") {
+        const response = await openScreenshotsFolder();
+        const reply = buildScreenshotsFolderReply();
+        setCommandResult({
+          title: "Screenshots folder opened",
+          detail: response,
+        });
+        setStatusMessage("Screenshots folder opened through the native bridge.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "read_clipboard_text") {
+        const text = await readClipboardText();
+        const reply = buildClipboardReadReply(text.trim().length > 0);
+        setCommandResult({
+          title: "Clipboard",
+          detail: text.trim().length > 0 ? text : "Clipboard is empty.",
+        });
+        setStatusMessage("Clipboard read through the native bridge.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "write_clipboard_text") {
+        const response = await writeClipboardText(intent.text);
+        const reply = buildClipboardWriteReply();
+        setCommandResult({
+          title: "Clipboard updated",
+          detail: response,
+        });
+        setStatusMessage("Clipboard updated through the native bridge.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "open_clipboard_target") {
+        const text = (await readClipboardText()).trim();
+        if (!text) {
+          throw new Error("Your clipboard is empty right now.");
+        }
+        const looksLikeFilePath = text.includes("\\") || text.includes(":\\") || text.includes("/");
+        if (looksLikeFilePath && !/^https?:\/\//i.test(text)) {
+          await openLocalFile(text);
+          setCommandResult({
+            title: "Clipboard file opened",
+            detail: `Opened ${text}.`,
+          });
+        } else {
+          const url = normalizeUrlTarget(text);
+          await openBrowserUrl(url);
+          setActiveConversationContext(createActiveBrowserContext(url));
+          setCommandResult({
+            title: "Clipboard target opened",
+            detail: `Opened ${formatBrowserTargetLabel(url)} from your clipboard.`,
+          });
+        }
+        const reply = buildClipboardOpenReply();
+        setStatusMessage("Clipboard target opened through JARVIS.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "search_clipboard_on_google") {
+        const text = (await readClipboardText()).trim();
+        if (!text) {
+          throw new Error("Your clipboard is empty right now.");
+        }
+        await searchGoogle(text);
+        const reply = buildClipboardSearchReply();
+        setActiveConversationContext(createActiveBrowserContext(buildGoogleSearchUrl(text)));
+        setCommandResult({
+          title: "Clipboard searched",
+          detail: `Searched Google for ${text}.`,
+        });
+        setStatusMessage("Clipboard text searched on Google.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "save_clipboard_to_notion") {
+        const text = (await readClipboardText()).trim();
+        if (!text) {
+          throw new Error("Your clipboard is empty right now.");
+        }
+        const note = await createNotionNote(`Clipboard Note\n\n${text}`);
+        const reply = buildClipboardNotionReply(note.title);
+        setCommandResult({
+          title: "Clipboard saved to Notion",
+          detail: `Saved clipboard text to Notion as "${note.title}".`,
+        });
+        setStatusMessage("Clipboard text saved into Notion.");
+        setVoiceSessionPhase("ready");
+        setRecentNotes((current) => [note, ...current].slice(0, 5));
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "save_screenshot_to_notion") {
+        const screenshotPath = await captureDesktopScreenshot();
+        setLastScreenshotPath(screenshotPath);
+        setActiveConversationContext(createActiveScreenshotContext(screenshotPath));
+        const note = await createNotionNote(
+          `Screenshot Capture\n\nPath: ${screenshotPath}\nCaptured: ${new Date().toLocaleString()}`,
+        );
+        const reply = buildScreenshotNotionReply(note.title);
+        setCommandResult({
+          title: "Screenshot saved to Notion",
+          detail: `Captured a screenshot and saved its path to Notion as "${note.title}".`,
+        });
+        setStatusMessage("Screenshot reference saved into Notion.");
+        setVoiceSessionPhase("ready");
+        setRecentNotes((current) => [note, ...current].slice(0, 5));
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "save_last_screenshot_to_notion") {
+        if (!lastScreenshotPath) {
+          throw new Error("There is no last screenshot yet. Ask JARVIS to take a screenshot first.");
+        }
+        const note = await createNotionNote(
+          `Screenshot Capture\n\nPath: ${lastScreenshotPath}\nSaved: ${new Date().toLocaleString()}`,
+        );
+        const reply = buildScreenshotNotionReply(note.title);
+        setCommandResult({
+          title: "Last screenshot saved to Notion",
+          detail: `Saved ${lastScreenshotPath} to Notion as "${note.title}".`,
+        });
+        setStatusMessage("Last screenshot reference saved into Notion.");
+        setVoiceSessionPhase("ready");
+        setRecentNotes((current) => [note, ...current].slice(0, 5));
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "read_screen_text") {
+        const { screenshotPath, ocrText } = await captureOcrSnapshot(intent);
+        const scopeLabel = describeOcrTarget(intent.scope, intent.appName, intent.region, intent.rect);
+        const detail = formatOcrResultDetail(ocrText);
+        rememberOcrHistory(scopeLabel, ocrText, screenshotPath);
+        setCommandResult({
+          title: detail ? `${scopeLabel} text read` : `No ${scopeLabel} text found`,
+          detail: detail || `OCR ran on ${screenshotPath}, but no readable text was found.`,
+        });
+        setStatusMessage("Screen OCR completed through the desktop bridge.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", detail ? `I read and cleaned the visible ${scopeLabel} text.` : `I tried reading the ${scopeLabel}, but did not find readable text.`);
+        speakIfEnabled(detail ? `I read and cleaned the visible ${scopeLabel} text.` : `I tried reading the ${scopeLabel}, but did not find readable text.`);
+      } else if (intent.kind === "save_screen_text_to_notion") {
+        const { screenshotPath, ocrText } = await captureOcrSnapshot(intent);
+        const cleaned = cleanupOcrText(ocrText);
+        const summary = summarizeOcrText(ocrText);
+        if (!cleaned) {
+          throw new Error(`OCR ran on ${screenshotPath}, but no readable text was found.`);
+        }
+        const savedScopeLabel = describeOcrTarget(intent.scope, intent.appName, intent.region, intent.rect);
+        rememberOcrHistory(savedScopeLabel, cleaned, screenshotPath);
+        const note = await createNotionNote(
+          `${savedScopeLabel} Text Capture\n\nPath: ${screenshotPath}\nCaptured: ${new Date().toLocaleString()}\n\nSummary\n${summary || cleaned}\n\nCleaned OCR\n${cleaned}`,
+        );
+        setCommandResult({
+          title: `${savedScopeLabel} text saved to Notion`,
+          detail: `Saved OCR text from ${screenshotPath} to Notion as "${note.title}".`,
+        });
+        setStatusMessage("Screen OCR text saved into Notion.");
+        setVoiceSessionPhase("ready");
+        setRecentNotes((current) => [note, ...current].slice(0, 5));
+        appendConversationTurn("jarvis", "I read the screen and saved the text to Notion.");
+        speakIfEnabled("I read the screen and saved the text to Notion.");
+      } else if (intent.kind === "cleanup_clipboard") {
+        const text = (await readClipboardText()).trim();
+        if (!text) {
+          throw new Error("Your clipboard is empty right now.");
+        }
+        const cleaned = cleanupClipboardText(text, intent.mode);
+        await writeClipboardText(cleaned);
+        const reply = buildClipboardCleanupReply(intent.mode);
+        setCommandResult({
+          title: "Clipboard updated",
+          detail: cleaned.slice(0, 2000),
+        });
+        setStatusMessage("Clipboard text cleaned and copied back.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "create_desktop_project") {
+        const project = createDesktopProject(intent.name);
+        if (!project) {
+          throw new Error("I need a workspace name before I can save it.");
+        }
+
+        const reply = buildDesktopProjectCreatedReply(project.name);
+        setCommandResult({
+          title: "Desktop workspace saved",
+          detail: `${project.name} is ready. Add apps, folders, or websites to it next.`,
+        });
+        setStatusMessage("Desktop workspace saved locally.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "create_desktop_project_template") {
+        const project = createDesktopProjectFromTemplate(intent.templateName, intent.projectName);
+        if (!project) {
+          throw new Error(`I do not have a ${intent.templateName} workspace template yet.`);
+        }
+
+        const reply = buildDesktopProjectCreatedReply(project.name);
+        setCommandResult({
+          title: "Workspace template added",
+          detail: `${project.name} now has ${project.apps.length} apps, ${project.folders.length} folders, and ${project.websites.length} websites.`,
+        });
+        setStatusMessage("Desktop workspace template saved locally.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "list_desktop_projects") {
+        const reply = buildDesktopProjectsListReply(desktopProjects.length);
+        setCommandResult({
+          title: "Desktop workspaces",
+          detail:
+            desktopProjects.length > 0
+              ? desktopProjects
+                  .map(
+                    (project) =>
+                      `${project.name}: ${project.apps.length} apps, ${project.folders.length} folders, ${project.websites.length} websites`,
+                  )
+                  .join(" | ")
+              : "No desktop workspaces are saved yet.",
+        });
+        setStatusMessage("Desktop workspace memory loaded.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "add_app_to_desktop_project") {
+        const project = updateDesktopProject(intent.projectQuery, (entry) => ({
+          ...entry,
+          apps: Array.from(new Set([...entry.apps, intent.appName])),
+          updatedAt: new Date().toISOString(),
+        }));
+        if (!project) {
+          throw new Error(`I could not find a workspace named ${intent.projectQuery}.`);
+        }
+
+        const reply = buildDesktopProjectUpdatedReply(project.name);
+        setCommandResult({
+          title: "Workspace app added",
+          detail: `Added ${intent.appName} to ${project.name}.`,
+        });
+        setStatusMessage("Desktop workspace updated locally.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "add_folder_to_desktop_project") {
+        const project = updateDesktopProject(intent.projectQuery, (entry) => ({
+          ...entry,
+          folders: Array.from(new Set([...entry.folders, intent.folderName])),
+          updatedAt: new Date().toISOString(),
+        }));
+        if (!project) {
+          throw new Error(`I could not find a workspace named ${intent.projectQuery}.`);
+        }
+
+        const reply = buildDesktopProjectUpdatedReply(project.name);
+        setCommandResult({
+          title: "Workspace folder added",
+          detail: `Added ${intent.folderName} to ${project.name}.`,
+        });
+        setStatusMessage("Desktop workspace updated locally.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "add_website_to_desktop_project") {
+        const project = updateDesktopProject(intent.projectQuery, (entry) => ({
+          ...entry,
+          websites: Array.from(new Set([...entry.websites, intent.url])),
+          updatedAt: new Date().toISOString(),
+        }));
+        if (!project) {
+          throw new Error(`I could not find a workspace named ${intent.projectQuery}.`);
+        }
+
+        const reply = buildDesktopProjectUpdatedReply(project.name);
+        setCommandResult({
+          title: "Workspace website added",
+          detail: `Added ${formatBrowserTargetLabel(intent.url)} to ${project.name}.`,
+        });
+        setStatusMessage("Desktop workspace updated locally.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "rename_desktop_project") {
+        const project = updateDesktopProject(intent.projectQuery, (entry) => ({
+          ...entry,
+          name: intent.newName,
+          updatedAt: new Date().toISOString(),
+        }));
+        if (!project) {
+          throw new Error(`I could not find a workspace named ${intent.projectQuery}.`);
+        }
+
+        const reply = buildDesktopProjectUpdatedReply(project.name);
+        setCommandResult({
+          title: "Workspace renamed",
+          detail: `Renamed ${intent.projectQuery} to ${project.name}.`,
+        });
+        setStatusMessage("Desktop workspace renamed locally.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "delete_desktop_project") {
+        const project = deleteDesktopProject(intent.projectQuery);
+        if (!project) {
+          throw new Error(`I could not find a workspace named ${intent.projectQuery}.`);
+        }
+
+        const reply = buildDesktopProjectDeletedReply(project.name);
+        setCommandResult({
+          title: "Workspace deleted",
+          detail: `Deleted ${project.name} from desktop workspace memory.`,
+        });
+        setStatusMessage("Desktop workspace deleted locally.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "remove_app_from_desktop_project") {
+        const project = updateDesktopProject(intent.projectQuery, (entry) => ({
+          ...entry,
+          apps: entry.apps.filter((appName) => appName !== intent.appName),
+          updatedAt: new Date().toISOString(),
+        }));
+        if (!project) {
+          throw new Error(`I could not find a workspace named ${intent.projectQuery}.`);
+        }
+
+        const reply = buildDesktopProjectUpdatedReply(project.name);
+        setCommandResult({
+          title: "Workspace app removed",
+          detail: `Removed ${intent.appName} from ${project.name}.`,
+        });
+        setStatusMessage("Desktop workspace updated locally.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "remove_folder_from_desktop_project") {
+        const project = updateDesktopProject(intent.projectQuery, (entry) => ({
+          ...entry,
+          folders: entry.folders.filter((folderName) => folderName !== intent.folderName),
+          updatedAt: new Date().toISOString(),
+        }));
+        if (!project) {
+          throw new Error(`I could not find a workspace named ${intent.projectQuery}.`);
+        }
+
+        const reply = buildDesktopProjectUpdatedReply(project.name);
+        setCommandResult({
+          title: "Workspace folder removed",
+          detail: `Removed ${intent.folderName} from ${project.name}.`,
+        });
+        setStatusMessage("Desktop workspace updated locally.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "remove_website_from_desktop_project") {
+        const normalizedUrl = canonicalizeBrowserUrl(intent.url);
+        const project = updateDesktopProject(intent.projectQuery, (entry) => ({
+          ...entry,
+          websites: entry.websites.filter((url) => canonicalizeBrowserUrl(url) !== normalizedUrl),
+          updatedAt: new Date().toISOString(),
+        }));
+        if (!project) {
+          throw new Error(`I could not find a workspace named ${intent.projectQuery}.`);
+        }
+
+        const reply = buildDesktopProjectUpdatedReply(project.name);
+        setCommandResult({
+          title: "Workspace website removed",
+          detail: `Removed ${formatBrowserTargetLabel(intent.url)} from ${project.name}.`,
+        });
+        setStatusMessage("Desktop workspace updated locally.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "open_desktop_project") {
+        const project = findDesktopProject(intent.query);
+        if (!project) {
+          throw new Error(`I could not find a workspace named ${intent.query}.`);
+        }
+
+        for (const appName of project.apps) {
+          await launchDesktopApp(appName);
+        }
+        for (const folderName of project.folders) {
+          await openNamedFolder(folderName);
+        }
+        for (const url of project.websites) {
+          await openBrowserUrl(url);
+        }
+
+        const reply = buildDesktopProjectOpenedReply(project.name);
+        setActiveConversationContext(createActiveDesktopWorkspaceContext(project.name));
+        setCommandResult({
+          title: "Desktop workspace opened",
+          detail: `Opened ${project.name}: ${project.apps.length} apps, ${project.folders.length} folders, ${project.websites.length} websites.`,
+        });
+        setStatusMessage("Desktop workspace opened through JARVIS.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "schedule_desktop_project") {
+        const project = findDesktopProject(intent.query);
+        if (!project) {
+          throw new Error(`I could not find a workspace named ${intent.query}.`);
+        }
+        const schedule: DesktopScheduleRecord = {
+          id: `desktop-schedule-${Date.now()}`,
+          projectName: project.name,
+          actionLabel: `Open ${project.name}`,
+          dueAt: intent.dueAt.toISOString(),
+          createdAt: new Date().toISOString(),
+        };
+        setDesktopSchedules((current) => [schedule, ...current].slice(0, 12));
+        const reply = buildWorkspaceScheduledReply(project.name);
+        setCommandResult({
+          title: "Workspace scheduled",
+          detail: `${project.name} is scheduled for ${intent.dueAt.toLocaleString()}. This works while JARVIS is running.`,
+        });
+        setStatusMessage("Desktop workspace schedule saved locally.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "start_desktop_project_for_duration") {
+        const project = findDesktopProject(intent.query);
+        if (!project) {
+          throw new Error(`I could not find a workspace named ${intent.query}.`);
+        }
+        for (const appName of project.apps) {
+          await launchDesktopApp(appName);
+        }
+        for (const folderName of project.folders) {
+          await openNamedFolder(folderName);
+        }
+        for (const url of project.websites) {
+          await openBrowserUrl(url);
+        }
+        const dueAt = new Date(Date.now() + intent.durationMinutes * 60 * 1000);
+        setDesktopSchedules((current) => [
+          {
+            id: `desktop-schedule-${Date.now()}`,
+            projectName: project.name,
+            actionLabel: `${project.name} focus block ends`,
+            dueAt: dueAt.toISOString(),
+            createdAt: new Date().toISOString(),
+          },
+          ...current,
+        ].slice(0, 12));
+        setActiveConversationContext(createActiveDesktopWorkspaceContext(project.name));
+        setCommandResult({
+          title: "Workspace focus block started",
+          detail: `Opened ${project.name} and marked a ${intent.durationMinutes}-minute focus block ending at ${dueAt.toLocaleTimeString()}.`,
+        });
+        setStatusMessage("Desktop workspace focus block started.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", `I started the ${project.name} workspace for ${intent.durationMinutes} minutes.`);
+        speakIfEnabled(`I started the ${project.name} workspace for ${intent.durationMinutes} minutes.`);
+      } else if (intent.kind === "list_desktop_schedules") {
+        const upcoming = desktopSchedules.filter((schedule) => new Date(schedule.dueAt).getTime() >= Date.now());
+        setCommandResult({
+          title: "Workspace schedules",
+          detail:
+            upcoming.length > 0
+              ? upcoming.map((schedule) => `${schedule.actionLabel}: ${new Date(schedule.dueAt).toLocaleString()}`).join(" | ")
+              : "No workspace schedules are active right now.",
+        });
+        setStatusMessage("Workspace schedules loaded.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", upcoming.length > 0 ? `I found ${upcoming.length} workspace schedule${upcoming.length === 1 ? "" : "s"}.` : "No workspace schedules are active right now.");
+        speakIfEnabled(upcoming.length > 0 ? `I found ${upcoming.length} workspace schedule${upcoming.length === 1 ? "" : "s"}.` : "No workspace schedules are active right now.");
+      } else if (
+        intent.kind === "run_project_checks" &&
+        desktopPermissionSettings.confirmProjectChecks &&
+        !intent.confirmed
+      ) {
+        setPendingClarification({
+          prompt: "Run the JARVIS project checks now? This can take a little while.",
+          choices: [
+            {
+              label: "Run checks",
+              intent: { kind: "run_project_checks", confirmed: true },
+            },
+          ],
+        });
+        setCommandResult({
+          title: "Confirm project checks",
+          detail: "Say yes to run TypeScript and Rust checks through the desktop bridge.",
+        });
+        setStatusMessage("Waiting for project-check confirmation.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", "Should I run the JARVIS project checks now?");
+        speakIfEnabled("Should I run the JARVIS project checks now?");
+      } else if (intent.kind === "run_project_checks") {
+        const response = await runJarvisProjectChecks();
+        const reply = buildProjectChecksReply();
+        setCommandResult({
+          title: "Project checks finished",
+          detail: response.slice(0, 5000),
+        });
+        setStatusMessage("JARVIS project checks completed.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "open_project_in_vscode") {
+        await openNamedFolder("jarvis project");
+        await launchDesktopApp("vs code");
+        setActiveConversationContext(createActiveDesktopWorkspaceContext("jarvis project"));
+        setCommandResult({
+          title: "Project opened",
+          detail: "Opened the JARVIS project folder and VS Code.",
+        });
+        setStatusMessage("JARVIS project opened for coding.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", "I opened the JARVIS project for coding.");
+        speakIfEnabled("I opened the JARVIS project for coding.");
+      } else if (intent.kind === "minimize_jarvis_window") {
+        await getCurrentWindow().minimize();
+        completed = true;
+        setIsRoutingCommand(false);
+        return completed;
+      } else if (intent.kind === "maximize_jarvis_window") {
+        await getCurrentWindow().maximize();
+        setCommandResult({
+          title: "JARVIS window maximized",
+          detail: "Maximized the JARVIS app window.",
+        });
+        setStatusMessage("JARVIS window maximized.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", "I maximized the JARVIS window.");
+        speakIfEnabled("I maximized the JARVIS window.");
+      } else if (intent.kind === "restore_jarvis_window") {
+        await getCurrentWindow().unmaximize();
+        setCommandResult({
+          title: "JARVIS window restored",
+          detail: "Restored the JARVIS app window.",
+        });
+        setStatusMessage("JARVIS window restored.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", "I restored the JARVIS window.");
+        speakIfEnabled("I restored the JARVIS window.");
+      } else if (
+        intent.kind === "control_desktop_app_window" &&
+        intent.action === "close" &&
+        desktopPermissionSettings.confirmAppClose &&
+        !intent.confirmed
+      ) {
+        setPendingClarification({
+          prompt: `Close ${intent.appName}? This can discard unsaved work in that app.`,
+          choices: [
+            {
+              label: "Close app",
+              intent: { ...intent, confirmed: true },
+            },
+          ],
+        });
+        setCommandResult({
+          title: "Confirm app close",
+          detail: `Say yes to close ${intent.appName}, or no to leave it open.`,
+        });
+        setStatusMessage("Waiting for app-close confirmation.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", `Should I close ${intent.appName}?`);
+        speakIfEnabled(`Should I close ${intent.appName}?`);
+      } else if (intent.kind === "control_desktop_app_window") {
+        const response = await controlDesktopAppWindow(intent.appName, intent.action);
+        setActiveConversationContext(createActiveDesktopAppContext(intent.appName));
+        setCommandResult({
+          title: "Desktop window controlled",
+          detail: response,
+        });
+        setStatusMessage("Desktop window command completed through the native bridge.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", `I sent ${intent.action} to ${intent.appName}.`);
+        speakIfEnabled(`I sent ${intent.action} to ${intent.appName}.`);
+      } else if (intent.kind === "check_desktop_app_window_status") {
+        const response = await getDesktopAppWindowStatus(intent.appName);
+        setActiveConversationContext(createActiveDesktopAppContext(intent.appName));
+        setCommandResult({
+          title: "Desktop app status",
+          detail: response,
+        });
+        setStatusMessage("Desktop app status checked through the native bridge.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", response);
+        speakIfEnabled(response);
+      } else if (intent.kind === "show_desktop_permissions") {
+        const detail = [
+          `Project checks confirmation: ${desktopPermissionSettings.confirmProjectChecks ? "on" : "off"}`,
+          `App close confirmation: ${desktopPermissionSettings.confirmAppClose ? "on" : "off"}`,
+          `Executor launch confirmation: ${desktopPermissionSettings.confirmExecutorLaunch ? "on" : "off"}`,
+        ].join(" | ");
+        setCommandResult({
+          title: "Desktop permissions",
+          detail,
+        });
+        setStatusMessage("Desktop permission settings loaded.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", detail);
+        speakIfEnabled("Here are the desktop permission settings.");
+      } else if (intent.kind === "set_desktop_permission") {
+        setDesktopPermissionSettings((current) => ({
+          ...current,
+          [intent.permission]: intent.enabled,
+        }));
+        const labels: Record<keyof DesktopPermissionSettings, string> = {
+          confirmProjectChecks: "project checks confirmation",
+          confirmAppClose: "app close confirmation",
+          confirmExecutorLaunch: "executor launch confirmation",
+        };
+        const detail = `${labels[intent.permission]} is now ${intent.enabled ? "on" : "off"}.`;
+        setCommandResult({
+          title: "Desktop permission updated",
+          detail,
+        });
+        setStatusMessage("Desktop permission setting saved locally.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", detail);
+        speakIfEnabled(detail);
+      } else if (intent.kind === "begin_ocr_region_selection") {
+        const { screenshotPath, ocrText } = await captureOcrSnapshot({ scope: "global_selection" });
+        const detail = formatOcrResultDetail(ocrText);
+        rememberOcrHistory("global selected area", ocrText, screenshotPath);
+        setCommandResult({
+          title: detail ? "Global selected area read" : "No selected-area text found",
+          detail: detail || `OCR ran on ${screenshotPath}, but no readable text was found.`,
+        });
+        setStatusMessage("Global OCR selection completed.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", detail ? "I read the selected desktop area." : "I tried reading the selected area, but did not find readable text.");
+        speakIfEnabled(detail ? "I read the selected desktop area." : "I tried reading the selected area, but did not find readable text.");
+      } else if (intent.kind === "begin_app_ocr_region_selection") {
+        beginOcrSelection();
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", "Drag a box over the area you want me to read.");
+        speakIfEnabled("Drag a box over the area you want me to read.");
+      } else if (intent.kind === "start_ocr_watch") {
+        const snapshot = await captureOcrSnapshot(intent);
+        const cleaned = cleanupOcrText(snapshot.ocrText);
+        const watchTarget: OcrWatchTarget = {
+          id: `watch-${Date.now()}`,
+          name: describeOcrTarget(intent.scope ?? "screen", intent.appName, intent.region, intent.rect),
+          scope: intent.scope ?? "screen",
+          appName: intent.appName,
+          region: intent.region,
+          rect: intent.rect,
+          status: "active",
+          intervalMs: intent.intervalMs,
+          logToNotion: intent.logToNotion,
+          createTaskOnMatch: intent.createTaskOnMatch,
+          action: intent.action,
+          rule: intent.rule,
+          lastText: cleaned,
+          lastCheckedAt: new Date().toISOString(),
+        };
+        setOcrWatchTargets((current) => [watchTarget, ...current].slice(0, 8));
+        const targetLabel = describeOcrTarget(watchTarget.scope, watchTarget.appName, watchTarget.region, watchTarget.rect);
+        rememberOcrHistory(targetLabel, cleaned, snapshot.screenshotPath);
+        setCommandResult({
+          title: "Screen watch started",
+          detail: `Watching ${targetLabel} every ${Math.round(watchTarget.intervalMs / 1000)} seconds for ${describeOcrWatchRule(watchTarget.rule)}${watchTarget.logToNotion ? " and logging matches to Notion" : ""}${watchTarget.createTaskOnMatch ? " and creating tasks on matches" : ""}${watchTarget.action ? ` and ${describeOcrWatchAction(watchTarget.action)}` : ""}. Current OCR preview:\n\n${formatOcrResultDetail(cleaned) || "No readable text yet."}`,
+        });
+        setStatusMessage(`OCR watch started for ${targetLabel}.`);
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", `I started watching the ${targetLabel} for text changes.`);
+        speakIfEnabled(`I started watching the ${targetLabel} for text changes.`);
+      } else if (intent.kind === "stop_ocr_watch") {
+        setOcrWatchTargets([]);
+        setCommandResult({
+          title: "Screen watches stopped",
+          detail: "JARVIS stopped all periodic OCR checks.",
+        });
+        setStatusMessage("OCR watch stopped.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", "I stopped watching the screen.");
+        speakIfEnabled("I stopped watching the screen.");
+      } else if (intent.kind === "name_latest_ocr_watch") {
+        setOcrWatchTargets((current) =>
+          current.map((watch, index) => (index === 0 ? { ...watch, name: intent.name } : watch)),
+        );
+        setCommandResult({
+          title: "OCR watch named",
+          detail: `Saved the latest OCR watch as "${intent.name}".`,
+        });
+        setStatusMessage("OCR watch name saved.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", `I named the latest OCR watch ${intent.name}.`);
+        speakIfEnabled(`I named the latest OCR watch ${intent.name}.`);
+      } else if (intent.kind === "pause_ocr_watch_by_name") {
+        setOcrWatchTargets((current) =>
+          current.map((watch) => (watch.name.toLowerCase().includes(intent.name.toLowerCase()) ? { ...watch, status: "paused" } : watch)),
+        );
+        setCommandResult({ title: "OCR watch paused", detail: `Paused watches matching "${intent.name}".` });
+        setStatusMessage("Named OCR watch paused.");
+        setVoiceSessionPhase("ready");
+      } else if (intent.kind === "resume_ocr_watch_by_name") {
+        setOcrWatchTargets((current) =>
+          current.map((watch) => (watch.name.toLowerCase().includes(intent.name.toLowerCase()) ? { ...watch, status: "active" } : watch)),
+        );
+        setCommandResult({ title: "OCR watch resumed", detail: `Resumed watches matching "${intent.name}".` });
+        setStatusMessage("Named OCR watch resumed.");
+        setVoiceSessionPhase("ready");
+      } else if (intent.kind === "delete_ocr_watch_by_name") {
+        setOcrWatchTargets((current) => current.filter((watch) => !watch.name.toLowerCase().includes(intent.name.toLowerCase())));
+        setCommandResult({ title: "OCR watch deleted", detail: `Deleted watches matching "${intent.name}".` });
+        setStatusMessage("Named OCR watch deleted.");
+        setVoiceSessionPhase("ready");
+      } else if (intent.kind === "save_latest_ocr_watch_template") {
+        const watch = ocrWatchTargets[0];
+        if (!watch) throw new Error("There is no OCR watch to save as a template yet.");
+        const template: OcrWatchTemplate = {
+          name: intent.name,
+          rule: watch.rule,
+          intervalMs: watch.intervalMs,
+          logToNotion: watch.logToNotion,
+          createTaskOnMatch: watch.createTaskOnMatch,
+          action: watch.action,
+        };
+        setOcrWatchTemplates((current) => [template, ...current.filter((item) => item.name.toLowerCase() !== intent.name.toLowerCase())].slice(0, 20));
+        setCommandResult({ title: "OCR watch template saved", detail: `Saved "${intent.name}" as a reusable watch template.` });
+        setStatusMessage("OCR watch template saved.");
+        setVoiceSessionPhase("ready");
+      } else if (intent.kind === "start_ocr_watch_template") {
+        const template = ocrWatchTemplates.find((item) => item.name.toLowerCase().includes(intent.templateName.toLowerCase()));
+        if (!template) throw new Error(`I could not find an OCR watch template called ${intent.templateName}.`);
+        await executeIntent({
+          kind: "start_ocr_watch",
+          scope: "app_window",
+          appName: intent.appName,
+          intervalMs: template.intervalMs,
+          logToNotion: template.logToNotion,
+          createTaskOnMatch: template.createTaskOnMatch,
+          action: template.action,
+          rule: template.rule,
+        });
+        completed = true;
+        return completed;
+      } else if (intent.kind === "pause_ocr_watches") {
+        setOcrWatchTargets((current) => current.map((watch) => ({ ...watch, status: "paused" })));
+        setCommandResult({
+          title: "OCR watches paused",
+          detail: "Paused all saved OCR watches. You can resume them later.",
+        });
+        setStatusMessage("OCR watches paused.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", "I paused OCR watches.");
+        speakIfEnabled("I paused OCR watches.");
+      } else if (intent.kind === "resume_ocr_watches") {
+        setOcrWatchTargets((current) => current.map((watch) => ({ ...watch, status: "active" })));
+        setCommandResult({
+          title: "OCR watches resumed",
+          detail: "Resumed all saved OCR watches.",
+        });
+        setStatusMessage("OCR watches resumed.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", "I resumed OCR watches.");
+        speakIfEnabled("I resumed OCR watches.");
+      } else if (intent.kind === "show_ocr_watches") {
+        setCommandResult({
+          title: "OCR watches",
+          detail:
+            ocrWatchTargets.length > 0
+              ? ocrWatchTargets
+                  .map(
+                    (watch, index) =>
+                      `${index + 1}. ${watch.status}: ${watch.name} | ${describeOcrWatchRule(watch.rule)} | ${describeOcrWatchAction(watch.action)} | every ${Math.round(watch.intervalMs / 1000)}s`,
+                  )
+                  .join("\n")
+              : "No OCR watches are saved right now.",
+        });
+        setStatusMessage("OCR watches loaded.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", `I found ${ocrWatchTargets.length} OCR watch${ocrWatchTargets.length === 1 ? "" : "es"}.`);
+        speakIfEnabled(`I found ${ocrWatchTargets.length} OCR watch${ocrWatchTargets.length === 1 ? "" : "es"}.`);
+      } else if (intent.kind === "show_ocr_history") {
+        setCommandResult({
+          title: "OCR history",
+          detail:
+            ocrHistory.length > 0
+              ? ocrHistory
+                  .slice(0, 5)
+                  .map((entry, index) => `${index + 1}. ${entry.target} at ${new Date(entry.createdAt).toLocaleString()}: ${entry.summary}`)
+                  .join("\n\n")
+              : "No OCR history yet. Try `read my screen` first.",
+        });
+        setStatusMessage("OCR history loaded.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", `I found ${ocrHistory.length} OCR history item${ocrHistory.length === 1 ? "" : "s"}.`);
+        speakIfEnabled(`I found ${ocrHistory.length} OCR history item${ocrHistory.length === 1 ? "" : "s"}.`);
+      } else if (intent.kind === "search_ocr_history") {
+        const matches = filterOcrHistory(ocrHistory, intent);
+        setCommandResult({
+          title: "OCR history search",
+          detail:
+            matches.length > 0
+              ? matches
+                  .slice(0, 5)
+                  .map((entry, index) => `${index + 1}. ${entry.target} at ${new Date(entry.createdAt).toLocaleString()}: ${entry.summary}`)
+                  .join("\n\n")
+              : `No OCR history matches found ${intent.label}.`,
+        });
+        setStatusMessage("OCR history searched.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", `I found ${matches.length} OCR history match${matches.length === 1 ? "" : "es"}.`);
+        speakIfEnabled(`I found ${matches.length} OCR history match${matches.length === 1 ? "" : "es"}.`);
+      } else if (intent.kind === "save_ocr_history_to_notion") {
+        if (ocrHistory.length === 0) {
+          throw new Error("There is no OCR history yet.");
+        }
+        const note = await createNotionNote(
+          `OCR History Log\n\nSaved: ${new Date().toLocaleString()}\n\n${ocrHistory
+            .slice(0, 10)
+            .map(
+              (entry, index) =>
+                `${index + 1}. ${entry.target}\nTime: ${new Date(entry.createdAt).toLocaleString()}\nScreenshot: ${entry.screenshotPath}\nSummary:\n${entry.summary}\n`,
+            )
+            .join("\n")}`,
+        );
+        setRecentNotes((current) => [note, ...current].slice(0, 5));
+        setCommandResult({
+          title: "OCR history saved to Notion",
+          detail: `Saved ${Math.min(ocrHistory.length, 10)} OCR history item${ocrHistory.length === 1 ? "" : "s"} as "${note.title}".`,
+        });
+        setStatusMessage("OCR history saved into Notion.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", "I saved the OCR history to Notion.");
+        speakIfEnabled("I saved the OCR history to Notion.");
+      } else if (intent.kind === "clear_ocr_history") {
+        setOcrHistory([]);
+        setOcrWatchMatches([]);
+        setLastOcrText("");
+        setCommandResult({
+          title: "OCR history cleared",
+          detail: "Cleared local OCR history and watch match previews.",
+        });
+        setStatusMessage("OCR history cleared.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", "I cleared OCR history.");
+        speakIfEnabled("I cleared OCR history.");
+      } else if (intent.kind === "export_ocr_history_to_clipboard") {
+        if (ocrHistory.length === 0) {
+          throw new Error("There is no OCR history to export yet.");
+        }
+        await writeClipboardText(JSON.stringify(ocrHistory, null, 2));
+        setCommandResult({
+          title: "OCR history exported",
+          detail: `Copied ${ocrHistory.length} OCR history item${ocrHistory.length === 1 ? "" : "s"} to the clipboard as JSON.`,
+        });
+        setStatusMessage("OCR history copied to clipboard.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", "I copied OCR history to the clipboard.");
+        speakIfEnabled("I copied OCR history to the clipboard.");
+      } else if (intent.kind === "copy_latest_ocr_text") {
+        const text = lastOcrText || ocrHistory[0]?.text || "";
+        if (!text) {
+          throw new Error("There is no OCR text to copy yet.");
+        }
+        await writeClipboardText(text);
+        setCommandResult({
+          title: "Latest OCR copied",
+          detail: "Copied the latest OCR text to your clipboard.",
+        });
+        setStatusMessage("Latest OCR text copied.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", "I copied the latest OCR text.");
+        speakIfEnabled("I copied the latest OCR text.");
+      } else if (intent.kind === "correct_ocr_text") {
+        setOcrCorrections((current) => [{ from: intent.from, to: intent.to, createdAt: new Date().toISOString() }, ...current].slice(0, 50));
+        setCommandResult({ title: "OCR correction saved", detail: `JARVIS will replace "${intent.from}" with "${intent.to}" in future OCR reads.` });
+        setStatusMessage("OCR correction saved.");
+        setVoiceSessionPhase("ready");
+      } else if (intent.kind === "remember_latest_ocr") {
+        const text = lastOcrText || ocrHistory[0]?.text || "";
+        if (!text) throw new Error("There is no OCR text to remember yet.");
+        const note = await createNotionNote(`Screen Memory\n\nSaved: ${new Date().toLocaleString()}\n\n${text}`);
+        setRecentNotes((current) => [note, ...current].slice(0, 5));
+        setCommandResult({ title: "Screen memory saved", detail: `Saved latest OCR as "${note.title}".` });
+        setStatusMessage("Latest OCR saved as memory.");
+        setVoiceSessionPhase("ready");
+      } else if (intent.kind === "summarize_screen") {
+        const { screenshotPath, ocrText } = await captureOcrSnapshot({ scope: intent.scope ?? "screen", appName: intent.appName });
+        const summary = buildOcrSummary(ocrText, intent.mode);
+        rememberOcrHistory(`screen ${intent.mode}`, ocrText, screenshotPath, { source: "summary" });
+        setCommandResult({ title: "Screen summary", detail: summary || "No readable text found to summarize." });
+        setStatusMessage("Screen summarized from OCR.");
+        setVoiceSessionPhase("ready");
+      } else if (intent.kind === "create_screen_task_list") {
+        const scopeLabel = describeOcrTarget(intent.scope, intent.appName, intent.region, intent.rect);
+        const taskTitles = intent.taskTitles ?? extractOcrTaskTitles((await captureOcrSnapshot(intent)).ocrText);
+        if (taskTitles.length === 0) {
+          throw new Error("I could not find task-like text in the OCR result yet.");
+        }
+        if (!intent.confirmed) {
+          setPendingClarification({
+            prompt: `Create ${taskTitles.length} Notion task${taskTitles.length === 1 ? "" : "s"} from ${scopeLabel}?`,
+            choices: [
+              {
+                label: "Create tasks",
+                intent: { ...intent, confirmed: true, taskTitles },
+              },
+            ],
+          });
+          setCommandResult({
+            title: "OCR task preview",
+            detail: `I found these possible tasks from ${scopeLabel}:\n${taskTitles.map((title, index) => `${index + 1}. ${title}`).join("\n")}\n\nSay yes to create them in Notion.`,
+          });
+          setStatusMessage("Waiting for OCR task creation confirmation.");
+          setVoiceSessionPhase("ready");
+          appendConversationTurn("jarvis", `I found ${taskTitles.length} possible task${taskTitles.length === 1 ? "" : "s"}. Should I create them in Notion?`);
+          speakIfEnabled(`I found ${taskTitles.length} possible task${taskTitles.length === 1 ? "" : "s"}. Should I create them in Notion?`);
+          completed = true;
+          await loadMemoryView();
+          return completed;
+        }
+        const createdTasks: NoteRecord[] = [];
+        for (const title of taskTitles) {
+          createdTasks.push(await createNotionTask(title, null, null));
+        }
+        setCommandResult({
+          title: "Screen task list created",
+          detail: `Created ${createdTasks.length} task${createdTasks.length === 1 ? "" : "s"} from ${scopeLabel}: ${createdTasks
+            .map((task) => task.title)
+            .join(" | ")}`,
+        });
+        setStatusMessage("OCR task list created through Notion.");
+        setVoiceSessionPhase("ready");
+        setRecentNotes((current) => [...createdTasks, ...current].slice(0, 5));
+        appendConversationTurn("jarvis", `I created ${createdTasks.length} task${createdTasks.length === 1 ? "" : "s"} from the ${scopeLabel}.`);
+        speakIfEnabled(`I created ${createdTasks.length} task${createdTasks.length === 1 ? "" : "s"} from the ${scopeLabel}.`);
+      } else if (intent.kind === "create_screen_task") {
+        const screenshotPath = await captureDesktopScreenshot();
+        setLastScreenshotPath(screenshotPath);
+        setActiveConversationContext(createActiveScreenshotContext(screenshotPath));
+        let contextText = "";
+        try {
+          contextText = (await extractImageOcrText(screenshotPath)).trim();
+        } catch {
+          contextText = (await readClipboardText()).trim();
+        }
+        const title = contextText
+          ? cleanupClipboardText(contextText, "summarize").slice(0, 120)
+          : `Review screenshot ${screenshotPath.split(/[\\/]/).pop() ?? ""}`.trim();
+        const task = await createNotionTask(title, null, null);
+        setCommandResult({
+          title: "Screen task created",
+          detail: `Created "${task.title}" from the screenshot context. Screenshot: ${screenshotPath}`,
+        });
+        setStatusMessage("Screen task created through Notion.");
+        setVoiceSessionPhase("ready");
+        setRecentNotes((current) => [task, ...current].slice(0, 5));
+        appendConversationTurn("jarvis", "I captured the screen and created a task from readable screen context.");
+        speakIfEnabled("I captured the screen and created a task from readable screen context.");
+      } else if (
+        intent.kind === "create_builder_handoff" &&
+        intent.launchExecutor &&
+        desktopPermissionSettings.confirmExecutorLaunch &&
+        !intent.confirmed
+      ) {
+        setPendingClarification({
+          prompt: "Launch the configured coding executor for this handoff?",
+          choices: [
+            {
+              label: "Launch executor",
+              intent: { ...intent, confirmed: true },
+            },
+          ],
+        });
+        setCommandResult({
+          title: "Confirm coding executor",
+          detail: "Say yes to create the handoff and launch the configured local coding agent bridge.",
+        });
+        setStatusMessage("Waiting for coding executor confirmation.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", "Should I launch the coding executor for this handoff?");
+        speakIfEnabled("Should I launch the coding executor for this handoff?");
+      } else if (intent.kind === "create_builder_handoff") {
+        const request = createVoiceBuildRequest(intent.request);
+        setBuildRequest(request);
+        const artifact = await createBuildHandoffArtifact(request);
+        setHandoffArtifact(artifact);
+        let launchDetail = artifact.message;
+        if (intent.launchExecutor) {
+          try {
+            launchDetail = await launchExecutorHandoff(artifact.jsonPath, artifact.markdownPath);
+          } catch (error) {
+            launchDetail = `Handoff saved, but executor launch needs manual help: ${error instanceof Error ? error.message : String(error)}`;
+          }
+        }
+        setCommandResult({
+          title: "Builder handoff ready",
+          detail: launchDetail,
+        });
+        setStatusMessage("Voice build request converted into a coding handoff.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", "I prepared the coding handoff.");
+        speakIfEnabled("I prepared the coding handoff.");
+      } else if (intent.kind === "open_last_desktop_context") {
+        const context = activeConversationContext;
+        if (!context) {
+          throw new Error("I do not have a recent desktop target to reopen yet.");
+        }
+        if (context.kind === "desktop_app") {
+          await launchDesktopApp(context.appName);
+        } else if (context.kind === "desktop_folder") {
+          await openNamedFolder(context.folderName);
+        } else if (context.kind === "desktop_workspace") {
+          const project = findDesktopProject(context.projectName);
+          if (!project) {
+            throw new Error(`I could not find the ${context.projectName} workspace anymore.`);
+          }
+          for (const appName of project.apps) {
+            await launchDesktopApp(appName);
+          }
+          for (const folderName of project.folders) {
+            await openNamedFolder(folderName);
+          }
+          for (const url of project.websites) {
+            await openBrowserUrl(url);
+          }
+        } else if (context.kind === "screenshot") {
+          await openLocalFile(context.path);
+        } else if (context.kind === "browser") {
+          await openBrowserUrl(context.url);
+        } else {
+          throw new Error("That recent item is not a desktop target I can reopen directly.");
+        }
+        setCommandResult({
+          title: "Last desktop target opened",
+          detail: `Opened ${context.label}.`,
+        });
+        setStatusMessage("Last desktop context reopened.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", `I opened ${context.label} again.`);
+        speakIfEnabled(`I opened ${context.label} again.`);
+      } else if (intent.kind === "export_desktop_projects_to_clipboard") {
+        await writeClipboardText(JSON.stringify(desktopProjects, null, 2));
+        setCommandResult({
+          title: "Workspaces exported",
+          detail: `Copied ${desktopProjects.length} workspace${desktopProjects.length === 1 ? "" : "s"} to the clipboard as JSON.`,
+        });
+        setStatusMessage("Desktop workspaces exported to clipboard.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", "I copied your workspace export to the clipboard.");
+        speakIfEnabled("I copied your workspace export to the clipboard.");
+      } else if (intent.kind === "import_desktop_projects_from_clipboard") {
+        const text = await readClipboardText();
+        const parsed = JSON.parse(text) as DesktopProjectRecord[];
+        if (!Array.isArray(parsed)) {
+          throw new Error("The clipboard does not contain a workspace JSON array.");
+        }
+        const sanitized = parsed
+          .filter((project) => project?.name)
+          .map((project) => ({
+            id: project.id || `desktop-project-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            name: project.name,
+            apps: Array.isArray(project.apps) ? project.apps : [],
+            folders: Array.isArray(project.folders) ? project.folders : [],
+            websites: Array.isArray(project.websites) ? project.websites : [],
+            createdAt: project.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }));
+        setDesktopProjects((current) => {
+          const byName = new Map(current.map((project) => [project.name.toLowerCase(), project]));
+          for (const project of sanitized) {
+            byName.set(project.name.toLowerCase(), project);
+          }
+          return [...byName.values()];
+        });
+        setCommandResult({
+          title: "Workspaces imported",
+          detail: `Imported ${sanitized.length} workspace${sanitized.length === 1 ? "" : "s"} from the clipboard.`,
+        });
+        setStatusMessage("Desktop workspaces imported from clipboard.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", `I imported ${sanitized.length} workspace${sanitized.length === 1 ? "" : "s"}.`);
+        speakIfEnabled(`I imported ${sanitized.length} workspace${sanitized.length === 1 ? "" : "s"}.`);
       } else if (intent.kind === "google_search") {
         const query = intent.query.trim();
         if (!query) {
@@ -7894,17 +12617,48 @@ function App() {
         appendConversationTurn("jarvis", reply);
         speakIfEnabled(reply);
       } else if (intent.kind === "remember_person_birthday") {
-        rememberPersonBirthday({
+        const savedPerson = rememberPersonBirthday({
           name: intent.name,
           birthdayLabel: intent.birthdayLabel,
           month: intent.month,
           day: intent.day,
+          age: intent.age ?? null,
+          relationship: intent.relationship ?? null,
+          giftNotes: [],
+          contactNotes: [],
+          lastContactLabel: null,
+          followUpDueLabel: null,
+          followUpReason: null,
+          reminderLeadDays: intent.reminderLeadDays ?? 7,
+          calendarLinkedAt: null,
           source: "manual",
         });
+        if (!savedPerson) {
+          throw new Error(`I could not save ${intent.name}'s birthday right now.`);
+        }
         const reply = buildBirthdaySavedReply(intent.name, intent.birthdayLabel);
+        if (intent.addToCalendar) {
+          const { start, end } = getNextBirthdayCalendarWindow(savedPerson);
+          if (googleCalendarAccessToken) {
+            await createGoogleCalendarEvent(
+              googleCalendarAccessToken,
+              `Birthday: ${savedPerson.name}`,
+              start,
+              end,
+            );
+          } else {
+            await openBrowserUrl(buildGoogleCalendarEventUrl(`Birthday: ${savedPerson.name}`, start, end));
+          }
+          updatePersonMemory(savedPerson.name, (person) => ({
+            ...person,
+            calendarLinkedAt: new Date().toISOString(),
+          }));
+        }
         setCommandResult({
           title: "Birthday saved",
-          detail: `${intent.name}'s birthday is now saved as ${intent.birthdayLabel}.`,
+          detail: `${formatBirthdaySummary(savedPerson)}${
+            intent.addToCalendar ? " | Calendar entry created." : ""
+          }`,
         });
         setStatusMessage("People memory updated through JARVIS.");
         setVoiceSessionPhase("ready");
@@ -7922,7 +12676,7 @@ function App() {
           title: "Saved birthdays",
           detail:
             sortedPeople.length > 0
-              ? sortedPeople.map((person) => `${person.name} - ${person.birthdayLabel}`).join(" | ")
+              ? sortedPeople.map((person) => formatBirthdaySummary(person)).join(" | ")
               : "No birthdays are saved yet.",
         });
         setStatusMessage("People memory loaded through JARVIS.");
@@ -7950,19 +12704,196 @@ function App() {
         appendConversationTurn("jarvis", reply);
         speakIfEnabled(reply);
       } else if (intent.kind === "show_person_birthday") {
-        const person = peopleMemory.find((entry) =>
-          entry.name.toLowerCase().includes(intent.query.trim().toLowerCase()),
-        );
+        const person = findPersonByQuery(peopleMemory, intent.query);
         if (!person) {
           throw new Error(`I could not find a saved birthday for ${intent.query} yet.`);
         }
 
-        const reply = buildBirthdayLookupReply(person.name, person.birthdayLabel);
+        const reply = buildBirthdayLookupReply(person);
         setCommandResult({
           title: "Birthday found",
-          detail: `${person.name}'s birthday is saved as ${person.birthdayLabel}.`,
+          detail: buildBirthdayLookupReply(person),
         });
         setStatusMessage("People memory lookup completed.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "update_person_relationship") {
+        const person = updatePersonMemory(intent.query, (entry) => ({
+          ...entry,
+          relationship: intent.relationship,
+        }));
+        if (!person) {
+          throw new Error(`I could not find ${intent.query} in people memory yet.`);
+        }
+        const reply = `Okay. I saved ${person.name} as your ${intent.relationship}.`;
+        setCommandResult({
+          title: "Relationship updated",
+          detail: buildBirthdayLookupReply(person),
+        });
+        setStatusMessage("People memory updated through JARVIS.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "update_person_age") {
+        const person = updatePersonMemory(intent.query, (entry) => ({
+          ...entry,
+          age: intent.age,
+        }));
+        if (!person) {
+          throw new Error(`I could not find ${intent.query} in people memory yet.`);
+        }
+        const reply = `Okay. I saved ${person.name} as turning ${intent.age}.`;
+        setCommandResult({
+          title: "Birthday age updated",
+          detail: buildBirthdayLookupReply(person),
+        });
+        setStatusMessage("People memory updated through JARVIS.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "add_person_gift_note") {
+        const person = updatePersonMemory(intent.query, (entry) => ({
+          ...entry,
+          giftNotes: [...(entry.giftNotes ?? []), intent.note],
+        }));
+        if (!person) {
+          throw new Error(`I could not find ${intent.query} in people memory yet.`);
+        }
+        const reply = `Okay. I added that gift note for ${person.name}.`;
+        setCommandResult({
+          title: "Gift note saved",
+          detail: buildBirthdayLookupReply(person),
+        });
+        setStatusMessage("People memory updated through JARVIS.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "add_person_contact_note") {
+        const person = updatePersonMemory(intent.query, (entry) => ({
+          ...entry,
+          contactNotes: [...(entry.contactNotes ?? []), intent.note],
+        }));
+        if (!person) {
+          throw new Error(`I could not find ${intent.query} in people memory yet.`);
+        }
+        const reply = `Okay. I added that contact note for ${person.name}.`;
+        setCommandResult({
+          title: "Contact note saved",
+          detail: buildBirthdayLookupReply(person),
+        });
+        setStatusMessage("People memory updated through JARVIS.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "set_person_last_contact") {
+        const person = updatePersonMemory(intent.query, (entry) => ({
+          ...entry,
+          lastContactLabel: intent.whenLabel,
+        }));
+        if (!person) {
+          throw new Error(`I could not find ${intent.query} in people memory yet.`);
+        }
+        const reply = `Okay. I saved that you last talked to ${person.name} ${intent.whenLabel}.`;
+        setCommandResult({
+          title: "Last contact saved",
+          detail: buildBirthdayLookupReply(person),
+        });
+        setStatusMessage("People memory updated through JARVIS.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "set_person_follow_up") {
+        const person = updatePersonMemory(intent.query, (entry) => ({
+          ...entry,
+          followUpDueLabel: intent.dueLabel,
+          followUpReason: intent.reason,
+        }));
+        if (!person) {
+          throw new Error(`I could not find ${intent.query} in people memory yet.`);
+        }
+        const reply = `Okay. I will remind you to follow up with ${person.name} ${intent.dueLabel}.`;
+        setCommandResult({
+          title: "People follow-up saved",
+          detail: buildBirthdayLookupReply(person),
+        });
+        setStatusMessage("People memory updated through JARVIS.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "list_people_follow_ups") {
+        const followUps = peopleMemory.filter((person) => person.followUpDueLabel);
+        const reply = buildPeopleFollowUpReply(followUps.length);
+        setCommandResult({
+          title: "People follow-ups",
+          detail:
+            followUps.length > 0
+              ? followUps.map((person) => formatPersonFollowUp(person)).join(" | ")
+              : "No people follow-ups are saved yet.",
+        });
+        setStatusMessage("People follow-ups loaded through JARVIS.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "list_people_check_ins") {
+        const followUps = getUpcomingPeopleFollowUps(peopleMemory);
+        const reply = buildPeopleCheckInReply(followUps.length);
+        setCommandResult({
+          title: "People to check in with",
+          detail:
+            followUps.length > 0
+              ? followUps.map((person) => formatPersonFollowUp(person)).join(" | ")
+              : "No people are flagged for a check-in this week.",
+        });
+        setStatusMessage("People check-ins loaded through JARVIS.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "set_person_birthday_reminder") {
+        const person = updatePersonMemory(intent.query, (entry) => ({
+          ...entry,
+          reminderLeadDays: intent.daysBefore,
+        }));
+        if (!person) {
+          throw new Error(`I could not find ${intent.query} in people memory yet.`);
+        }
+        const reply = `Okay. I will treat ${intent.daysBefore} days before ${person.name}'s birthday as the reminder timing.`;
+        setCommandResult({
+          title: "Birthday reminder updated",
+          detail: buildBirthdayLookupReply(person),
+        });
+        setStatusMessage("People memory updated through JARVIS.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "add_person_birthday_to_calendar") {
+        const person = findPersonByQuery(peopleMemory, intent.query);
+        if (!person) {
+          throw new Error(`I could not find a saved birthday for ${intent.query} yet.`);
+        }
+        const { start, end } = getNextBirthdayCalendarWindow(person);
+        if (googleCalendarAccessToken) {
+          await createGoogleCalendarEvent(
+            googleCalendarAccessToken,
+            `Birthday: ${person.name}`,
+            start,
+            end,
+          );
+        } else {
+          await openBrowserUrl(buildGoogleCalendarEventUrl(`Birthday: ${person.name}`, start, end));
+        }
+        updatePersonMemory(person.name, (entry) => ({
+          ...entry,
+          calendarLinkedAt: new Date().toISOString(),
+        }));
+        const reply = buildBirthdayCalendarReply(person.name);
+        setCommandResult({
+          title: googleCalendarAccessToken ? "Birthday calendar event created" : "Birthday calendar draft opened",
+          detail: googleCalendarAccessToken
+            ? `Created a Google Calendar birthday event for ${person.name}.`
+            : `Opened a Google Calendar birthday draft for ${person.name}.`,
+        });
+        setStatusMessage("Birthday calendar action completed through JARVIS.");
         setVoiceSessionPhase("ready");
         appendConversationTurn("jarvis", reply);
         speakIfEnabled(reply);
@@ -7976,11 +12907,43 @@ function App() {
           detail:
             travelMemory.length > 0
               ? travelMemory
-                  .map((item) => `${item.title} - from ${item.sourceEmailSubject}`)
+                  .map((item) =>
+                    `${item.title}${item.departure ? ` - ${item.departure}` : ""}${
+                      item.hotel ? ` - ${item.hotel}` : ""
+                    }`,
+                  )
                   .join(" | ")
               : "No travel summaries are saved yet.",
         });
         setStatusMessage("Travel memory loaded through JARVIS.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "show_current_travel_checklist") {
+        const trip = travelMemory[0];
+        if (!trip) {
+          throw new Error("There is no saved trip in travel memory yet. Extract travel from an email first.");
+        }
+        const reply = buildTravelChecklistReply(trip.title);
+        setCommandResult({
+          title: "Travel checklist",
+          detail: trip.checklist.length > 0 ? trip.checklist.join(" | ") : "No travel checklist items are available yet.",
+        });
+        setStatusMessage("Travel checklist loaded through JARVIS.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "show_current_travel_timeline") {
+        const trip = travelMemory[0];
+        if (!trip) {
+          throw new Error("There is no saved trip in travel memory yet. Extract travel from an email first.");
+        }
+        const reply = buildTravelTimelineReply(trip.title);
+        setCommandResult({
+          title: "Trip timeline",
+          detail: trip.timeline.length > 0 ? trip.timeline.join(" | ") : "No trip timeline cues are available yet.",
+        });
+        setStatusMessage("Travel timeline loaded through JARVIS.");
         setVoiceSessionPhase("ready");
         appendConversationTurn("jarvis", reply);
         speakIfEnabled(reply);
@@ -7995,7 +12958,7 @@ function App() {
             expenseMemory.length > 0
               ? expenseMemory
                   .map((item) =>
-                    `${item.title}${item.amount ? ` - ${item.amount}` : ""}${item.merchant ? ` (${item.merchant})` : ""}`,
+                    `${item.title}${item.amount ? ` - ${item.amount}` : ""}${item.category ? ` [${item.category}]` : ""}${item.merchant ? ` (${item.merchant})` : ""}`,
                   )
                   .join(" | ")
               : "No expense summaries are saved yet.",
@@ -8004,10 +12967,97 @@ function App() {
         setVoiceSessionPhase("ready");
         appendConversationTurn("jarvis", reply);
         speakIfEnabled(reply);
+      } else if (
+        intent.kind === "list_weekly_expenses" ||
+        intent.kind === "list_monthly_expenses" ||
+        intent.kind === "list_monthly_expenses_by_category"
+      ) {
+        const now = new Date();
+        const start =
+          intent.kind === "list_weekly_expenses"
+            ? addMinutes(startOfDay(now), -6 * 24 * 60)
+            : new Date(now.getFullYear(), now.getMonth(), 1);
+        const normalizedCategory =
+          intent.kind === "list_monthly_expenses_by_category"
+            ? normalizeExpenseCategoryLabel(intent.category).toLowerCase()
+            : null;
+        const filtered = expenseMemory.filter((item) => {
+          const parsed = item.expenseDate ? parseDateFromFlexibleText(item.expenseDate) : null;
+          if (!parsed || parsed < start) {
+            return false;
+          }
+          if (!normalizedCategory) {
+            return true;
+          }
+          return (item.category ?? "").toLowerCase() === normalizedCategory;
+        });
+        const total = filtered.reduce<number | null>((sum, item) => {
+          if (item.amountValue === null) {
+            return sum;
+          }
+          return (sum ?? 0) + item.amountValue;
+        }, 0);
+        const reply =
+          intent.kind === "list_monthly_expenses_by_category"
+            ? buildCategoryExpenseReply(intent.category, filtered.length, filtered.length > 0 ? total : null)
+            : buildExpenseSummaryReply(
+                intent.kind === "list_weekly_expenses" ? "weekly" : "monthly",
+                filtered.length,
+                filtered.length > 0 ? total : null,
+              );
+        setCommandResult({
+          title:
+            intent.kind === "list_weekly_expenses"
+              ? "Weekly expenses"
+              : intent.kind === "list_monthly_expenses_by_category"
+                ? `${normalizeExpenseCategoryLabel(intent.category)} expenses`
+                : "Monthly expenses",
+          detail:
+            filtered.length > 0
+              ? filtered
+                  .map(
+                    (item) =>
+                      `${item.title}${item.amount ? ` - ${item.amount}` : ""}${item.category ? ` [${item.category}]` : ""}${
+                        item.recurringLikely ? " - recurring" : ""
+                      }`,
+                  )
+                  .join(" | ")
+              : "No matching expenses are saved yet.",
+        });
+        setStatusMessage("Expense summary loaded through JARVIS.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "list_recurring_expenses") {
+        const recurring = expenseMemory.filter((item) => item.recurringLikely);
+        const total = recurring.reduce<number | null>((sum, item) => {
+          if (item.amountValue === null) {
+            return sum;
+          }
+          return (sum ?? 0) + item.amountValue;
+        }, 0);
+        const reply = buildRecurringExpenseReply(recurring.length, recurring.length > 0 ? total : null);
+        setCommandResult({
+          title: "Recurring expenses",
+          detail:
+            recurring.length > 0
+              ? recurring
+                  .map(
+                    (item) =>
+                      `${item.title}${item.amount ? ` - ${item.amount}` : ""}${item.category ? ` [${item.category}]` : ""}`,
+                  )
+                  .join(" | ")
+              : "No likely recurring charges are saved yet.",
+        });
+        setStatusMessage("Recurring expense summary loaded through JARVIS.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
       } else if (intent.kind === "list_package_memory") {
+        const arrivingTodayCount = packageMemory.filter((item) => item.arrivingToday).length;
         const reply =
           packageMemory.length > 0
-            ? `I found ${packageMemory.length} saved package item${packageMemory.length === 1 ? "" : "s"}.`
+            ? buildPackageSummaryReply(arrivingTodayCount)
             : "You do not have any saved package summaries yet.";
         setCommandResult({
           title: "Package memory",
@@ -8016,14 +13066,46 @@ function App() {
               ? packageMemory
                   .map(
                     (item) =>
-                      `${item.title}${item.status ? ` - ${item.status}` : ""}${
+                      `${item.title}${item.itemLabel ? ` - ${item.itemLabel}` : ""}${item.status ? ` - ${item.status}` : ""}${
                         item.deliveryDate ? ` (${item.deliveryDate})` : ""
-                      }`,
+                      }${item.trackingNumber ? ` [${item.trackingNumber}]` : ""}${item.merchant ? ` - ${item.merchant}` : ""}`,
                   )
                   .join(" | ")
               : "No package summaries are saved yet.",
         });
         setStatusMessage("Package memory loaded through JARVIS.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "list_packages_arriving_tomorrow") {
+        const arrivingTomorrow = packageMemory.filter((item) => item.arrivingTomorrow);
+        const reply = buildPackageTomorrowReply(arrivingTomorrow.length);
+        setCommandResult({
+          title: "Packages arriving tomorrow",
+          detail:
+            arrivingTomorrow.length > 0
+              ? arrivingTomorrow
+                  .map((item) => `${item.title}${item.itemLabel ? ` - ${item.itemLabel}` : ""}${item.deliveryDate ? ` (${item.deliveryDate})` : ""}`)
+                  .join(" | ")
+              : "No packages are marked as arriving tomorrow.",
+        });
+        setStatusMessage("Tomorrow package summary loaded through JARVIS.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "list_delayed_packages") {
+        const delayed = packageMemory.filter((item) => /\bdelayed\b/i.test(item.status ?? ""));
+        const reply = buildDelayedPackageReply(delayed.length);
+        setCommandResult({
+          title: "Delayed packages",
+          detail:
+            delayed.length > 0
+              ? delayed
+                  .map((item) => `${item.title}${item.status ? ` - ${item.status}` : ""}${item.trackingNumber ? ` [${item.trackingNumber}]` : ""}`)
+                  .join(" | ")
+              : "No delayed packages are saved yet.",
+        });
+        setStatusMessage("Delayed package summary loaded through JARVIS.");
         setVoiceSessionPhase("ready");
         appendConversationTurn("jarvis", reply);
         speakIfEnabled(reply);
@@ -8037,7 +13119,12 @@ function App() {
           detail:
             meetingPrepMemory.length > 0
               ? meetingPrepMemory
-                  .map((item) => `${item.summaryTitle} - ${item.eventTitle}`)
+                  .map(
+                    (item) =>
+                      `${item.summaryTitle} - ${item.eventTitle}${item.relatedPeople.length > 0 ? ` - people: ${item.relatedPeople.join(", ")}` : ""}${
+                        item.changesSinceLastPrep ? ` - ${item.changesSinceLastPrep}` : ""
+                      }`,
+                  )
                   .join(" | ")
               : "No meeting prep summaries are saved yet.",
         });
@@ -8054,7 +13141,14 @@ function App() {
           title: "School memory",
           detail:
             schoolPlanMemory.length > 0
-              ? schoolPlanMemory.map((item) => item.title).join(" | ")
+              ? schoolPlanMemory
+                  .map(
+                    (item) =>
+                      `${item.title}${item.subjects.length > 0 ? ` - ${item.subjects.join(", ")}` : ""}${
+                        item.examCountdowns.length > 0 ? ` - exams: ${item.examCountdowns.join(", ")}` : ""
+                      }`,
+                  )
+                  .join(" | ")
               : "No school plans are saved yet.",
         });
         setStatusMessage("School memory loaded through JARVIS.");
@@ -8064,11 +13158,33 @@ function App() {
       } else if (intent.kind === "create_school_plan" || intent.kind === "save_school_plan_to_notion") {
         const availableTasks = plannerTasks.length > 0 ? plannerTasks : await loadPlannerTaskRecords();
         const planContent = buildSchoolPlanContent(recentEmails, availableTasks, recentFiles);
+        const loadedPdfs = getLoadedPdfFiles(recentFiles);
+        const urgentStudyEmails = recentEmails
+          .map(scoreEmailUrgency)
+          .filter(({ email, signals, score }) => {
+            const text = `${email.subject} ${email.snippet} ${email.body}`.toLowerCase();
+            return (
+              /\b(class|course|assignment|exam|quiz|study|homework|syllabus|lecture|project)\b/i.test(text) ||
+              signals.deadlines.length > 0 ||
+              score > 0
+            );
+          })
+          .slice(0, 5);
+        const studyTasks = availableTasks.filter((task) =>
+          /\b(class|course|assignment|exam|quiz|study|homework|syllabus|lecture|project|school)\b/i.test(
+            `${task.title} ${task.sourceNote.summary}`,
+          ) || task.status === "today" || task.status === "overdue",
+        );
+        const focusSummary = buildSchoolFocusSummary(urgentStudyEmails, studyTasks, loadedPdfs);
+        const subjects = detectSchoolSubjects(recentEmails, studyTasks, loadedPdfs);
+        const sessions = buildSchoolSessions(subjects, loadedPdfs, studyTasks, urgentStudyEmails);
+        const assignments = extractSchoolAssignments(urgentStudyEmails, studyTasks);
+        const examCountdowns = buildExamCountdowns(urgentStudyEmails, studyTasks);
         const reply = buildSchoolPlanReply();
 
         if (intent.kind === "save_school_plan_to_notion") {
           const note = await createNotionNote(planContent);
-          rememberSchoolPlan(note.title, planContent);
+          rememberSchoolPlan(note.title, focusSummary, subjects, sessions, assignments, examCountdowns, planContent);
           setCommandResult({
             title: "School plan saved",
             detail: `Saved your school mode plan to Notion as "${note.title}".`,
@@ -8078,7 +13194,7 @@ function App() {
           appendConversationTurn("jarvis", buildSchoolPlanSavedReply(note.title));
           speakIfEnabled(buildSchoolPlanSavedReply(note.title));
         } else {
-          rememberSchoolPlan("School Mode Plan", planContent);
+          rememberSchoolPlan("School Mode Plan", focusSummary, subjects, sessions, assignments, examCountdowns, planContent);
           setCommandResult({
             title: "School mode plan ready",
             detail: planContent,
@@ -9186,6 +14302,11 @@ function App() {
           title: "Email details extracted",
           detail: formatEmailSignals(email, signals),
         });
+        {
+          const suggestions = buildCrossFeatureSuggestionsForEmail(email);
+          setCrossFeatureSuggestions(suggestions);
+          setProactiveCrossSuggestion(pickProactiveCrossSuggestion(suggestions));
+        }
         setStatusMessage("Email details were extracted through JARVIS.");
         setVoiceSessionPhase("ready");
         appendConversationTurn("jarvis", reply);
@@ -9205,6 +14326,11 @@ function App() {
           title: "Email details extracted",
           detail: formatEmailSignals(email, signals),
         });
+        {
+          const suggestions = buildCrossFeatureSuggestionsForEmail(email);
+          setCrossFeatureSuggestions(suggestions);
+          setProactiveCrossSuggestion(pickProactiveCrossSuggestion(suggestions));
+        }
         setStatusMessage("Active email details were extracted through JARVIS.");
         setVoiceSessionPhase("ready");
         appendConversationTurn("jarvis", reply);
@@ -9320,7 +14446,7 @@ function App() {
 
         const details = extractTravelDetails(email);
         const formatted = formatTravelExtraction(email, details);
-        rememberTravelSummary(email.subject, email.subject, formatted);
+        rememberTravelSummary(email.subject, email.subject, details, formatted);
         const reply = buildTravelExtractionReply(email.subject);
         setActiveConversationContext(createActiveEmailContext(email));
         setCommandResult({
@@ -9344,7 +14470,7 @@ function App() {
 
         const details = extractTravelDetails(email);
         const formatted = formatTravelExtraction(email, details);
-        rememberTravelSummary(email.subject, email.subject, formatted);
+        rememberTravelSummary(email.subject, email.subject, details, formatted);
         const reply = buildTravelExtractionReply(email.subject);
         setActiveConversationContext(createActiveEmailContext(email));
         setCommandResult({
@@ -9363,7 +14489,7 @@ function App() {
 
         const details = extractTravelDetails(email);
         const formatted = formatTravelExtraction(email, details);
-        rememberTravelSummary(email.subject, email.subject, formatted);
+        rememberTravelSummary(email.subject, email.subject, details, formatted);
         const reply = buildTravelExtractionReply(email.subject);
         setActiveConversationContext(createActiveEmailContext(email));
         setCommandResult({
@@ -9384,7 +14510,7 @@ function App() {
 
         const details = extractTravelDetails(email);
         const note = await createNotionNote(formatTravelForNotion(email, details));
-        rememberTravelSummary(note.title, email.subject, formatTravelExtraction(email, details));
+        rememberTravelSummary(note.title, email.subject, details, formatTravelExtraction(email, details));
         const reply = buildTravelSavedReply(email.subject);
         setActiveConversationContext(createActiveEmailContext(email));
         setCommandResult({
@@ -9404,7 +14530,7 @@ function App() {
 
         const details = extractTravelDetails(email);
         const note = await createNotionNote(formatTravelForNotion(email, details));
-        rememberTravelSummary(note.title, email.subject, formatTravelExtraction(email, details));
+        rememberTravelSummary(note.title, email.subject, details, formatTravelExtraction(email, details));
         const reply = buildTravelSavedReply(email.subject);
         setActiveConversationContext(createActiveEmailContext(email));
         setCommandResult({
@@ -9424,7 +14550,7 @@ function App() {
 
         const details = extractTravelDetails(email);
         const note = await createNotionNote(formatTravelForNotion(email, details));
-        rememberTravelSummary(note.title, email.subject, formatTravelExtraction(email, details));
+        rememberTravelSummary(note.title, email.subject, details, formatTravelExtraction(email, details));
         const reply = buildTravelSavedReply(email.subject);
         setActiveConversationContext(createActiveEmailContext(email));
         setCommandResult({
@@ -9434,6 +14560,134 @@ function App() {
         setStatusMessage(`Travel summary from the email about ${intent.query} saved to Notion.`);
         setVoiceSessionPhase("ready");
         setRecentNotes((current) => [note, ...current].slice(0, 5));
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "save_current_email_travel_to_calendar") {
+        const email = resolveActiveEmail(activeConversationContext, recentEmails) ?? getCurrentEmail(recentEmails);
+        if (!email) {
+          throw new Error(
+            "There is no loaded email yet. Ask JARVIS to show unread emails or search Gmail first.",
+          );
+        }
+
+        const details = extractTravelDetails(email);
+        const calendarIntent = buildTravelCalendarIntent(email, details);
+        if (!calendarIntent) {
+          throw new Error("I could not find a clear travel date to add to calendar from that email yet.");
+        }
+        if (googleCalendarAccessToken) {
+          await createGoogleCalendarEvent(
+            googleCalendarAccessToken,
+            calendarIntent.title,
+            calendarIntent.start,
+            calendarIntent.end,
+          );
+        } else {
+          await openBrowserUrl(
+            buildGoogleCalendarEventUrl(calendarIntent.title, calendarIntent.start, calendarIntent.end),
+          );
+        }
+        rememberTravelSummary(
+          calendarIntent.title,
+          email.subject,
+          details,
+          formatTravelExtraction(email, details),
+          new Date().toISOString(),
+        );
+        const reply = buildTravelCalendarReply(email.subject);
+        setActiveConversationContext(createActiveEmailContext(email));
+        setCommandResult({
+          title: googleCalendarAccessToken ? "Travel calendar event created" : "Travel calendar draft opened",
+          detail: googleCalendarAccessToken
+            ? `Created a Google Calendar trip event from ${email.subject}.`
+            : `Opened a Google Calendar trip draft from ${email.subject}.`,
+        });
+        setStatusMessage("Travel calendar action completed through JARVIS.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "save_email_travel_to_calendar_by_index") {
+        const email = getEmailByIndex(recentEmails, intent.index);
+        if (!email) {
+          throw new Error(`Email ${intent.index} is not loaded right now. Load emails first.`);
+        }
+
+        const details = extractTravelDetails(email);
+        const calendarIntent = buildTravelCalendarIntent(email, details);
+        if (!calendarIntent) {
+          throw new Error(`I could not find a clear travel date in email ${intent.index} yet.`);
+        }
+        if (googleCalendarAccessToken) {
+          await createGoogleCalendarEvent(
+            googleCalendarAccessToken,
+            calendarIntent.title,
+            calendarIntent.start,
+            calendarIntent.end,
+          );
+        } else {
+          await openBrowserUrl(
+            buildGoogleCalendarEventUrl(calendarIntent.title, calendarIntent.start, calendarIntent.end),
+          );
+        }
+        rememberTravelSummary(
+          calendarIntent.title,
+          email.subject,
+          details,
+          formatTravelExtraction(email, details),
+          new Date().toISOString(),
+        );
+        const reply = buildTravelCalendarReply(email.subject);
+        setActiveConversationContext(createActiveEmailContext(email));
+        setCommandResult({
+          title: googleCalendarAccessToken ? "Travel calendar event created" : "Travel calendar draft opened",
+          detail: googleCalendarAccessToken
+            ? `Created a Google Calendar trip event from email ${intent.index}.`
+            : `Opened a Google Calendar trip draft from email ${intent.index}.`,
+        });
+        setStatusMessage(`Travel calendar action ran on email ${intent.index}.`);
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", reply);
+        speakIfEnabled(reply);
+      } else if (intent.kind === "save_email_travel_to_calendar_by_query") {
+        const email = findEmailByQuery(recentEmails, intent.query);
+        if (!email) {
+          throw new Error(`I could not find a loaded email about ${intent.query}.`);
+        }
+
+        const details = extractTravelDetails(email);
+        const calendarIntent = buildTravelCalendarIntent(email, details);
+        if (!calendarIntent) {
+          throw new Error(`I could not find a clear travel date in the email about ${intent.query} yet.`);
+        }
+        if (googleCalendarAccessToken) {
+          await createGoogleCalendarEvent(
+            googleCalendarAccessToken,
+            calendarIntent.title,
+            calendarIntent.start,
+            calendarIntent.end,
+          );
+        } else {
+          await openBrowserUrl(
+            buildGoogleCalendarEventUrl(calendarIntent.title, calendarIntent.start, calendarIntent.end),
+          );
+        }
+        rememberTravelSummary(
+          calendarIntent.title,
+          email.subject,
+          details,
+          formatTravelExtraction(email, details),
+          new Date().toISOString(),
+        );
+        const reply = buildTravelCalendarReply(email.subject);
+        setActiveConversationContext(createActiveEmailContext(email));
+        setCommandResult({
+          title: googleCalendarAccessToken ? "Travel calendar event created" : "Travel calendar draft opened",
+          detail: googleCalendarAccessToken
+            ? `Created a Google Calendar trip event from the email about ${intent.query}.`
+            : `Opened a Google Calendar trip draft from the email about ${intent.query}.`,
+        });
+        setStatusMessage(`Travel calendar action ran on the email about ${intent.query}.`);
+        setVoiceSessionPhase("ready");
         appendConversationTurn("jarvis", reply);
         speakIfEnabled(reply);
       } else if (intent.kind === "extract_current_email_expense") {
@@ -9451,6 +14705,11 @@ function App() {
           email.subject,
           details.merchants[0] ?? null,
           details.amounts[0] ?? null,
+          details.primaryAmountValue,
+          details.normalizedCategory,
+          details.primaryDate,
+          details.orderNumbers[0] ?? null,
+          details.recurringLikely,
           formatted,
         );
         const reply = buildExpenseExtractionReply(email.subject);
@@ -9481,6 +14740,11 @@ function App() {
           email.subject,
           details.merchants[0] ?? null,
           details.amounts[0] ?? null,
+          details.primaryAmountValue,
+          details.normalizedCategory,
+          details.primaryDate,
+          details.orderNumbers[0] ?? null,
+          details.recurringLikely,
           formatted,
         );
         const reply = buildExpenseExtractionReply(email.subject);
@@ -9506,6 +14770,11 @@ function App() {
           email.subject,
           details.merchants[0] ?? null,
           details.amounts[0] ?? null,
+          details.primaryAmountValue,
+          details.normalizedCategory,
+          details.primaryDate,
+          details.orderNumbers[0] ?? null,
+          details.recurringLikely,
           formatted,
         );
         const reply = buildExpenseExtractionReply(email.subject);
@@ -9533,6 +14802,11 @@ function App() {
           email.subject,
           details.merchants[0] ?? null,
           details.amounts[0] ?? null,
+          details.primaryAmountValue,
+          details.normalizedCategory,
+          details.primaryDate,
+          details.orderNumbers[0] ?? null,
+          details.recurringLikely,
           formatExpenseExtraction(email, details),
         );
         const reply = buildExpenseSavedReply(email.subject);
@@ -9559,6 +14833,11 @@ function App() {
           email.subject,
           details.merchants[0] ?? null,
           details.amounts[0] ?? null,
+          details.primaryAmountValue,
+          details.normalizedCategory,
+          details.primaryDate,
+          details.orderNumbers[0] ?? null,
+          details.recurringLikely,
           formatExpenseExtraction(email, details),
         );
         const reply = buildExpenseSavedReply(email.subject);
@@ -9585,6 +14864,11 @@ function App() {
           email.subject,
           details.merchants[0] ?? null,
           details.amounts[0] ?? null,
+          details.primaryAmountValue,
+          details.normalizedCategory,
+          details.primaryDate,
+          details.orderNumbers[0] ?? null,
+          details.recurringLikely,
           formatExpenseExtraction(email, details),
         );
         const reply = buildExpenseSavedReply(email.subject);
@@ -9612,8 +14896,11 @@ function App() {
           email.subject,
           email.subject,
           details.carriers[0] ?? null,
+          details.merchants[0] ?? null,
+          details.items[0] ?? null,
           details.statuses[0] ?? null,
           details.deliveryDates[0] ?? null,
+          details.trackingNumbers[0] ?? null,
           formatted,
         );
         const reply = buildPackageExtractionReply(email.subject);
@@ -9643,8 +14930,11 @@ function App() {
           email.subject,
           email.subject,
           details.carriers[0] ?? null,
+          details.merchants[0] ?? null,
+          details.items[0] ?? null,
           details.statuses[0] ?? null,
           details.deliveryDates[0] ?? null,
+          details.trackingNumbers[0] ?? null,
           formatted,
         );
         const reply = buildPackageExtractionReply(email.subject);
@@ -9669,8 +14959,11 @@ function App() {
           email.subject,
           email.subject,
           details.carriers[0] ?? null,
+          details.merchants[0] ?? null,
+          details.items[0] ?? null,
           details.statuses[0] ?? null,
           details.deliveryDates[0] ?? null,
+          details.trackingNumbers[0] ?? null,
           formatted,
         );
         const reply = buildPackageExtractionReply(email.subject);
@@ -9697,8 +14990,11 @@ function App() {
           note.title,
           email.subject,
           details.carriers[0] ?? null,
+          details.merchants[0] ?? null,
+          details.items[0] ?? null,
           details.statuses[0] ?? null,
           details.deliveryDates[0] ?? null,
+          details.trackingNumbers[0] ?? null,
           formatPackageExtraction(email, details),
         );
         const reply = buildPackageSavedReply(email.subject);
@@ -9724,8 +15020,11 @@ function App() {
           note.title,
           email.subject,
           details.carriers[0] ?? null,
+          details.merchants[0] ?? null,
+          details.items[0] ?? null,
           details.statuses[0] ?? null,
           details.deliveryDates[0] ?? null,
+          details.trackingNumbers[0] ?? null,
           formatPackageExtraction(email, details),
         );
         const reply = buildPackageSavedReply(email.subject);
@@ -9751,8 +15050,11 @@ function App() {
           note.title,
           email.subject,
           details.carriers[0] ?? null,
+          details.merchants[0] ?? null,
+          details.items[0] ?? null,
           details.statuses[0] ?? null,
           details.deliveryDates[0] ?? null,
+          details.trackingNumbers[0] ?? null,
           formatPackageExtraction(email, details),
         );
         const reply = buildPackageSavedReply(email.subject);
@@ -9787,12 +15089,33 @@ function App() {
         const relatedNotes = findRelatedMeetingNotes(event, recentNotes);
         const availableTasks = plannerTasks.length > 0 ? plannerTasks : await loadPlannerTaskRecords();
         const relatedTasks = findRelatedMeetingTasks(event, availableTasks);
-        const prepContent = buildMeetingPrepContent(event, relatedEmails, relatedNotes, relatedTasks);
+        const previousPrep =
+          meetingPrepMemory.find((item) => item.eventTitle.toLowerCase() === event.summary.toLowerCase()) ?? null;
+        const relatedPeople = findMeetingRelatedPeople(event, relatedEmails, peopleMemory);
+        const changeSummary = buildMeetingChangeSummary(event, relatedEmails, relatedTasks, previousPrep);
+        const prepContent = buildMeetingPrepContent(
+          event,
+          relatedEmails,
+          relatedNotes,
+          relatedTasks,
+          peopleMemory,
+          previousPrep,
+        );
+        const focusSummary = buildMeetingFocusSummary(event, relatedEmails, relatedNotes, relatedTasks);
+        const actionItems = buildMeetingActionItems(relatedEmails, relatedNotes, relatedTasks);
         const reply = buildMeetingPrepReply(event.summary);
 
         if (intent.kind === "save_meeting_prep_to_notion") {
           const note = await createNotionNote(prepContent);
-          rememberMeetingPrepSummary(event.summary, note.title, prepContent);
+          rememberMeetingPrepSummary(
+            event.summary,
+            note.title,
+            focusSummary,
+            actionItems,
+            relatedPeople,
+            changeSummary,
+            prepContent,
+          );
           setCommandResult({
             title: "Meeting prep saved",
             detail: `Saved the meeting prep note for ${event.summary} as "${note.title}".`,
@@ -9802,7 +15125,15 @@ function App() {
           appendConversationTurn("jarvis", buildMeetingPrepSavedReply(event.summary));
           speakIfEnabled(buildMeetingPrepSavedReply(event.summary));
         } else {
-          rememberMeetingPrepSummary(event.summary, `Meeting Prep: ${event.summary}`, prepContent);
+          rememberMeetingPrepSummary(
+            event.summary,
+            `Meeting Prep: ${event.summary}`,
+            focusSummary,
+            actionItems,
+            relatedPeople,
+            changeSummary,
+            prepContent,
+          );
           setCommandResult({
             title: "Meeting prep ready",
             detail: prepContent,
@@ -9828,6 +15159,11 @@ function App() {
           title: "Email details extracted",
           detail: formatEmailSignals(email, signals),
         });
+        {
+          const suggestions = buildCrossFeatureSuggestionsForEmail(email);
+          setCrossFeatureSuggestions(suggestions);
+          setProactiveCrossSuggestion(pickProactiveCrossSuggestion(suggestions));
+        }
         setStatusMessage(`Email details were extracted for the email about ${intent.query}.`);
         setVoiceSessionPhase("ready");
         appendConversationTurn("jarvis", reply);
@@ -10574,7 +15910,17 @@ function App() {
           ? await listTodayGoogleCalendarEvents(googleCalendarAccessToken)
           : [];
 
-        const briefContent = buildDailyBriefContentV2(emails, parsedTasks, events);
+        const briefContent = buildDailyBriefContentV4(
+          emails,
+          parsedTasks,
+          events,
+          peopleMemory,
+          travelMemory,
+          expenseMemory,
+          packageMemory,
+          meetingPrepMemory,
+          schoolPlanMemory,
+        );
         const note = await createNotionNote(briefContent);
         const reply = buildDailyBriefReply(note.title);
         setCommandResult({
@@ -10586,6 +15932,11 @@ function App() {
         setRecentEmails(emails);
         setPlannerTasks(parsedTasks);
         setRecentNotes((current) => [note, ...current.filter((item) => item.id !== note.id)].slice(0, 5));
+        {
+          const suggestions = buildCrossFeatureSuggestionsForState();
+          setCrossFeatureSuggestions(suggestions);
+          setProactiveCrossSuggestion(pickProactiveCrossSuggestion(suggestions));
+        }
         appendConversationTurn("jarvis", reply);
         speakIfEnabled(reply);
       } else if (intent.kind === "standby_mode") {
@@ -10653,6 +16004,28 @@ function App() {
     return completed;
   }
 
+  async function handleApplyCrossFeatureSuggestion(suggestion: CrossFeatureSuggestionRecord) {
+    const intents = suggestion.intents ?? (suggestion.intent ? [suggestion.intent] : []);
+    if (intents.length === 0) {
+      return;
+    }
+
+    let completed = true;
+    for (const intent of intents) {
+      const stepCompleted = await executeIntent(intent);
+      if (!stepCompleted) {
+        completed = false;
+        break;
+      }
+    }
+    if (completed) {
+      setCrossFeatureSuggestions((current) =>
+        current.filter((entry) => entry.id !== suggestion.id),
+      );
+      setProactiveCrossSuggestion((current) => (current?.id === suggestion.id ? null : current));
+    }
+  }
+
   async function runCommand(
     trimmedInput: string,
     options?: {
@@ -10662,6 +16035,7 @@ function App() {
   ): Promise<RunCommandOutcome> {
     const appendUserTurn = options?.appendUserTurn ?? true;
     const allowChaining = options?.allowChaining ?? true;
+    setCrossFeatureSuggestions([]);
 
     if (!trimmedInput) {
       setVoiceSessionPhase("idle");
@@ -10676,6 +16050,29 @@ function App() {
 
     if (appendUserTurn) {
       appendConversationTurn("user", trimmedInput);
+    }
+
+    if (proactiveCrossSuggestion) {
+      const normalizedReply = normalizeControlCommand(trimmedInput);
+      if (["yes", "yeah", "yep", "sure", "okay", "ok", "do it", "do that"].includes(normalizedReply)) {
+        const suggestion = proactiveCrossSuggestion;
+        setProactiveCrossSuggestion(null);
+        await handleApplyCrossFeatureSuggestion(suggestion);
+        return { status: "completed" };
+      }
+
+      if (["no", "nope", "nah", "not now", "skip that", "don't do that", "do not do that"].includes(normalizedReply)) {
+        setProactiveCrossSuggestion(null);
+        setCommandResult({
+          title: "Skipped suggested next step",
+          detail: "Okay. I left that cross-feature follow-up alone.",
+        });
+        setStatusMessage("Skipped the proactive cross-feature suggestion.");
+        setVoiceSessionPhase("ready");
+        appendConversationTurn("jarvis", "Okay, I won't do that right now.");
+        speakIfEnabled("Okay, I won't do that right now.");
+        return { status: "completed" };
+      }
     }
 
     if (pendingWorkflowExecution) {
@@ -11083,8 +16480,95 @@ function App() {
     return completed ? { status: "completed" } : { status: "failed" };
   }
 
+  const selectionRect = ocrSelection
+    ? {
+        left: Math.min(ocrSelection.viewStartX, ocrSelection.viewCurrentX),
+        top: Math.min(ocrSelection.viewStartY, ocrSelection.viewCurrentY),
+        width: Math.abs(ocrSelection.viewCurrentX - ocrSelection.viewStartX),
+        height: Math.abs(ocrSelection.viewCurrentY - ocrSelection.viewStartY),
+      }
+    : null;
+  const activeOcrWatches = ocrWatchTargets.filter((watch) => watch.status === "active");
+  const primaryOcrWatch = ocrWatchTargets[0] ?? null;
+
   return (
     <main className="app-shell">
+      {isOcrSelecting ? (
+        <div
+          className="ocr-selection-overlay"
+          role="presentation"
+          onMouseDown={(event) => {
+            setOcrSelection({
+              startX: event.screenX,
+              startY: event.screenY,
+              currentX: event.screenX,
+              currentY: event.screenY,
+              viewStartX: event.clientX,
+              viewStartY: event.clientY,
+              viewCurrentX: event.clientX,
+              viewCurrentY: event.clientY,
+            });
+          }}
+          onMouseMove={(event) => {
+            setOcrSelection((current) =>
+              current
+                ? {
+                    ...current,
+                    currentX: event.screenX,
+                    currentY: event.screenY,
+                    viewCurrentX: event.clientX,
+                    viewCurrentY: event.clientY,
+                  }
+                : current,
+            );
+          }}
+          onMouseUp={(event) => {
+            if (!ocrSelection) {
+              return;
+            }
+            const rect = {
+              x: Math.min(ocrSelection.startX, event.screenX),
+              y: Math.min(ocrSelection.startY, event.screenY),
+              width: Math.abs(event.screenX - ocrSelection.startX),
+              height: Math.abs(event.screenY - ocrSelection.startY),
+            };
+            if (rect.width < 20 || rect.height < 20) {
+              setOcrSelection(null);
+              setStatusMessage("OCR selection was too small. Drag a larger box.");
+              return;
+            }
+            void completeOcrSelection(rect);
+          }}
+        >
+          <div className="ocr-selection-help">
+            <strong>Select OCR area</strong>
+            <span>Drag a box over text. Press Cancel to stop.</span>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setIsOcrSelecting(false);
+                setOcrSelection(null);
+                setStatusMessage("OCR selection cancelled.");
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+          {selectionRect ? (
+            <div
+              className="ocr-selection-box"
+              style={{
+                left: `${selectionRect.left}px`,
+                top: `${selectionRect.top}px`,
+                width: `${selectionRect.width}px`,
+                height: `${selectionRect.height}px`,
+              }}
+            />
+          ) : null}
+        </div>
+      ) : null}
       <section className="hero-panel">
         <div className="hero-copy">
           <p className="eyebrow">Personal Assistant Platform</p>
@@ -11511,17 +16995,268 @@ function App() {
           </div>
         ) : null}
 
+        <div className="result-card">
+          <p className="section-kicker">Desktop Permissions</p>
+          <h3>Risky actions stay under your control</h3>
+          <p>Choose which desktop actions need a final yes before JARVIS runs them.</p>
+          <div className="workflow-actions">
+            {[
+              ["Project checks", "confirmProjectChecks"],
+              ["Close apps", "confirmAppClose"],
+              ["Coding executor", "confirmExecutorLaunch"],
+            ].map(([label, permission]) => {
+              const key = permission as keyof DesktopPermissionSettings;
+              return (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  key={key}
+                  onClick={() =>
+                    setDesktopPermissionSettings((current) => ({
+                      ...current,
+                      [key]: !current[key],
+                    }))
+                  }
+                >
+                  {label}: {desktopPermissionSettings[key] ? "Confirm" : "Auto-run"}
+                </button>
+              );
+            })}
+          </div>
+          <p className="result-meta">
+            Voice: `show desktop permissions`, `turn off app close confirmation`, or `turn on executor launch confirmation`.
+          </p>
+        </div>
+
+        {primaryOcrWatch ? (
+          <div className="result-card">
+            <p className="section-kicker">OCR Watch</p>
+            <h3>{activeOcrWatches.length} active watch{activeOcrWatches.length === 1 ? "" : "es"}</h3>
+            <p>
+              Latest: {primaryOcrWatch.name} every {Math.round(primaryOcrWatch.intervalMs / 1000)} seconds.
+              {primaryOcrWatch.logToNotion ? " Matches are logged to Notion." : ""}
+              {primaryOcrWatch.createTaskOnMatch ? " Matches create Notion tasks." : ""}
+            </p>
+            <p className="result-meta">Rule: {describeOcrWatchRule(primaryOcrWatch.rule)}</p>
+            <p className="result-meta">
+              Last checked: {primaryOcrWatch.lastCheckedAt ? new Date(primaryOcrWatch.lastCheckedAt).toLocaleTimeString() : "Starting now"}
+            </p>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => {
+                void executeIntent({ kind: "stop_ocr_watch" });
+              }}
+              disabled={isRoutingCommand}
+            >
+              Stop watching
+            </button>
+          </div>
+        ) : null}
+
+        <div className="result-card">
+          <p className="section-kicker">OCR Command Deck</p>
+          <h3>Screen intelligence controls</h3>
+          <p>Quick actions for reading, summarizing, watching, and managing OCR memory.</p>
+          <div className="workflow-actions">
+            {[
+              "select ocr area",
+              "summarize screen",
+              "explain this error",
+              "make study notes from this screen",
+              "turn this screen into flashcards",
+              "show ocr watches",
+              "watch Chrome for errors every 30 seconds",
+              "watch Chrome for errors and create task every 30 seconds",
+              "copy latest ocr",
+              "export ocr history",
+              "clear ocr history",
+            ].map((command) => (
+              <button
+                className="secondary-button"
+                type="button"
+                key={command}
+                onClick={() => {
+                  void runCommand(command);
+                }}
+                disabled={isRoutingCommand}
+              >
+                {command}
+              </button>
+            ))}
+          </div>
+          {ocrWatchTemplates.length > 0 ? (
+            <p className="result-meta">
+              Templates: {ocrWatchTemplates.map((template) => template.name).slice(0, 5).join(", ")}
+            </p>
+          ) : (
+            <p className="result-meta">Tip: say `save this watch template as error monitor` after starting a watch.</p>
+          )}
+        </div>
+
+        {(ocrWatchTargets.length > 0 || ocrWatchMatches.length > 0) ? (
+          <div className="result-card">
+            <p className="section-kicker">Watch Dashboard</p>
+            <h3>{activeOcrWatches.length} active, {ocrWatchTargets.length - activeOcrWatches.length} paused</h3>
+            <p className="result-meta">
+              {primaryOcrWatch
+                ? `${primaryOcrWatch.name} | ${describeOcrWatchRule(primaryOcrWatch.rule)} | ${describeOcrWatchAction(primaryOcrWatch.action)} | every ${Math.round(primaryOcrWatch.intervalMs / 1000)}s`
+                : "Start one with `watch Chrome for errors every 30 seconds`."}
+            </p>
+            <div className="workflow-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void executeIntent({ kind: "pause_ocr_watches" })}
+                disabled={isRoutingCommand || ocrWatchTargets.length === 0}
+              >
+                Pause watches
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void executeIntent({ kind: "resume_ocr_watches" })}
+                disabled={isRoutingCommand || ocrWatchTargets.length === 0}
+              >
+                Resume watches
+              </button>
+            </div>
+            {ocrWatchMatches.length > 0 ? (
+              <div className="memory-grid">
+                {ocrWatchMatches.slice(0, 3).map((match) => (
+                  <div className="memory-card" key={match.id}>
+                    <h4>{match.matchType ?? "OCR match"}</h4>
+                    <p>{match.target}</p>
+                    <p className="result-meta">{match.summary.slice(0, 180)}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="result-meta">No watch matches yet.</p>
+            )}
+          </div>
+        ) : null}
+
+        {ocrHistory.length > 0 ? (
+          <div className="result-card">
+            <p className="section-kicker">OCR History</p>
+            <h3>{ocrHistory.length} remembered screen read{ocrHistory.length === 1 ? "" : "s"}</h3>
+            <p className="result-meta">
+              {ocrHistory
+                .slice(0, 3)
+                .map((entry) => `${entry.target}: ${entry.summary.slice(0, 140)}`)
+                .join(" | ")}
+            </p>
+            <div className="workflow-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void executeIntent({ kind: "show_ocr_history" })}
+                disabled={isRoutingCommand}
+              >
+                Show OCR history
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void executeIntent({ kind: "save_ocr_history_to_notion" })}
+                disabled={isRoutingCommand}
+              >
+                Save to Notion
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {desktopProjects.length > 0 ? (
+          <div className="result-card">
+            <p className="section-kicker">Desktop Workspaces</p>
+            <h3>{desktopProjects.length} saved workspace{desktopProjects.length === 1 ? "" : "s"}</h3>
+            <p>JARVIS can open saved app, folder, and website bundles from one command.</p>
+            <div className="memory-grid">
+              {desktopProjects.slice(0, 4).map((project) => (
+                <div className="memory-card" key={project.id}>
+                  <h4>{project.name}</h4>
+                  <p>
+                    {project.apps.length} apps, {project.folders.length} folders, {project.websites.length} websites
+                  </p>
+                  <p className="result-meta">
+                    {[...project.apps, ...project.folders, ...project.websites.map(formatBrowserTargetLabel)]
+                      .slice(0, 4)
+                      .join(", ") || "Empty workspace"}
+                  </p>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => {
+                      void executeIntent({ kind: "open_desktop_project", query: project.name });
+                    }}
+                    disabled={isRoutingCommand}
+                  >
+                    Open workspace
+                  </button>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => {
+                      void executeIntent({ kind: "delete_desktop_project", projectQuery: project.name });
+                    }}
+                    disabled={isRoutingCommand}
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="workflow-actions">
+              {["coding", "school", "focus"].map((templateName) => (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  key={templateName}
+                  onClick={() => {
+                    void executeIntent({
+                      kind: "create_desktop_project_template",
+                      templateName,
+                      projectName: templateName,
+                    });
+                  }}
+                  disabled={isRoutingCommand}
+                >
+                  Add {templateName}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {desktopSchedules.length > 0 ? (
+          <div className="result-card">
+            <p className="section-kicker">Workspace Schedule</p>
+            <h3>{desktopSchedules.length} scheduled desktop item{desktopSchedules.length === 1 ? "" : "s"}</h3>
+            <p className="result-meta">
+              {desktopSchedules
+                .slice(0, 4)
+                .map((schedule) => `${schedule.actionLabel} at ${new Date(schedule.dueAt).toLocaleString()}`)
+                .join(" | ")}
+            </p>
+          </div>
+        ) : null}
+
         {peopleMemory.length > 0 ? (
           <div className="result-card">
             <p className="section-kicker">People Memory</p>
             <h3>{peopleMemory.length} saved birthday{peopleMemory.length === 1 ? "" : "s"}</h3>
-            <p>JARVIS can now remember people and upcoming birthdays from your voice commands and Gmail.</p>
+            <p>JARVIS can now remember richer people details like relationships, gift notes, contact notes, and follow-up timing.</p>
             <p className="result-meta">
               Next up: {[...peopleMemory]
                 .sort((left, right) => getNextBirthdayDate(left).getTime() - getNextBirthdayDate(right).getTime())
                 .slice(0, 3)
-                .map((person) => `${person.name} (${person.birthdayLabel})`)
+                .map((person) => `${person.name} (${person.birthdayLabel}${person.relationship ? `, ${person.relationship}` : ""})`)
                 .join(", ")}
+            </p>
+            <p className="result-meta">
+              Follow-ups: {peopleMemory.filter((person) => person.followUpDueLabel).length} saved
             </p>
           </div>
         ) : null}
@@ -11530,12 +17265,18 @@ function App() {
           <div className="result-card">
             <p className="section-kicker">Travel Memory</p>
             <h3>{travelMemory.length} saved travel item{travelMemory.length === 1 ? "" : "s"}</h3>
-            <p>JARVIS is now keeping lightweight travel summaries from the emails you analyze or save.</p>
+            <p>JARVIS is now keeping structured trip cards with timelines, checklist suggestions, stay details, and calendar linkage.</p>
             <p className="result-meta">
               Recent: {travelMemory
                 .slice(0, 3)
-                .map((item) => item.title)
+                .map((item) =>
+                  `${item.title}${item.departure ? ` (${item.departure})` : ""}${item.hotel ? ` - ${item.hotel}` : ""}`,
+                )
                 .join(", ")}
+            </p>
+            <p className="result-meta">
+              Latest trip: {travelMemory[0]?.segmentCount ?? 0} segment{(travelMemory[0]?.segmentCount ?? 0) === 1 ? "" : "s"} and{" "}
+              {travelMemory[0]?.checklist.length ?? 0} checklist item{(travelMemory[0]?.checklist.length ?? 0) === 1 ? "" : "s"}
             </p>
           </div>
         ) : null}
@@ -11544,14 +17285,19 @@ function App() {
           <div className="result-card">
             <p className="section-kicker">Expense Memory</p>
             <h3>{expenseMemory.length} saved expense item{expenseMemory.length === 1 ? "" : "s"}</h3>
-            <p>JARVIS is now keeping lightweight expense summaries from the emails you analyze or save.</p>
+            <p>JARVIS is now keeping structured expense summaries with categories, recurring-charge detection, and date-aware rollups.</p>
             <p className="result-meta">
               Recent: {expenseMemory
                 .slice(0, 3)
                 .map((item) =>
-                  `${item.title}${item.amount ? ` (${item.amount})` : ""}`,
+                  `${item.title}${item.amount ? ` (${item.amount})` : ""}${item.category ? ` - ${item.category}` : ""}${
+                    item.recurringLikely ? " - recurring" : ""
+                  }`,
                 )
                 .join(", ")}
+            </p>
+            <p className="result-meta">
+              Likely subscriptions: {expenseMemory.filter((item) => item.recurringLikely).length}
             </p>
           </div>
         ) : null}
@@ -11560,15 +17306,72 @@ function App() {
           <div className="result-card">
             <p className="section-kicker">Package Memory</p>
             <h3>{packageMemory.length} saved package item{packageMemory.length === 1 ? "" : "s"}</h3>
-            <p>JARVIS is now keeping lightweight package summaries from the shipping emails you analyze or save.</p>
+            <p>JARVIS is now keeping evolving package updates with item labels, merchant hints, and tomorrow/delay awareness.</p>
             <p className="result-meta">
               Recent: {packageMemory
                 .slice(0, 3)
                 .map((item) =>
-                  `${item.title}${item.status ? ` (${item.status})` : ""}`,
+                  `${item.title}${item.status ? ` (${item.status})` : ""}${item.arrivingToday ? ` - arriving today` : ""}${
+                    item.arrivingTomorrow ? ` - arriving tomorrow` : ""
+                  }`,
                 )
                 .join(", ")}
             </p>
+          </div>
+        ) : null}
+
+        {crossFeatureSuggestions.length > 0 ? (
+          <div className="result-card">
+            <p className="section-kicker">Cross-Feature Suggestions</p>
+            <h3>{crossFeatureSuggestions.length} suggested next step{crossFeatureSuggestions.length === 1 ? "" : "s"}</h3>
+            <p>JARVIS found follow-through actions from the last email analysis that connect to your other skills.</p>
+            <div className="memory-grid">
+              {crossFeatureSuggestions.map((suggestion) => (
+                <div className="memory-card" key={suggestion.id}>
+                  <h4>{suggestion.title}</h4>
+                  <p>{suggestion.detail}</p>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => {
+                      void handleApplyCrossFeatureSuggestion(suggestion);
+                    }}
+                    disabled={isRoutingCommand}
+                  >
+                    Run this
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {proactiveCrossSuggestion ? (
+          <div className="result-card">
+            <p className="section-kicker">Likely Next Step</p>
+            <h3>{proactiveCrossSuggestion.title}</h3>
+            <p>{proactiveCrossSuggestion.detail}</p>
+            <p className="result-meta">Say `yes` to run it or `no` to dismiss it.</p>
+            <div className="workflow-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => {
+                  void handleApplyCrossFeatureSuggestion(proactiveCrossSuggestion);
+                }}
+                disabled={isRoutingCommand}
+              >
+                Run it
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setProactiveCrossSuggestion(null)}
+                disabled={isRoutingCommand}
+              >
+                Dismiss
+              </button>
+            </div>
           </div>
         ) : null}
 
@@ -11576,11 +17379,16 @@ function App() {
           <div className="result-card">
             <p className="section-kicker">Meeting Prep Memory</p>
             <h3>{meetingPrepMemory.length} saved prep item{meetingPrepMemory.length === 1 ? "" : "s"}</h3>
-            <p>JARVIS is now keeping lightweight meeting prep summaries from your calendar-driven prep runs.</p>
+            <p>JARVIS is now keeping richer meeting prep summaries with people context, change tracking, and action items.</p>
             <p className="result-meta">
               Recent: {meetingPrepMemory
                 .slice(0, 3)
-                .map((item) => item.summaryTitle)
+                .map(
+                  (item) =>
+                    `${item.summaryTitle}${item.relatedPeople.length > 0 ? ` - ${item.relatedPeople[0]}` : ""}${
+                      item.actionItems.length > 0 ? ` - ${item.actionItems[0]}` : ""
+                    }`,
+                )
                 .join(", ")}
             </p>
           </div>
@@ -11590,11 +17398,16 @@ function App() {
           <div className="result-card">
             <p className="section-kicker">School Memory</p>
             <h3>{schoolPlanMemory.length} saved school plan{schoolPlanMemory.length === 1 ? "" : "s"}</h3>
-            <p>JARVIS is now keeping lightweight school mode plans from your study-planning runs.</p>
+            <p>JARVIS is now keeping richer school mode plans with subjects, assignments, exam countdowns, and study sessions.</p>
             <p className="result-meta">
               Recent: {schoolPlanMemory
                 .slice(0, 3)
-                .map((item) => item.title)
+                .map(
+                  (item) =>
+                    `${item.title}${item.subjects.length > 0 ? ` - ${item.subjects.join(", ")}` : ""}${
+                      item.examCountdowns.length > 0 ? ` - ${item.examCountdowns[0]}` : ""
+                    }`,
+                )
                 .join(", ")}
             </p>
           </div>

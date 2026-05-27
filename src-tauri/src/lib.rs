@@ -49,6 +49,12 @@ fn user_documents_dir() -> Result<PathBuf, String> {
     Ok(Path::new(&user_profile).join("Documents"))
 }
 
+fn user_profile_dir() -> Result<PathBuf, String> {
+    let user_profile = std::env::var("USERPROFILE")
+        .map_err(|error| format!("Could not resolve USERPROFILE: {}", error))?;
+    Ok(PathBuf::from(user_profile))
+}
+
 fn system_time_to_iso(time: SystemTime) -> String {
     let duration = time
         .duration_since(UNIX_EPOCH)
@@ -821,6 +827,942 @@ fn open_local_file(
     {
         Err("Local file opening is currently implemented for Windows only.".to_string())
     }
+}
+
+#[tauri::command]
+fn launch_desktop_app(
+    state: State<'_, AppState>,
+    app_name: String,
+) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let normalized = app_name.trim().to_lowercase();
+        let target = match normalized.as_str() {
+            "code" | "vs code" | "vscode" | "visual studio code" => StudyTarget {
+                label: "VS Code",
+                target: "code",
+            },
+            "explorer" | "file explorer" => StudyTarget {
+                label: "File Explorer",
+                target: "explorer",
+            },
+            "powershell" | "power shell" => StudyTarget {
+                label: "PowerShell",
+                target: "powershell",
+            },
+            "command prompt" | "cmd" => StudyTarget {
+                label: "Command Prompt",
+                target: "cmd",
+            },
+            "notepad" => StudyTarget {
+                label: "Notepad",
+                target: "notepad",
+            },
+            "spotify" => StudyTarget {
+                label: "Spotify",
+                target: "spotify",
+            },
+            "chrome" | "google chrome" => StudyTarget {
+                label: "Google Chrome",
+                target: "chrome",
+            },
+            "edge" | "microsoft edge" => StudyTarget {
+                label: "Microsoft Edge",
+                target: "msedge",
+            },
+            "calculator" | "calc" => StudyTarget {
+                label: "Calculator",
+                target: "calc",
+            },
+            "settings" | "windows settings" => StudyTarget {
+                label: "Settings",
+                target: "ms-settings:",
+            },
+            "task manager" | "taskmgr" => StudyTarget {
+                label: "Task Manager",
+                target: "taskmgr",
+            },
+            _ => return Err(format!("I do not have a desktop app launcher for {} yet.", app_name.trim())),
+        };
+
+        open_windows_target(target)?;
+        log_action(
+            &state.db_path,
+            &format!("Launch app {}", target.label),
+            "launch_desktop_app",
+            "success",
+            target.label,
+        )?;
+
+        return Ok(format!("Opened {}.", target.label));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Desktop app launching is currently implemented for Windows only.".to_string())
+    }
+}
+
+#[tauri::command]
+fn focus_desktop_app(
+    state: State<'_, AppState>,
+    app_name: String,
+) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let normalized = app_name.trim().to_lowercase();
+        let (label, window_name) = desktop_window_label(&normalized)?;
+        let escaped_window_name = window_name.replace('\'', "''");
+        let script = format!(
+            "$shell = New-Object -ComObject WScript.Shell; \
+             if ($shell.AppActivate('{window_name}')) {{ exit 0 }} else {{ exit 1 }}",
+            window_name = escaped_window_name
+        );
+
+        let status = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &script])
+            .status()
+            .map_err(|error| format!("Failed to focus {}: {}", label, error))?;
+        if !status.success() {
+            return Err(format!("I could not find an open {} window to focus.", label));
+        }
+
+        log_action(
+            &state.db_path,
+            &format!("Focus app {}", label),
+            "focus_desktop_app",
+            "success",
+            label,
+        )?;
+
+        return Ok(format!("Focused {}.", label));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Desktop app focusing is currently implemented for Windows only.".to_string())
+    }
+}
+
+fn desktop_window_label(app_name: &str) -> Result<(&'static str, &'static str), String> {
+    match app_name.trim().to_lowercase().as_str() {
+        "code" | "vs code" | "vscode" | "visual studio code" => Ok(("VS Code", "Visual Studio Code")),
+        "explorer" | "file explorer" => Ok(("File Explorer", "File Explorer")),
+        "powershell" | "power shell" => Ok(("PowerShell", "PowerShell")),
+        "command prompt" | "cmd" => Ok(("Command Prompt", "Command Prompt")),
+        "notepad" => Ok(("Notepad", "Notepad")),
+        "spotify" => Ok(("Spotify", "Spotify")),
+        "chrome" | "google chrome" => Ok(("Google Chrome", "Google Chrome")),
+        "edge" | "microsoft edge" => Ok(("Microsoft Edge", "Microsoft Edge")),
+        "calculator" | "calc" => Ok(("Calculator", "Calculator")),
+        "settings" | "windows settings" => Ok(("Settings", "Settings")),
+        "task manager" | "taskmgr" => Ok(("Task Manager", "Task Manager")),
+        _ => Err(format!("I do not have a desktop window mapping for {} yet.", app_name.trim())),
+    }
+}
+
+#[tauri::command]
+fn get_desktop_app_window_status(
+    state: State<'_, AppState>,
+    app_name: String,
+) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let (label, window_name) = desktop_window_label(&app_name)?;
+        let escaped_window_name = window_name.replace('\'', "''");
+        let script = format!(
+            "Get-Process | Where-Object {{ $_.MainWindowTitle -like '*{window_name}*' }} | \
+             Select-Object -First 1 -ExpandProperty MainWindowTitle",
+            window_name = escaped_window_name
+        );
+        let output = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &script])
+            .output()
+            .map_err(|error| format!("Failed to check {} window status: {}", label, error))?;
+
+        if !output.status.success() {
+            return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+        }
+
+        let title = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let detail = if title.is_empty() {
+            format!("{} does not appear to have an open window right now.", label)
+        } else {
+            format!("{} is open: {}", label, title)
+        };
+
+        log_action(
+            &state.db_path,
+            &format!("Check app window {}", label),
+            "get_desktop_app_window_status",
+            "success",
+            &detail,
+        )?;
+
+        return Ok(detail);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Desktop app window status is currently implemented for Windows only.".to_string())
+    }
+}
+
+#[tauri::command]
+fn control_desktop_app_window(
+    state: State<'_, AppState>,
+    app_name: String,
+    action: String,
+) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let (label, window_name) = desktop_window_label(&app_name)?;
+        let normalized_action = action.trim().to_lowercase();
+        let send_keys = match normalized_action.as_str() {
+            "minimize" => "n",
+            "maximize" => "x",
+            "close" => "%{F4}",
+            _ => return Err(format!("Unsupported window action: {}", action.trim())),
+        };
+        let escaped_window_name = window_name.replace('\'', "''");
+        let script = if normalized_action == "close" {
+            format!(
+                "$shell = New-Object -ComObject WScript.Shell; \
+                 if (-not $shell.AppActivate('{window_name}')) {{ exit 1 }}; \
+                 Start-Sleep -Milliseconds 150; \
+                 $shell.SendKeys('{send_keys}');",
+                window_name = escaped_window_name,
+                send_keys = send_keys
+            )
+        } else {
+            format!(
+                "$shell = New-Object -ComObject WScript.Shell; \
+                 if (-not $shell.AppActivate('{window_name}')) {{ exit 1 }}; \
+                 Start-Sleep -Milliseconds 150; \
+                 $shell.SendKeys('% '); \
+                 Start-Sleep -Milliseconds 100; \
+                 $shell.SendKeys('{send_keys}');",
+                window_name = escaped_window_name,
+                send_keys = send_keys
+            )
+        };
+
+        let status = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &script])
+            .status()
+            .map_err(|error| format!("Failed to control {} window: {}", label, error))?;
+        if !status.success() {
+            return Err(format!("I could not find an open {} window to control.", label));
+        }
+
+        log_action(
+            &state.db_path,
+            &format!("{} app {}", action.trim(), label),
+            "control_desktop_app_window",
+            "success",
+            label,
+        )?;
+
+        return Ok(format!("Sent {} to {}.", action.trim(), label));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Desktop app window controls are currently implemented for Windows only.".to_string())
+    }
+}
+
+#[tauri::command]
+fn open_named_folder(
+    state: State<'_, AppState>,
+    folder_name: String,
+) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let normalized = folder_name.trim().to_lowercase();
+        let folder_path = match normalized.as_str() {
+            "documents" | "documents folder" => user_documents_dir()?,
+            "downloads" | "downloads folder" => user_profile_dir()?.join("Downloads"),
+            "desktop" | "desktop folder" => user_profile_dir()?.join("Desktop"),
+            "project" | "project folder" | "jarvis project" => {
+                std::env::current_dir().unwrap_or_else(|_| state.app_data_dir.clone())
+            }
+            _ => return Err(format!("I do not have a named folder mapping for {} yet.", folder_name.trim())),
+        };
+
+        if !folder_path.exists() {
+            return Err(format!("That folder does not exist: {}", folder_path.to_string_lossy()));
+        }
+
+        Command::new("cmd")
+            .args(["/C", "start", "", folder_path.to_string_lossy().as_ref()])
+            .spawn()
+            .map_err(|error| format!("Failed to open folder: {}", error))?;
+
+        log_action(
+            &state.db_path,
+            &format!("Open folder {}", folder_name.trim()),
+            "open_named_folder",
+            "success",
+            &folder_path.to_string_lossy(),
+        )?;
+
+        return Ok(format!("Opened {}.", folder_path.to_string_lossy()));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Named folder opening is currently implemented for Windows only.".to_string())
+    }
+}
+
+#[tauri::command]
+fn capture_desktop_screenshot(state: State<'_, AppState>) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let screenshot_dir = state.app_data_dir.join("screenshots");
+        fs::create_dir_all(&screenshot_dir)
+            .map_err(|error| format!("Failed to create screenshot directory: {}", error))?;
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let screenshot_path = screenshot_dir.join(format!("jarvis-screenshot-{}.png", timestamp));
+        let screenshot_path_string = screenshot_path.to_string_lossy().replace('\'', "''");
+        let script = format!(
+            "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; \
+             $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; \
+             $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height; \
+             $graphics = [System.Drawing.Graphics]::FromImage($bitmap); \
+             $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size); \
+             $bitmap.Save('{path}', [System.Drawing.Imaging.ImageFormat]::Png); \
+             $graphics.Dispose(); \
+             $bitmap.Dispose();",
+            path = screenshot_path_string
+        );
+
+        Command::new("powershell")
+            .args(["-NoProfile", "-Command", &script])
+            .spawn()
+            .map_err(|error| format!("Failed to capture screenshot: {}", error))?
+            .wait()
+            .map_err(|error| format!("Failed to wait for screenshot capture: {}", error))?;
+
+        log_action(
+            &state.db_path,
+            "Capture screenshot",
+            "capture_desktop_screenshot",
+            "success",
+            &screenshot_path.to_string_lossy(),
+        )?;
+
+        return Ok(screenshot_path.to_string_lossy().to_string());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Desktop screenshot capture is currently implemented for Windows only.".to_string())
+    }
+}
+
+#[tauri::command]
+fn capture_active_window_screenshot(state: State<'_, AppState>) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let screenshot_dir = state.app_data_dir.join("screenshots");
+        fs::create_dir_all(&screenshot_dir)
+            .map_err(|error| format!("Failed to create screenshot directory: {}", error))?;
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let screenshot_path = screenshot_dir.join(format!("jarvis-active-window-{}.png", timestamp));
+        let screenshot_path_string = screenshot_path.to_string_lossy().replace('\'', "''");
+        let script = r#"
+Add-Type -AssemblyName System.Drawing;
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public struct RECT {
+    public int Left;
+    public int Top;
+    public int Right;
+    public int Bottom;
+}
+public class NativeMethods {
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+}
+"@;
+$hwnd = [NativeMethods]::GetForegroundWindow();
+if ($hwnd -eq [IntPtr]::Zero) { exit 2 }
+$rect = New-Object RECT;
+if (-not [NativeMethods]::GetWindowRect($hwnd, [ref]$rect)) { exit 3 }
+$width = $rect.Right - $rect.Left;
+$height = $rect.Bottom - $rect.Top;
+if ($width -lt 10 -or $height -lt 10) { exit 4 }
+$bitmap = New-Object System.Drawing.Bitmap $width, $height;
+$graphics = [System.Drawing.Graphics]::FromImage($bitmap);
+$graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size);
+$bitmap.Save('__PATH__', [System.Drawing.Imaging.ImageFormat]::Png);
+$graphics.Dispose();
+$bitmap.Dispose();
+"#
+        .replace("__PATH__", &screenshot_path_string);
+
+        let status = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &script])
+            .status()
+            .map_err(|error| format!("Failed to capture active window screenshot: {}", error))?;
+        if !status.success() {
+            return Err("Windows could not capture the active window screenshot.".to_string());
+        }
+
+        log_action(
+            &state.db_path,
+            "Capture active window screenshot",
+            "capture_active_window_screenshot",
+            "success",
+            &screenshot_path.to_string_lossy(),
+        )?;
+
+        return Ok(screenshot_path.to_string_lossy().to_string());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Active window screenshot capture is currently implemented for Windows only.".to_string())
+    }
+}
+
+#[tauri::command]
+fn capture_desktop_app_window_screenshot(
+    state: State<'_, AppState>,
+    app_name: String,
+) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let (label, window_name) = desktop_window_label(&app_name)?;
+        let screenshot_dir = state.app_data_dir.join("screenshots");
+        fs::create_dir_all(&screenshot_dir)
+            .map_err(|error| format!("Failed to create screenshot directory: {}", error))?;
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let safe_label = label.to_lowercase().replace(' ', "-");
+        let screenshot_path = screenshot_dir.join(format!("jarvis-{}-window-{}.png", safe_label, timestamp));
+        let screenshot_path_string = screenshot_path.to_string_lossy().replace('\'', "''");
+        let escaped_window_name = window_name.replace('\'', "''");
+        let script = r#"
+Add-Type -AssemblyName System.Drawing;
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public struct RECT {
+    public int Left;
+    public int Top;
+    public int Right;
+    public int Bottom;
+}
+public class NativeMethods {
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+}
+"@;
+$shell = New-Object -ComObject WScript.Shell;
+if (-not $shell.AppActivate('__WINDOW__')) { exit 1 }
+Start-Sleep -Milliseconds 250;
+$hwnd = [NativeMethods]::GetForegroundWindow();
+if ($hwnd -eq [IntPtr]::Zero) { exit 2 }
+$rect = New-Object RECT;
+if (-not [NativeMethods]::GetWindowRect($hwnd, [ref]$rect)) { exit 3 }
+$width = $rect.Right - $rect.Left;
+$height = $rect.Bottom - $rect.Top;
+if ($width -lt 10 -or $height -lt 10) { exit 4 }
+$bitmap = New-Object System.Drawing.Bitmap $width, $height;
+$graphics = [System.Drawing.Graphics]::FromImage($bitmap);
+$graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size);
+$bitmap.Save('__PATH__', [System.Drawing.Imaging.ImageFormat]::Png);
+$graphics.Dispose();
+$bitmap.Dispose();
+"#
+        .replace("__WINDOW__", &escaped_window_name)
+        .replace("__PATH__", &screenshot_path_string);
+
+        let status = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &script])
+            .status()
+            .map_err(|error| format!("Failed to capture {} window screenshot: {}", label, error))?;
+        if !status.success() {
+            return Err(format!("I could not find an open {} window to capture.", label));
+        }
+
+        log_action(
+            &state.db_path,
+            &format!("Capture app window screenshot {}", label),
+            "capture_desktop_app_window_screenshot",
+            "success",
+            &screenshot_path.to_string_lossy(),
+        )?;
+
+        return Ok(screenshot_path.to_string_lossy().to_string());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("App window screenshot capture is currently implemented for Windows only.".to_string())
+    }
+}
+
+#[tauri::command]
+fn capture_screen_region_screenshot(
+    state: State<'_, AppState>,
+    region: String,
+) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let normalized = region.trim().to_lowercase().replace('-', " ");
+        let (x_factor, y_factor, width_factor, height_factor, label) = match normalized.as_str() {
+            "selected" | "center" | "middle" => (0.2_f32, 0.2_f32, 0.6_f32, 0.6_f32, "center"),
+            "top" | "top half" => (0.0, 0.0, 1.0, 0.5, "top"),
+            "bottom" | "bottom half" => (0.0, 0.5, 1.0, 0.5, "bottom"),
+            "left" | "left half" => (0.0, 0.0, 0.5, 1.0, "left"),
+            "right" | "right half" => (0.5, 0.0, 0.5, 1.0, "right"),
+            "top left" => (0.0, 0.0, 0.5, 0.5, "top-left"),
+            "top right" => (0.5, 0.0, 0.5, 0.5, "top-right"),
+            "bottom left" => (0.0, 0.5, 0.5, 0.5, "bottom-left"),
+            "bottom right" => (0.5, 0.5, 0.5, 0.5, "bottom-right"),
+            _ => return Err(format!("Unsupported OCR region: {}", region.trim())),
+        };
+
+        let screenshot_dir = state.app_data_dir.join("screenshots");
+        fs::create_dir_all(&screenshot_dir)
+            .map_err(|error| format!("Failed to create screenshot directory: {}", error))?;
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let screenshot_path = screenshot_dir.join(format!("jarvis-region-{}-{}.png", label, timestamp));
+        let screenshot_path_string = screenshot_path.to_string_lossy().replace('\'', "''");
+        let script = format!(
+            "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; \
+             $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; \
+             $x = [int]($bounds.Left + ($bounds.Width * {x_factor})); \
+             $y = [int]($bounds.Top + ($bounds.Height * {y_factor})); \
+             $width = [int]($bounds.Width * {width_factor}); \
+             $height = [int]($bounds.Height * {height_factor}); \
+             $bitmap = New-Object System.Drawing.Bitmap $width, $height; \
+             $graphics = [System.Drawing.Graphics]::FromImage($bitmap); \
+             $graphics.CopyFromScreen($x, $y, 0, 0, $bitmap.Size); \
+             $bitmap.Save('{path}', [System.Drawing.Imaging.ImageFormat]::Png); \
+             $graphics.Dispose(); \
+             $bitmap.Dispose();",
+            x_factor = x_factor,
+            y_factor = y_factor,
+            width_factor = width_factor,
+            height_factor = height_factor,
+            path = screenshot_path_string
+        );
+
+        let status = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &script])
+            .status()
+            .map_err(|error| format!("Failed to capture screen region: {}", error))?;
+        if !status.success() {
+            return Err("Windows could not capture that screen region.".to_string());
+        }
+
+        log_action(
+            &state.db_path,
+            &format!("Capture screen region {}", label),
+            "capture_screen_region_screenshot",
+            "success",
+            &screenshot_path.to_string_lossy(),
+        )?;
+
+        return Ok(screenshot_path.to_string_lossy().to_string());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Screen region capture is currently implemented for Windows only.".to_string())
+    }
+}
+
+#[tauri::command]
+fn capture_screen_rect_screenshot(
+    state: State<'_, AppState>,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        if width < 20 || height < 20 {
+            return Err("The selected OCR area is too small to read.".to_string());
+        }
+
+        let screenshot_dir = state.app_data_dir.join("screenshots");
+        fs::create_dir_all(&screenshot_dir)
+            .map_err(|error| format!("Failed to create screenshot directory: {}", error))?;
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let screenshot_path = screenshot_dir.join(format!("jarvis-selected-rect-{}.png", timestamp));
+        let screenshot_path_string = screenshot_path.to_string_lossy().replace('\'', "''");
+        let script = format!(
+            "Add-Type -AssemblyName System.Drawing; \
+             $bitmap = New-Object System.Drawing.Bitmap {width}, {height}; \
+             $graphics = [System.Drawing.Graphics]::FromImage($bitmap); \
+             $graphics.CopyFromScreen({x}, {y}, 0, 0, $bitmap.Size); \
+             $bitmap.Save('{path}', [System.Drawing.Imaging.ImageFormat]::Png); \
+             $graphics.Dispose(); \
+             $bitmap.Dispose();",
+            x = x,
+            y = y,
+            width = width,
+            height = height,
+            path = screenshot_path_string
+        );
+
+        let status = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &script])
+            .status()
+            .map_err(|error| format!("Failed to capture selected OCR rectangle: {}", error))?;
+        if !status.success() {
+            return Err("Windows could not capture the selected OCR rectangle.".to_string());
+        }
+
+        log_action(
+            &state.db_path,
+            "Capture selected OCR rectangle",
+            "capture_screen_rect_screenshot",
+            "success",
+            &screenshot_path.to_string_lossy(),
+        )?;
+
+        return Ok(screenshot_path.to_string_lossy().to_string());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Selected rectangle capture is currently implemented for Windows only.".to_string())
+    }
+}
+
+#[tauri::command]
+fn capture_global_selection_screenshot(state: State<'_, AppState>) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let screenshot_dir = state.app_data_dir.join("screenshots");
+        fs::create_dir_all(&screenshot_dir)
+            .map_err(|error| format!("Failed to create screenshot directory: {}", error))?;
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let screenshot_path = screenshot_dir.join(format!("jarvis-global-selection-{}.png", timestamp));
+        let screenshot_path_string = screenshot_path.to_string_lossy().replace('\'', "''");
+        let script = r#"
+Add-Type -AssemblyName System.Windows.Forms;
+Add-Type -AssemblyName System.Drawing;
+$bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen;
+$form = New-Object System.Windows.Forms.Form;
+$form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None;
+$form.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual;
+$form.Bounds = $bounds;
+$form.TopMost = $true;
+$form.Opacity = 0.32;
+$form.BackColor = [System.Drawing.Color]::Black;
+$form.Cursor = [System.Windows.Forms.Cursors]::Cross;
+$start = $null;
+$current = $null;
+$selected = $null;
+$form.Add_KeyDown({
+    if ($_.KeyCode -eq [System.Windows.Forms.Keys]::Escape) {
+        $form.Tag = 'cancel';
+        $form.Close();
+    }
+});
+$form.Add_MouseDown({
+    $script:start = $_.Location;
+    $script:current = $_.Location;
+    $form.Invalidate();
+});
+$form.Add_MouseMove({
+    if ($script:start -ne $null) {
+        $script:current = $_.Location;
+        $form.Invalidate();
+    }
+});
+$form.Add_MouseUp({
+    if ($script:start -eq $null) { return }
+    $x = [Math]::Min($script:start.X, $_.X) + $bounds.Left;
+    $y = [Math]::Min($script:start.Y, $_.Y) + $bounds.Top;
+    $w = [Math]::Abs($_.X - $script:start.X);
+    $h = [Math]::Abs($_.Y - $script:start.Y);
+    if ($w -lt 20 -or $h -lt 20) {
+        $form.Tag = 'small';
+        $form.Close();
+        return;
+    }
+    $script:selected = New-Object System.Drawing.Rectangle $x, $y, $w, $h;
+    $form.Close();
+});
+$form.Add_Paint({
+    if ($script:start -ne $null -and $script:current -ne $null) {
+        $x = [Math]::Min($script:start.X, $script:current.X);
+        $y = [Math]::Min($script:start.Y, $script:current.Y);
+        $w = [Math]::Abs($script:current.X - $script:start.X);
+        $h = [Math]::Abs($script:current.Y - $script:start.Y);
+        $pen = New-Object System.Drawing.Pen ([System.Drawing.Color]::Cyan), 4;
+        $_.Graphics.DrawRectangle($pen, $x, $y, $w, $h);
+        $pen.Dispose();
+    }
+});
+[void]$form.ShowDialog();
+if ($form.Tag -eq 'cancel') { exit 5 }
+if ($form.Tag -eq 'small') { exit 6 }
+if ($script:selected -eq $null) { exit 7 }
+$bitmap = New-Object System.Drawing.Bitmap $script:selected.Width, $script:selected.Height;
+$graphics = [System.Drawing.Graphics]::FromImage($bitmap);
+$graphics.CopyFromScreen($script:selected.X, $script:selected.Y, 0, 0, $bitmap.Size);
+$bitmap.Save('__PATH__', [System.Drawing.Imaging.ImageFormat]::Png);
+$graphics.Dispose();
+$bitmap.Dispose();
+"#
+        .replace("__PATH__", &screenshot_path_string);
+
+        let status = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &script])
+            .status()
+            .map_err(|error| format!("Failed to run global OCR selector: {}", error))?;
+        if !status.success() {
+            return Err("Global OCR selection was cancelled or could not capture the selected area.".to_string());
+        }
+
+        log_action(
+            &state.db_path,
+            "Capture global OCR selection",
+            "capture_global_selection_screenshot",
+            "success",
+            &screenshot_path.to_string_lossy(),
+        )?;
+
+        return Ok(screenshot_path.to_string_lossy().to_string());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Global OCR selection is currently implemented for Windows only.".to_string())
+    }
+}
+
+#[tauri::command]
+fn open_screenshots_folder(state: State<'_, AppState>) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let screenshot_dir = state.app_data_dir.join("screenshots");
+        fs::create_dir_all(&screenshot_dir)
+            .map_err(|error| format!("Failed to create screenshot directory: {}", error))?;
+
+        Command::new("cmd")
+            .args(["/C", "start", "", screenshot_dir.to_string_lossy().as_ref()])
+            .spawn()
+            .map_err(|error| format!("Failed to open screenshots folder: {}", error))?;
+
+        log_action(
+            &state.db_path,
+            "Open screenshots folder",
+            "open_screenshots_folder",
+            "success",
+            &screenshot_dir.to_string_lossy(),
+        )?;
+
+        return Ok(format!("Opened {}.", screenshot_dir.to_string_lossy()));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Opening the screenshots folder is currently implemented for Windows only.".to_string())
+    }
+}
+
+#[tauri::command]
+fn extract_image_ocr_text(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<String, String> {
+    let image_path = PathBuf::from(path.trim());
+    if !image_path.exists() {
+        return Err(format!("That image does not exist: {}", image_path.to_string_lossy()));
+    }
+
+    let output = Command::new("tesseract")
+        .arg(&image_path)
+        .arg("stdout")
+        .output()
+        .or_else(|_| {
+            Command::new(r"C:\Program Files\Tesseract-OCR\tesseract.exe")
+                .arg(&image_path)
+                .arg("stdout")
+                .output()
+        })
+        .map_err(|error| {
+            format!(
+                "OCR needs Tesseract installed and available on PATH or at C:\\Program Files\\Tesseract-OCR. I could not start it: {}",
+                error
+            )
+        })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            "Tesseract could not read text from that image.".to_string()
+        } else {
+            stderr
+        });
+    }
+
+    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    log_action(
+        &state.db_path,
+        &format!("OCR image {}", image_path.to_string_lossy()),
+        "extract_image_ocr_text",
+        "success",
+        if text.is_empty() { "empty" } else { "text" },
+    )?;
+
+    Ok(text)
+}
+
+#[tauri::command]
+fn read_clipboard_text(state: State<'_, AppState>) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let output = Command::new("powershell")
+            .args(["-NoProfile", "-Command", "Get-Clipboard -Raw"])
+            .output()
+            .map_err(|error| format!("Failed to read clipboard: {}", error))?;
+
+        if !output.status.success() {
+            return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+        }
+
+        let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        log_action(
+            &state.db_path,
+            "Read clipboard",
+            "read_clipboard_text",
+            "success",
+            if text.is_empty() { "empty" } else { "text" },
+        )?;
+
+        return Ok(text);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Clipboard reading is currently implemented for Windows only.".to_string())
+    }
+}
+
+#[tauri::command]
+fn write_clipboard_text(state: State<'_, AppState>, text: String) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut child = Command::new("powershell")
+            .args(["-NoProfile", "-Command", "Set-Clipboard"])
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|error| format!("Failed to write clipboard: {}", error))?;
+
+        if let Some(stdin) = child.stdin.as_mut() {
+            stdin
+                .write_all(text.as_bytes())
+                .map_err(|error| format!("Failed to send clipboard text: {}", error))?;
+        }
+
+        let status = child
+            .wait()
+            .map_err(|error| format!("Failed to wait for clipboard write: {}", error))?;
+        if !status.success() {
+            return Err("Windows rejected the clipboard update.".to_string());
+        }
+
+        log_action(
+            &state.db_path,
+            "Write clipboard",
+            "write_clipboard_text",
+            "success",
+            if text.trim().is_empty() { "empty" } else { "text" },
+        )?;
+
+        return Ok("Copied text to the clipboard.".to_string());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Clipboard writing is currently implemented for Windows only.".to_string())
+    }
+}
+
+#[tauri::command]
+fn run_jarvis_project_checks(state: State<'_, AppState>) -> Result<String, String> {
+    let project_dir = std::env::current_dir().map_err(|error| {
+        format!("Could not resolve the current JARVIS project directory: {}", error)
+    })?;
+
+    let tsc_output = Command::new("npm")
+        .args(["exec", "tsc", "--noEmit"])
+        .current_dir(&project_dir)
+        .output()
+        .map_err(|error| format!("Failed to run TypeScript checks: {}", error))?;
+
+    let cargo_output = Command::new("cargo")
+        .args(["check", "-j", "1", "--manifest-path", "src-tauri\\Cargo.toml"])
+        .current_dir(&project_dir)
+        .output()
+        .map_err(|error| format!("Failed to run Rust checks: {}", error))?;
+
+    let tsc_stdout = String::from_utf8_lossy(&tsc_output.stdout);
+    let tsc_stderr = String::from_utf8_lossy(&tsc_output.stderr);
+    let cargo_stdout = String::from_utf8_lossy(&cargo_output.stdout);
+    let cargo_stderr = String::from_utf8_lossy(&cargo_output.stderr);
+    let summary = format!(
+        "TypeScript: {}\n{}\n{}\nRust: {}\n{}\n{}",
+        if tsc_output.status.success() { "passed" } else { "failed" },
+        tsc_stdout.trim(),
+        tsc_stderr.trim(),
+        if cargo_output.status.success() { "passed" } else { "failed" },
+        cargo_stdout.trim(),
+        cargo_stderr.trim(),
+    );
+
+    log_action(
+        &state.db_path,
+        "Run JARVIS project checks",
+        "run_jarvis_project_checks",
+        if tsc_output.status.success() && cargo_output.status.success() {
+            "success"
+        } else {
+            "failed"
+        },
+        &project_dir.to_string_lossy(),
+    )?;
+
+    if !tsc_output.status.success() || !cargo_output.status.success() {
+        return Err(summary);
+    }
+
+    Ok(summary)
 }
 
 #[tauri::command]
@@ -2237,6 +3179,22 @@ pub fn run() {
             search_local_files,
             list_recent_local_files,
             open_local_file,
+            launch_desktop_app,
+            focus_desktop_app,
+            control_desktop_app_window,
+            get_desktop_app_window_status,
+            open_named_folder,
+            capture_desktop_screenshot,
+            capture_active_window_screenshot,
+            capture_desktop_app_window_screenshot,
+            capture_screen_region_screenshot,
+            capture_screen_rect_screenshot,
+            capture_global_selection_screenshot,
+            open_screenshots_folder,
+            extract_image_ocr_text,
+            read_clipboard_text,
+            write_clipboard_text,
+            run_jarvis_project_checks,
             extract_pdf_text,
             search_google,
             get_routines,

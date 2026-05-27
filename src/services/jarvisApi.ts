@@ -34,6 +34,70 @@ export function launchStudySetup() {
   return invoke<string>("launch_study_setup");
 }
 
+export function launchDesktopApp(appName: string) {
+  return invoke<string>("launch_desktop_app", { appName });
+}
+
+export function focusDesktopApp(appName: string) {
+  return invoke<string>("focus_desktop_app", { appName });
+}
+
+export function controlDesktopAppWindow(appName: string, action: string) {
+  return invoke<string>("control_desktop_app_window", { appName, action });
+}
+
+export function getDesktopAppWindowStatus(appName: string) {
+  return invoke<string>("get_desktop_app_window_status", { appName });
+}
+
+export function openNamedFolder(folderName: string) {
+  return invoke<string>("open_named_folder", { folderName });
+}
+
+export function captureDesktopScreenshot() {
+  return invoke<string>("capture_desktop_screenshot");
+}
+
+export function captureActiveWindowScreenshot() {
+  return invoke<string>("capture_active_window_screenshot");
+}
+
+export function captureDesktopAppWindowScreenshot(appName: string) {
+  return invoke<string>("capture_desktop_app_window_screenshot", { appName });
+}
+
+export function captureScreenRegionScreenshot(region: string) {
+  return invoke<string>("capture_screen_region_screenshot", { region });
+}
+
+export function captureScreenRectScreenshot(x: number, y: number, width: number, height: number) {
+  return invoke<string>("capture_screen_rect_screenshot", { x, y, width, height });
+}
+
+export function captureGlobalSelectionScreenshot() {
+  return invoke<string>("capture_global_selection_screenshot");
+}
+
+export function openScreenshotsFolder() {
+  return invoke<string>("open_screenshots_folder");
+}
+
+export function extractImageOcrText(path: string) {
+  return invoke<string>("extract_image_ocr_text", { path });
+}
+
+export function readClipboardText() {
+  return invoke<string>("read_clipboard_text");
+}
+
+export function writeClipboardText(text: string) {
+  return invoke<string>("write_clipboard_text", { text });
+}
+
+export function runJarvisProjectChecks() {
+  return invoke<string>("run_jarvis_project_checks");
+}
+
 export function openBrowserUrl(url: string) {
   return invoke<string>("open_browser_url", { url });
 }

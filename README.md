@@ -122,36 +122,138 @@ Supported examples:
 - `Be more detailed`
 - `What's my voice mode`
 
-## Birthdays / People Memory V1
+## Desktop Automation V10
 
-JARVIS can now remember people and birthdays locally, and it can pull birthday candidates from loaded Gmail messages.
+JARVIS now has a safer desktop-control layer for screen reading, external windows, coding handoffs, and risky-action permissions.
+
+Current behavior:
+
+1. Capture the screen and run OCR through a local Tesseract bridge when available.
+2. Capture only the active/focused window for cleaner OCR when the full screen is too noisy.
+3. Capture a named app window, such as Chrome or Notepad, before OCR so JARVIS can read a specific target.
+4. Clean and summarize noisy OCR text before showing or saving it.
+5. Read screen regions like the center, top, bottom-right, or selected/center area.
+6. Drag-select an OCR rectangle from the desktop and read that exact area.
+7. Remember recent OCR reads locally, filter/search the history by source or time, and save the history to Notion.
+8. Preview OCR-derived task candidates before creating Notion tasks.
+9. Watch a screen, region, active window, or app window for readable text changes.
+10. Filter watch events by rule, such as errors, prices, or a chosen keyword.
+11. Optionally log watched OCR matches into Notion or create a Notion task when a match appears.
+12. Show an OCR watch dashboard with the active rule and recent matches.
+13. Save readable screen text to Notion or create one or many tasks from OCR context.
+14. Check whether supported desktop apps have an open window before controlling them.
+15. Launch and focus more Windows apps, including Edge, Calculator, Settings, and Task Manager.
+16. Keep local permission toggles for project checks, closing apps, and coding-executor launches.
+17. Ask for confirmation before launching the configured coding executor unless that permission is turned off.
+
+Supported examples:
+
+- `Read my screen`
+- `Read active window`
+- `Read Chrome`
+- `Read Notepad`
+- `Read selected area`
+- `Select OCR area`
+- `Read top right area`
+- `Show OCR history`
+- `Find screen read about deadline`
+- `Show OCR history from Chrome`
+- `Show OCR history today`
+- `Show OCR history from last hour`
+- `Save OCR history to Notion`
+- `Save screen text to Notion`
+- `Save active window text to Notion`
+- `Save Chrome text to Notion`
+- `Make task from screen`
+- `Screen to task list`
+- `Create tasks from Notepad`
+- `Watch screen every 1 minute`
+- `Watch Chrome every 30 seconds`
+- `Watch Chrome and log to Notion every 30 seconds`
+- `Watch Chrome for errors every 30 seconds`
+- `Watch Chrome for price every 1 minute`
+- `Watch Chrome for price below $50 every 1 minute`
+- `Watch Chrome for keyword submitted every 30 seconds`
+- `Watch Chrome for errors and create task every 30 seconds`
+- `Watch Chrome for errors and log to Notion and create task every 30 seconds`
+- `Watch Chrome for errors and open coding workspace every 30 seconds`
+- `Watch Chrome for keyword submitted and open Notepad every 30 seconds`
+- `Watch Chrome for price below $50 and copy OCR every 1 minute`
+- `Save this watch as price tracker`
+- `Save this watch template as error monitor`
+- `Start error monitor on Chrome`
+- `Pause watch price tracker`
+- `Resume watch price tracker`
+- `Delete watch price tracker`
+- `Correct OCR rn to m`
+- `Remember this from my screen`
+- `Summarize screen`
+- `Explain this error`
+- `Make study notes from this screen`
+- `Turn this screen into flashcards`
+- `Pause OCR watches`
+- `Resume OCR watches`
+- `Show OCR watches`
+- `Copy latest OCR`
+- `Export OCR history`
+- `Clear OCR history`
+- `Stop watching screen`
+- `Is Spotify open`
+- `Check Edge window`
+- `Show desktop permissions`
+- `Turn off app close confirmation`
+- `Turn on executor launch confirmation`
+
+Current limitation:
+
+- OCR requires the free `tesseract` command to be installed and available on PATH.
+
+## Birthdays / People Memory V3
+
+JARVIS can now remember richer people details around birthdays, follow-ups, and contact context, and it can still pull birthday candidates from loaded Gmail messages.
 
 Current behavior:
 
 1. Save a birthday directly by voice.
-2. Look up saved birthdays and sort upcoming ones.
-3. Extract clear birthday patterns from the current email, a numbered email, a topic-matched email, or the loaded inbox list.
+2. Add relationship, age, gift-note, contact-note, and reminder timing details to saved people.
+3. Track last-contact and follow-up memory for people you want to remember better.
+4. Look up saved birthdays and sort upcoming ones with richer context.
+5. Add a saved birthday to Google Calendar or open a draft if Calendar is not connected.
+6. Extract clear birthday patterns from the current email, a numbered email, a topic-matched email, or the loaded inbox list.
 
 Supported examples:
 
 - `Remember that Sarah's birthday is June 14`
+- `Remember that Sarah's birthday is June 14 and add it to calendar`
 - `Did I save Rahul's birthday`
+- `Set Sarah relationship to cousin`
+- `Set Sarah age to 21`
+- `Add gift note for Sarah flowers and books`
+- `Add note for Sarah likes green tea`
+- `I last talked to Sarah yesterday`
+- `Remind me to check in with Sarah next friday`
+- `Show people follow ups`
+- `Who should I check in with this week`
+- `Remind me 7 days before Sarah's birthday`
+- `Add Sarah's birthday to calendar`
 - `Show birthdays`
 - `Show upcoming birthdays`
 - `Save birthdays from this email`
 - `Save birthdays from email 2`
 - `Save birthdays from loaded emails`
 
-## Travel Extraction V1
+## Travel Extraction V3
 
-JARVIS can now pull travel details from Gmail and save a travel summary to Notion.
+JARVIS can now turn travel emails into richer trip cards with timelines and checklist guidance, save them to Notion, and create calendar entries from them.
 
 Current behavior:
 
 1. Extract travel details from the current email, a numbered email, or a topic-matched email.
-2. Pull likely transport, hotel, booking, date, address, and confirmation-code details.
-3. Save the travel summary to Notion when asked.
-4. Keep a lightweight local travel memory for recent extracted trips.
+2. Pull likely departure, arrival, hotel, check-in, check-out, booking, date, address, and confirmation-code details.
+3. Build a simple trip timeline and a “what do I need?” travel checklist from those details.
+4. Save the travel summary to Notion when asked.
+5. Add a travel email to Google Calendar or open a trip draft if Calendar is not connected.
+6. Keep a structured local travel memory for recent extracted trips, including segment counts and checklist items.
 
 Supported examples:
 
@@ -160,18 +262,26 @@ Supported examples:
 - `Extract travel from the email about flight`
 - `Save this travel to Notion`
 - `Save travel from email 2 to Notion`
+- `Add this travel to calendar`
+- `Add travel from email 2 to calendar`
+- `Add travel from the email about flight to calendar`
+- `Show trip timeline`
+- `Show travel checklist`
+- `What do I need for this trip`
 - `Show travel memory`
 
-## Expense Capture V1
+## Expense Capture V3
 
-JARVIS can now pull receipt and invoice-style details from Gmail and save an expense summary to Notion.
+JARVIS can now pull receipt and invoice-style details from Gmail, detect likely subscriptions, store richer structured expense memory, and answer category-based monthly spending questions.
 
 Current behavior:
 
 1. Extract expense details from the current email, a numbered email, or a topic-matched email.
-2. Pull likely merchants, amounts, dates, order numbers, and receipt notes.
+2. Pull likely merchants, amounts, dates, order numbers, receipt notes, a detected category, and whether the charge looks recurring.
 3. Save the expense summary to Notion when asked.
-4. Keep a lightweight local expense memory for recent extracted expenses.
+4. Keep a structured local expense memory for recent extracted expenses.
+5. Show quick weekly or monthly spending summaries from saved expense memory.
+6. Answer category-based monthly questions and list likely subscriptions.
 
 Supported examples:
 
@@ -181,17 +291,23 @@ Supported examples:
 - `Save this expense to Notion`
 - `Save expense from email 2 to Notion`
 - `Show expense memory`
+- `Show weekly expenses`
+- `Show monthly expenses`
+- `How much did I spend on food this month`
+- `Show recurring expenses`
+- `Show subscriptions`
 
-## Package Tracking V1
+## Package Tracking V3
 
-JARVIS can now pull shipping and delivery-style details from Gmail and save a package summary to Notion.
+JARVIS can now pull shipping and delivery-style details from Gmail, keep evolving package records, and surface arrivals or delays in your brief.
 
 Current behavior:
 
 1. Extract package details from the current email, a numbered email, or a topic-matched email.
-2. Pull likely carriers, delivery statuses, delivery dates, tracking numbers, and package notes.
+2. Pull likely carriers, merchants, item labels, delivery statuses, delivery dates, tracking numbers, and package notes.
 3. Save the package summary to Notion when asked.
-4. Keep a lightweight local package memory for recent extracted shipments.
+4. Merge repeated shipping updates into one evolving package record when the subject or tracking number matches.
+5. Highlight packages that appear to be arriving today or tomorrow, and call out delayed shipments.
 
 Supported examples:
 
@@ -201,17 +317,21 @@ Supported examples:
 - `Save this package to Notion`
 - `Save package from email 2 to Notion`
 - `Show package memory`
+- `What's arriving tomorrow`
+- `Show delayed packages`
 
-## Meeting Prep V1
+## Meeting Prep V3
 
-JARVIS can now build a meeting prep summary from today's Google Calendar events and related Gmail/Notion context.
+JARVIS can now build a cleaner meeting prep summary from today's Google Calendar events and related Gmail/Notion context.
 
 Current behavior:
 
 1. Match a meeting from today's connected Google Calendar events.
 2. Pull related loaded emails, notes, and tasks using the event title.
-3. Show the prep summary in-app or save it to Notion.
-4. Keep a lightweight local meeting-prep memory for recent prep runs.
+3. Generate a prep note with a focus summary, likely agenda cues, people context, and explicit action items.
+4. Compare the current prep snapshot against the last saved prep for the same meeting.
+5. Show the prep summary in-app or save it to Notion.
+6. Keep a richer local meeting-prep memory for recent prep runs.
 
 Supported examples:
 
@@ -221,21 +341,24 @@ Supported examples:
 - `Make a prep note for interview`
 - `Show meeting prep memory`
 
-## School Mode V1
+## School Mode V3
 
-JARVIS can now build a school-focused study plan from your loaded PDFs, school-like tasks, and deadline-heavy emails.
+JARVIS can now build a more structured school-focused study plan from your loaded PDFs, school-like tasks, and deadline-heavy emails.
 
 Current behavior:
 
 1. Scan loaded PDFs, tasks, and recent Gmail context for school-related signals.
-2. Build a focused study plan with suggested next moves.
-3. Show the plan in-app or save it to Notion.
-4. Keep a lightweight local school-plan memory for recent study-planning runs.
+2. Detect likely subjects or courses from your material.
+3. Pull assignment-style items and exam countdown cues from tasks and loaded email.
+4. Build a focused study plan with deadline sections and a simple three-day study-session structure.
+5. Show the plan in-app or save it to Notion.
+6. Keep a richer local school-plan memory for recent study-planning runs.
 
 Supported examples:
 
 - `Start school mode`
 - `What should I study today`
+- `Build my study plan for next 3 days`
 - `Save school mode to Notion`
 - `Show school memory`
 
@@ -537,6 +660,13 @@ Current missing-skill escalation behavior:
 
 1. If JARVIS understands the request but does not have the skill, it keeps the request as a skill gap instead of dropping it.
 2. You can explicitly ask the advanced assistant for a suggested skill plan.
+3. The advanced assistant returns a reviewable plan with a skill name, summary, build steps, and permission needs.
+4. JARVIS shows that plan in the UI and does not auto-build or auto-run it.
+
+Current limitation:
+
+- This first escalation flow drafts plans only.
+- It does not yet turn the plan into a real implemented skill automatically.
 
 ## Notion Notes V1
 
@@ -602,13 +732,84 @@ Supported commands:
 - `Find my resume`
 - `Search files for project`
 - `Show recent files`
-3. The advanced assistant returns a reviewable plan with a skill name, summary, build steps, and permission needs.
-4. JARVIS shows that plan in the UI and does not auto-build or auto-run it.
 
-Current limitation:
+## Desktop Control V9
 
-- This first escalation flow drafts plans only.
-- It does not yet turn the plan into a real implemented skill automatically.
+JARVIS can now use the native desktop bridge for a few direct computer-control actions.
+
+Current desktop behavior:
+
+1. JARVIS can launch common desktop apps.
+2. JARVIS can focus an already-open desktop app window.
+3. JARVIS can open common folders like Documents, Downloads, Desktop, and the JARVIS project folder.
+4. JARVIS can capture a screenshot and save it under the local app data screenshots folder.
+5. JARVIS can open the screenshots folder.
+6. JARVIS can read or write plain text through the Windows clipboard.
+7. JARVIS can use clipboard text as context for opening, searching, or Notion capture.
+8. JARVIS can remember named desktop workspaces made of apps, folders, and websites.
+9. JARVIS can rename, delete, and clean up saved desktop workspaces.
+10. JARVIS can create starter workspaces from templates for coding, school, focus, and music.
+11. JARVIS can schedule workspace opens while the app is running.
+12. JARVIS can save screenshots to Notion as path notes.
+13. JARVIS can clean, summarize, or format clipboard text and copy it back.
+14. JARVIS can run the project check bridge for the JARVIS repo.
+15. JARVIS can remember the last desktop target and reopen it.
+16. JARVIS can export/import desktop workspaces through clipboard JSON.
+17. JARVIS can run overdue scheduled workspace opens after restart.
+18. JARVIS can minimize, maximize, or close mapped external app windows, with confirmation before close.
+19. JARVIS can create a task from a screenshot plus available clipboard context.
+20. JARVIS can turn voice code-change requests into saved builder handoff packages.
+
+Supported commands:
+
+- `Open VS Code`
+- `Switch to Spotify`
+- `Focus Chrome`
+- `Open file explorer`
+- `Open PowerShell`
+- `Open downloads folder`
+- `Open Jarvis project`
+- `Take a screenshot`
+- `Open screenshots folder`
+- `Show clipboard`
+- `Copy meeting notes to clipboard`
+- `Open clipboard`
+- `Search clipboard on Google`
+- `Save clipboard to Notion`
+- `Create desktop project coding`
+- `Create coding workspace template`
+- `Create school workspace template`
+- `Create focus workspace called deep work`
+- `Add VS Code to coding workspace`
+- `Add downloads folder to coding workspace`
+- `Add GitHub to coding workspace`
+- `Open coding workspace`
+- `Start coding mode for 2 hours`
+- `Open school workspace at 7 PM`
+- `Show scheduled workspaces`
+- `Take screenshot and save to Notion`
+- `Save last screenshot to Notion`
+- `Clean clipboard`
+- `Summarize clipboard`
+- `Format clipboard`
+- `Run project checks`
+- `Open project in VS Code`
+- `Minimize Jarvis window`
+- `Maximize Jarvis window`
+- `Minimize Spotify`
+- `Maximize Chrome`
+- `Close Notepad`
+- `Make task from screen`
+- `Build add a better notes search in Jarvis`
+- `Prepare a coding handoff for improve desktop workspace editing`
+- `Open that again`
+- `Export workspaces`
+- `Import workspaces from clipboard`
+- `Show workspaces`
+- `Rename coding workspace to dev`
+- `Remove GitHub from coding workspace`
+- `Remove downloads folder from coding workspace`
+- `Delete coding workspace`
 
 ## Skill Builder V1
 
@@ -895,6 +1096,57 @@ Supported examples:
 - `Create daily brief`
 - `Make my daily brief`
 - `Save daily brief to Notion`
+
+## Daily Brief V4
+
+JARVIS now turns the daily brief into a broader life snapshot instead of only a Gmail/Calendar/task summary.
+
+Current behavior:
+
+1. Pull today's Google Calendar events if Calendar is connected.
+2. Pull recent unread Gmail messages and prioritize them by urgency signals.
+3. Load overdue / today / upcoming tasks from Notion task notes.
+4. Include upcoming birthdays, package arrivals for today and tomorrow, travel memory, expense memory, meeting prep memory, and school memory.
+5. Build a broader focus summary, a `Top 3 priorities` section, and proactive suggestions.
+6. Save the full brief to Notion.
+
+Supported examples:
+
+- `Create daily brief`
+- `Make my daily brief`
+- `Save daily brief to Notion`
+
+## Cross-feature Automation V3
+
+JARVIS can now suggest connected follow-through actions after it analyzes an email or refreshes your broader life state, instead of leaving each skill isolated.
+
+Current behavior:
+
+1. Analyze an email and detect whether it looks like birthdays, travel, expenses, packages, or meeting/calendar content.
+2. Surface suggested next actions as clickable follow-through cards in the UI.
+3. Offer one-click mini-automations that run more than one linked action in sequence.
+4. Pick one likely next step proactively and let you confirm it with `yes` or dismiss it with `no`.
+5. After a daily brief, suggest useful follow-throughs from your live people, package, expense, meeting, and school memory.
+6. Reuse the current email context so those actions can run immediately without you restating the target email.
+
+Supported examples:
+
+- `Analyze this email`
+- then use suggested actions like:
+  - `Save birthday details`
+  - `Capture the whole trip`
+  - `Capture and total this category`
+  - `Track and check package status`
+  - `Turn email into calendar item`
+- `Create daily brief`
+- then use suggested actions like:
+  - `Review people follow-ups`
+  - `Check tomorrow's deliveries`
+  - `Review delayed packages`
+  - `Review recurring charges`
+- when JARVIS shows a `Likely Next Step`, say:
+  - `yes`
+  - `no`
 
 ## Local setup
 
