@@ -1,0 +1,5 @@
+[
+  { "phrase": "create daily brief", "capabilityId": "memory.life" },
+  { "phrase": "morning brief", "capabilityId": "memory.life" },
+  { "phrase": "generate daily brief", "capabilityId": "memory.life" }
+]

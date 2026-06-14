@@ -1,0 +1,5 @@
+[
+  { "phrase": "how much did i spend on food this month", "capabilityId": "finance.readonly" },
+  { "phrase": "expense summary for this week", "capabilityId": "finance.readonly" },
+  { "phrase": "spending report for groceries", "capabilityId": "finance.readonly" }
+]

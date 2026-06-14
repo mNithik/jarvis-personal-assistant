@@ -1,0 +1,5 @@
+[
+  { "phrase": "when is mom's birthday", "capabilityId": "memory.life" },
+  { "phrase": "remember that Alice likes tea", "capabilityId": "memory.life" },
+  { "phrase": "show my people memory", "capabilityId": "memory.life" }
+]

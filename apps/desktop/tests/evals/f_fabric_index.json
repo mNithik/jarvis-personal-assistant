@@ -1,0 +1,14 @@
+[
+  { "id": "F3", "capabilityId": "command.study", "eval": "f3_study.json" },
+  { "id": "F7", "capabilityId": "command.vision", "eval": "f7_screen.json" },
+  { "id": "F10", "capabilityId": "integrations.gmail", "eval": "f10_gmail.json" },
+  { "id": "F15", "capabilityId": "memory.life", "eval": "f15_memory.json" },
+  { "id": "F18", "capabilityId": "memory.life", "eval": "f_brief_v2.json" },
+  { "id": "F22", "capabilityId": "builder.coding", "eval": "f22_builder.json" },
+  { "id": "Finance", "capabilityId": "finance.readonly", "eval": "f_finance_routes.json" },
+  { "id": "Writer", "capabilityId": "writer.draft", "eval": "f_writer_routes.json" },
+  { "id": "Vault", "capabilityId": "memory.vault", "eval": "f_vault_routes.json" },
+  { "id": "Obsidian", "capabilityId": "memory.vault", "eval": "f_obsidian_live.json" },
+  { "id": "Telegram", "capabilityId": "command.desktop", "eval": "f_telegram.json" },
+  { "id": "Supervisor", "capabilityId": "supervisor.replan", "eval": "f_l3_supervisor.json" }
+]

@@ -1,0 +1,5 @@
+[
+  { "phrase": "research rust async patterns", "capabilityId": "research.web" },
+  { "phrase": "look up quantum computing basics", "capabilityId": "research.web" },
+  { "phrase": "investigate solar panel efficiency", "capabilityId": "research.web" }
+]

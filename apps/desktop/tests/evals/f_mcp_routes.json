@@ -1,0 +1,5 @@
+[
+  { "phrase": "mcp obsidian-local search_notes", "capabilityId": "integrations.mcp.host" },
+  { "phrase": "mcp jarvis-builtin get_routines", "capabilityId": "integrations.mcp.host" },
+  { "phrase": "mcp github create_issue", "capabilityId": "integrations.mcp.host" }
+]

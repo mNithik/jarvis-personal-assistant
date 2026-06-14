@@ -1,0 +1,5 @@
+[
+  { "phrase": "debug this repo", "capabilityId": "builder.code" },
+  { "phrase": "debug the repo", "capabilityId": "builder.code" },
+  { "phrase": "run project checks", "capabilityId": "builder.code" }
+]

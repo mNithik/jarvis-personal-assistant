@@ -1,0 +1,177 @@
+use std::path::Path;
+
+use tauri::{AppHandle, Emitter, Manager};
+
+use super::{
+    config::GatewayConfig,
+    orchestrator::GatewayOrchestrator,
+    state::GatewayState,
+    trigger_queue::{claim_next_trigger, complete_trigger},
+    types::{TurnRequest, TurnSource},
+};
+
+/// Process at most one pending trigger per heartbeat tick.
+pub fn process_trigger_queue(
+    app: &AppHandle,
+    db_path: &Path,
+    config: &GatewayConfig,
+) -> Result<Option<String>, String> {
+    if !config.enabled {
+        return Ok(None);
+    }
+
+    let conn = rusqlite::Connection::open(db_path).map_err(|error| error.to_string())?;
+    let Some(event) = claim_next_trigger(&conn)? else {
+        return Ok(None);
+    };
+
+    let result = match event.kind.as_str() {
+        "morning_brief" => dispatch_morning_brief(app, config),
+        "ocr_watch" => dispatch_ocr_watch(app, &event.payload),
+        "channel_turn" => dispatch_channel_turn(app, db_path, config, &event.payload),
+        other => {
+            let _ = complete_trigger(&conn, &event.id, false);
+            return Err(format!("Unknown trigger kind: {other}"));
+        }
+    };
+
+    let success = result.is_ok();
+    complete_trigger(&conn, &event.id, success)?;
+    result.map(|summary| Some(format!("{}: {}", event.kind, summary)))
+}
+
+fn dispatch_morning_brief(app: &AppHandle, config: &GatewayConfig) -> Result<String, String> {
+    let gateway_state = app
+        .try_state::<GatewayState>()
+        .ok_or_else(|| "Gateway state unavailable".to_string())?;
+    let app_state = app
+        .try_state::<crate::AppState>()
+        .ok_or_else(|| "App state unavailable".to_string())?;
+
+    let session_id = "proactive-morning-brief".to_string();
+    let turn_id = gateway_state.next_turn_id(&session_id)?;
+    let request = TurnRequest {
+        session_id: Some(session_id.clone()),
+        command: "create daily brief".to_string(),
+        source: Some(TurnSource::Automation),
+        idempotency_key: None,
+    };
+
+    let router_context = crate::gateway::router::RouterContext {
+        config: config.clone(),
+        db_path: Some(app_state.db_path.clone()),
+    };
+
+    let mut bus = gateway_state.bus.lock().map_err(|error| error.to_string())?;
+    let mut escalation = gateway_state
+        .escalation
+        .lock()
+        .map_err(|error| error.to_string())?;
+
+    let response = GatewayOrchestrator::run_turn(
+        request,
+        turn_id,
+        &session_id,
+        config,
+        &router_context,
+        &mut bus,
+        crate::env_local::provider_api_key("groq"),
+        Some(crate::gateway::orchestrator::TurnExecutionEnv {
+            db_path: &app_state.db_path,
+            app_data_dir: &app_state.app_data_dir,
+            escalation: &mut escalation,
+        }),
+    );
+
+    let _ = app.emit("gateway-turn-complete", &response);
+    Ok(response.result.reply.chars().take(120).collect())
+}
+
+fn dispatch_ocr_watch(app: &AppHandle, payload: &str) -> Result<String, String> {
+    let parsed: serde_json::Value =
+        serde_json::from_str(payload).unwrap_or_else(|_| serde_json::json!({ "raw": payload }));
+    app.emit("ocr-watch-tick", parsed)
+        .map_err(|error| error.to_string())?;
+    Ok("OCR watch tick emitted".to_string())
+}
+
+fn dispatch_channel_turn(
+    app: &AppHandle,
+    db_path: &Path,
+    config: &GatewayConfig,
+    payload: &str,
+) -> Result<String, String> {
+    let channel_request =
+        crate::gateway::channels::parse_local_channel_payload(payload)?;
+    let turn_request: TurnRequest = channel_request.into();
+
+    let gateway_state = app
+        .try_state::<GatewayState>()
+        .ok_or_else(|| "Gateway state unavailable".to_string())?;
+    let app_state = app
+        .try_state::<crate::AppState>()
+        .ok_or_else(|| "App state unavailable".to_string())?;
+
+    let session_id = turn_request
+        .session_id
+        .clone()
+        .unwrap_or_else(|| "trigger-channel".to_string());
+    let turn_id = gateway_state.next_turn_id(&session_id)?;
+
+    let router_context = crate::gateway::router::RouterContext {
+        db_path: Some(db_path.to_path_buf()),
+        config: config.clone(),
+    };
+
+    let mut bus = gateway_state.bus.lock().map_err(|error| error.to_string())?;
+    let mut escalation = gateway_state
+        .escalation
+        .lock()
+        .map_err(|error| error.to_string())?;
+
+    let response = GatewayOrchestrator::run_turn(
+        turn_request,
+        turn_id,
+        &session_id,
+        config,
+        &router_context,
+        &mut bus,
+        None,
+        Some(crate::gateway::orchestrator::TurnExecutionEnv {
+            db_path: &app_state.db_path,
+            app_data_dir: &app_state.app_data_dir,
+            escalation: &mut escalation,
+        }),
+    );
+
+    let _ = app.emit("gateway-turn-complete", &response);
+    Ok(response.result.reply.chars().take(120).collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::gateway::trigger_queue::enqueue_trigger;
+
+    #[test]
+    fn unknown_trigger_kind_fails() {
+        let dir = std::env::temp_dir().join(format!(
+            "jarvis-trigger-dispatch-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).expect("dir");
+        let db_path = dir.join("test.db");
+        let conn = rusqlite::Connection::open(&db_path).expect("db");
+        enqueue_trigger(&conn, "unknown_kind", "{}").expect("enqueue");
+        drop(conn);
+
+        // Without AppHandle we only test queue claim/complete via trigger_queue tests.
+        let conn = rusqlite::Connection::open(&db_path).expect("db");
+        let claimed = claim_next_trigger(&conn).expect("claim").expect("event");
+        assert_eq!(claimed.kind, "unknown_kind");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}

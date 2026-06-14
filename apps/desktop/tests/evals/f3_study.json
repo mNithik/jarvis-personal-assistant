@@ -1,0 +1,5 @@
+[
+  { "phrase": "launch study setup", "capabilityId": "command.study" },
+  { "phrase": "study routine", "capabilityId": "command.study" },
+  { "phrase": "focus workspace", "capabilityId": "command.study" }
+]

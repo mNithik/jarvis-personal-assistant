@@ -1,0 +1,5 @@
+[
+  { "phrase": "run workflow morning routine", "capabilityId": "automation.workflow" },
+  { "phrase": "start workflow nightly backup", "capabilityId": "automation.workflow" },
+  { "phrase": "run workflow compile finished", "capabilityId": "automation.workflow" }
+]

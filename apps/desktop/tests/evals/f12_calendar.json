@@ -1,0 +1,5 @@
+[
+  { "phrase": "add gym tomorrow at 6 PM to my calendar", "capabilityId": "integrations.calendar" },
+  { "phrase": "what's on my calendar today", "capabilityId": "integrations.calendar" },
+  { "phrase": "schedule this email", "capabilityId": "integrations.calendar" }
+]

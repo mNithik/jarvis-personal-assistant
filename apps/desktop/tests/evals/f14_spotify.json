@@ -1,0 +1,5 @@
+[
+  { "phrase": "play music on spotify", "capabilityId": "integrations.spotify" },
+  { "phrase": "pause spotify", "capabilityId": "integrations.spotify" },
+  { "phrase": "skip song on spotify", "capabilityId": "integrations.spotify" }
+]

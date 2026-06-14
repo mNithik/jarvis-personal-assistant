@@ -1,0 +1,6 @@
+[
+  { "phrase": "create daily brief", "capabilityId": "memory.life" },
+  { "phrase": "make my daily brief", "capabilityId": "memory.life" },
+  { "phrase": "morning brief", "capabilityId": "memory.life" },
+  { "phrase": "save daily brief to notion", "capabilityId": "memory.life" }
+]

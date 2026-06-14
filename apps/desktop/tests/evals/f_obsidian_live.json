@@ -1,0 +1,5 @@
+[
+  { "phrase": "search obsidian for project alpha", "capabilityId": "memory.vault" },
+  { "phrase": "search my vault for meeting prep", "capabilityId": "memory.vault" },
+  { "phrase": "find in vault budget review", "capabilityId": "memory.vault" }
+]

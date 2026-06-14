@@ -1,0 +1,9 @@
+[
+  { "phrase": "launch study setup", "capabilityId": "command.study" },
+  { "phrase": "open chrome then read screen", "capabilityId": "supervisor.delegate" },
+  { "phrase": "search vault for meeting notes", "capabilityId": "memory.vault" },
+  { "phrase": "open chrome", "capabilityId": "command.desktop" },
+  { "phrase": "read my screen", "capabilityId": "vision.ocr" },
+  { "phrase": "make my daily brief", "capabilityId": "memory.life" },
+  { "phrase": "save this to notion", "capabilityId": "integrations.notion" }
+]

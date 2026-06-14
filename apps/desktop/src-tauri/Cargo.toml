@@ -1,0 +1,48 @@
+[package]
+name = "jarvis"
+version = "0.1.0"
+description = "A modular desktop assistant powered by Tauri"
+authors = ["nithi"]
+edition = "2021"
+
+[lib]
+name = "jarvis_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "jarvis"
+path = "src/main.rs"
+
+[[bin]]
+name = "jarvis-mcp"
+path = "src/bin/jarvis_mcp.rs"
+
+[[bin]]
+name = "jarvis-service"
+path = "src/bin/jarvis_service.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.6.2", features = [] }
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls", "multipart", "stream"] }
+rmcp = { version = "1.7", features = ["server", "transport-io"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+tauri = { version = "2.6.2", features = [] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "net", "io-util", "time"] }
+dotenvy = "0.15"
+regex = "1"
+pdf-extract = "0.7"
+keyring = "3"
+chrono = "0.4"
+wasmparser = "0.244"
+
+[target.'cfg(windows)'.dependencies]
+uiautomation = "0.24"
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }

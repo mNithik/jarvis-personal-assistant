@@ -1,0 +1,5 @@
+[
+  { "phrase": "how much did i spend on food this month", "capabilityId": "finance.readonly" },
+  { "phrase": "create daily brief", "capabilityId": "memory.life" },
+  { "phrase": "open chrome", "capabilityId": "command.desktop" }
+]

@@ -1,0 +1,5 @@
+[
+  { "phrase": "draft meeting follow-up email", "capabilityId": "writer.draft" },
+  { "phrase": "summarize for notion quarterly review", "capabilityId": "writer.draft" },
+  { "phrase": "compose thank you note for mentor", "capabilityId": "writer.draft" }
+]

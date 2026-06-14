@@ -1,0 +1,8 @@
+[
+  { "phrase": "read screen and save to notion", "capabilityId": "integrations.ocr_notion" },
+  { "phrase": "save ocr history to notion", "capabilityId": "integrations.ocr_notion" },
+  { "phrase": "ocr screen to notion", "capabilityId": "integrations.ocr_notion" },
+  { "phrase": "watch chrome every 30 seconds and log to notion", "capabilityId": "integrations.ocr_notion" },
+  { "phrase": "stop ocr watch", "capabilityId": "integrations.ocr_notion" },
+  { "phrase": "show ocr watches", "capabilityId": "integrations.ocr_notion" }
+]

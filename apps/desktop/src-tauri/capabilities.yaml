@@ -1,0 +1,172 @@
+capabilities:
+  - id: infer.groq.talker
+    label: Groq talker
+    agent: command
+    tier: chat
+    provider: groq
+    quota_key: groq
+    always_enabled: true
+  - id: memory.recall
+    label: Memory recall
+    agent: memory
+    tier: embed
+    always_enabled: true
+  - id: memory.life
+    label: Life memory
+    agent: memory
+    tier: embed
+    feature_flag: memory
+    command_guard: memory
+  - id: builder.code
+    label: Builder coding assist
+    agent: builder
+    tier: planner
+    provider: groq
+    quota_key: groq
+    feature_flag: builder
+    command_guard: builder
+  - id: command.study
+    label: Study routine
+    agent: command
+    tier: local
+    feature_flag: study_routine
+  - id: command.desktop
+    label: Desktop control
+    agent: command
+    tier: local
+    always_enabled: true
+  - id: command.search
+    label: Local file search
+    agent: command
+    tier: local
+    command_guard: file_search
+  - id: command.files
+    label: Recent files
+    agent: command
+    tier: local
+    always_enabled: true
+  - id: vision.ocr
+    label: Screen read and OCR
+    agent: vision
+    tier: local
+    feature_flag: screen_ocr
+  - id: integrations.gmail
+    label: Gmail
+    agent: integrations
+    tier: local
+    feature_flag: gmail
+    command_guard: gmail
+  - id: integrations.google
+    label: Google services
+    agent: integrations
+    tier: local
+    feature_flag: gmail
+    command_guard: gmail
+  - id: integrations.calendar
+    label: Google Calendar
+    agent: integrations
+    tier: local
+    feature_flag: calendar
+    command_guard: calendar
+  - id: integrations.notion
+    label: Notion
+    agent: integrations
+    tier: local
+    feature_flag: notion
+    command_guard: notion
+  - id: integrations.spotify
+    label: Spotify
+    agent: integrations
+    tier: local
+    feature_flag: spotify
+    command_guard: spotify
+  - id: integrations.ocr_notion
+    label: OCR to Notion
+    agent: integrations
+    tier: local
+    feature_flag: ocr_notion
+    command_guard: ocr_notion
+  - id: integrations.email_notion
+    label: Email to Notion
+    agent: integrations
+    tier: local
+    feature_flags:
+      - email_notion
+      - gmail
+    command_guard: email_notion
+  - id: proactive.heartbeat
+    label: Proactive heartbeat
+    agent: memory
+    tier: local
+    always_enabled: true
+  - id: supervisor.delegate
+    label: Supervisor delegation
+    agent: supervisor
+    tier: planner
+    always_enabled: true
+    command_guard: supervisor
+  - id: automation.workflow
+    label: Automation workflow
+    agent: automation
+    tier: local
+    always_enabled: true
+    command_guard: automation
+  - id: integrations.mcp.host
+    label: External MCP host
+    agent: integrations
+    tier: local
+    always_enabled: true
+    command_guard: mcp
+  - id: memory.vault
+    label: Knowledge vault
+    agent: memory
+    tier: embed
+    feature_flag: memory
+    command_guard: vault
+  - id: research.web
+    label: Web research
+    agent: research
+    tier: talker
+    always_enabled: true
+    command_guard: research
+  - id: finance.readonly
+    label: Finance read-only
+    agent: finance
+    tier: embed
+    feature_flag: memory
+    command_guard: finance
+  - id: writer.draft
+    label: Writer draft
+    agent: writer
+    tier: worker
+    always_enabled: true
+    command_guard: writer
+  - id: integrations.mcp.github
+    label: GitHub MCP
+    agent: integrations
+    tier: worker
+    always_enabled: true
+    command_guard: mcp
+  - id: integrations.mcp.jira
+    label: Jira MCP
+    agent: integrations
+    tier: worker
+    always_enabled: true
+    command_guard: mcp
+  - id: integrations.mcp.huggingface
+    label: HuggingFace MCP
+    agent: integrations
+    tier: worker
+    always_enabled: true
+    command_guard: mcp
+  - id: integrations.mcp.zapier
+    label: Zapier MCP
+    agent: integrations
+    tier: worker
+    always_enabled: true
+    command_guard: mcp
+  - id: command.clipboard
+    label: Clipboard
+    agent: command
+    tier: local
+    always_enabled: true

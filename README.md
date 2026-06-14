@@ -1,13 +1,60 @@
 # JARVIS
 
-JARVIS is a modular desktop assistant built with Tauri, React, and TypeScript. The first version is shaped around real daily-use actions like launching app routines, opening websites, routing Google searches, and growing into calendar, weather, and memory skills.
+JARVIS is a modular desktop assistant built with Tauri, React, and TypeScript.
+
+## Install v0.1 (preview)
+
+**End users:** Download the latest `.exe` / `.msi` from [GitHub Releases](https://github.com/mNithik/jarvis-personal-assistant/releases) (tag `v0.1.0` or newer).
+
+**Developers:**
+
+```powershell
+git clone https://github.com/mNithik/jarvis-personal-assistant.git
+cd jarvis-personal-assistant
+npm install
+copy .env.example apps\desktop\.env   # add API keys as needed
+npm run tauri dev
+```
+
+- **Gateway is off by default** — enable in Settings → Agent gateway, or use “Apply easy mode (dry-run)”.
+- **Free disk on PC:** `npm run clean:build` removes Rust `target/` (~11 GB). One-time: `npm run setup:lean-dev`.
+- **Releases:** push tag `v0.1.x` → GitHub Actions builds the Windows installer in the cloud.
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) for post-v0.1 sprints.
 
 ## Stack
 
-- Tauri
-- React
+- Tauri 2 desktop shell
+- React 18
 - TypeScript
 - Vite
+- Rust backend commands and local gateway foundation
+- npm workspaces for `apps/*` and `packages/*`
+
+## Repository Layout
+
+JARVIS now uses a small monorepo layout so the desktop app, shared types, and future gateway packages can grow without turning the root into one giant app folder.
+
+```text
+apps/
+  desktop/              Current Tauri + React desktop app
+    src/                Frontend UI, services, and command logic
+    src-tauri/          Rust/Tauri backend commands
+packages/
+  jarvis-types/         Shared TypeScript gateway and agent types
+tools/                  Local helper scripts
+```
+
+Useful commands:
+
+```powershell
+npm install
+npm run dev
+npm run tauri
+npm run build
+npm exec tsc --noEmit
+cargo check -j 1 --manifest-path apps\desktop\src-tauri\Cargo.toml
+```
 
 ## Planned V1 skills
 
@@ -35,7 +82,7 @@ The first end-to-end skill is `Open my study apps`.
 How it works:
 
 1. The command input in the React app captures your text.
-2. A tiny command router in `src/App.tsx` checks whether the command matches the study routine.
+2. A tiny command router in `apps/desktop/src/App.tsx` checks whether the command matches the study routine.
 3. The frontend calls the Tauri command `launch_study_setup`.
 4. Rust runs the Windows launcher routine and opens the configured targets.
 
@@ -1150,7 +1197,7 @@ Supported examples:
 
 ## Local setup
 
-This repository has been scaffolded, but the current machine is missing a working npm installation and the Rust/Tauri toolchain.
+Install Node/npm, Rust, and the Tauri prerequisites for Windows. Then install dependencies from the repository root.
 
 ## Document / PDF Skill V1
 
@@ -1203,5 +1250,5 @@ Once those are installed, run:
 
 ```powershell
 npm install
-npm run tauri dev
+npm run tauri
 ```

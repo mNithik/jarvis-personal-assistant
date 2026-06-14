@@ -1,0 +1,5 @@
+[
+  { "phrase": "open chrome then read screen", "capabilityId": "supervisor.delegate" },
+  { "phrase": "launch spotify then pause", "capabilityId": "supervisor.delegate" },
+  { "phrase": "focus vs code then run project checks", "capabilityId": "supervisor.delegate" }
+]

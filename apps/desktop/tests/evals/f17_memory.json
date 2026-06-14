@@ -1,0 +1,5 @@
+[
+  { "phrase": "list meeting prep memory", "capabilityId": "memory.life" },
+  { "phrase": "show school plans", "capabilityId": "memory.life" },
+  { "phrase": "show package memory", "capabilityId": "memory.life" }
+]

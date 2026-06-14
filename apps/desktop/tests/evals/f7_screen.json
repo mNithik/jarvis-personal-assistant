@@ -1,0 +1,5 @@
+[
+  { "phrase": "read my screen", "capabilityId": "vision.ocr" },
+  { "phrase": "what's on screen", "capabilityId": "vision.ocr" },
+  { "phrase": "read screen", "capabilityId": "vision.ocr" }
+]

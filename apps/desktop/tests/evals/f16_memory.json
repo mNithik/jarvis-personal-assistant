@@ -1,0 +1,5 @@
+[
+  { "phrase": "show my travel plans", "capabilityId": "memory.life" },
+  { "phrase": "list recurring expenses", "capabilityId": "memory.life" },
+  { "phrase": "what's arriving tomorrow", "capabilityId": "memory.life" }
+]

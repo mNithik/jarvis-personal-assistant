@@ -1,0 +1,6 @@
+[
+  { "phrase": "debug this repo", "capabilityId": "builder.code" },
+  { "phrase": "run project checks", "capabilityId": "builder.code" },
+  { "phrase": "build add daily brief export in jarvis", "capabilityId": "builder.code" },
+  { "phrase": "open repo in vs code", "capabilityId": "builder.code" }
+]

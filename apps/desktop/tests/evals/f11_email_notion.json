@@ -1,0 +1,8 @@
+[
+  { "phrase": "save this email to notion", "capabilityId": "integrations.email_notion" },
+  { "phrase": "save email digest to notion", "capabilityId": "integrations.email_notion" },
+  { "phrase": "save travel from this email to notion", "capabilityId": "integrations.email_notion" },
+  { "phrase": "save first 3 emails to notion", "capabilityId": "integrations.email_notion" },
+  { "phrase": "save travel from email 2 to notion", "capabilityId": "integrations.email_notion" },
+  { "phrase": "save expense from the email about netflix to notion", "capabilityId": "integrations.email_notion" }
+]

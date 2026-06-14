@@ -1,0 +1,7 @@
+[
+  { "phrase": "show weekly expenses", "capabilityId": "memory.life" },
+  { "phrase": "list monthly expenses", "capabilityId": "memory.life" },
+  { "phrase": "show travel checklist", "capabilityId": "memory.life" },
+  { "phrase": "show trip timeline", "capabilityId": "memory.life" },
+  { "phrase": "how much did i spend on food this month", "capabilityId": "finance.readonly" }
+]

@@ -1,0 +1,5 @@
+[
+  { "phrase": "open chrome then read my screen", "capabilityId": "supervisor.delegate" },
+  { "phrase": "launch study setup then search vault for notes", "capabilityId": "supervisor.delegate" },
+  { "phrase": "open notepad then save this to notion", "capabilityId": "supervisor.delegate" }
+]

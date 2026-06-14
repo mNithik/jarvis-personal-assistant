@@ -3,13 +3,25 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "tauri": "tauri"
+    "dev": "npm --workspace @jarvis/desktop run dev",
+    "build": "npm --workspace @jarvis/desktop run build",
+    "preview": "npm --workspace @jarvis/desktop run preview",
+    "tauri": "tauri dev --config apps/desktop/src-tauri/tauri.conf.json",
+    "tauri:build": "npm run tauri:build --workspace @jarvis/desktop",
+    "typecheck": "npm exec tsc --noEmit && npm --workspace @jarvis/types run typecheck",
+    "dev:desktop": "npm --workspace @jarvis/desktop run dev",
+    "build:desktop": "npm --workspace @jarvis/desktop run build",
+    "tauri:desktop": "npm run tauri",
+    "clean:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/clean-build-artifacts.ps1",
+    "setup:lean-dev": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-lean-dev.ps1"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "@tauri-apps/api": "^2.6.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

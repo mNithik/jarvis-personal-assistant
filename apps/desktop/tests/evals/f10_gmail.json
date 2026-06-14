@@ -1,0 +1,8 @@
+[
+  { "phrase": "check my email", "capabilityId": "integrations.google" },
+  { "phrase": "list unread emails", "capabilityId": "integrations.google" },
+  { "phrase": "search gmail for invoices", "capabilityId": "integrations.google" },
+  { "phrase": "read this email", "capabilityId": "integrations.google" },
+  { "phrase": "read email 2", "capabilityId": "integrations.google" },
+  { "phrase": "read the email about flight confirmation", "capabilityId": "integrations.google" }
+]

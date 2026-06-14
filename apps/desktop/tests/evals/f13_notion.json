@@ -1,0 +1,5 @@
+[
+  { "phrase": "list my notes", "capabilityId": "integrations.notion" },
+  { "phrase": "make a note to call mom", "capabilityId": "integrations.notion" },
+  { "phrase": "search notion for budget", "capabilityId": "integrations.notion" }
+]
