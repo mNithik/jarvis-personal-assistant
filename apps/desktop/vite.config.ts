@@ -11,7 +11,8 @@ export default defineConfig({
   },
   envPrefix: ["VITE_", "TAURI_"],
   build: {
-    target: ["es2020", "chrome105", "safari13"],
+    // es2020/chrome105 breaks @huggingface/transformers (BigInt literals in deps)
+    target: "esnext",
     minify: !process.env.TAURI_DEBUG ? "esbuild" : false,
     sourcemap: !!process.env.TAURI_DEBUG,
   },
