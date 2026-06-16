@@ -1,0 +1,23 @@
+[
+  {
+    "command": "list desktop schedules",
+    "capabilityId": "automation.workflow",
+    "fixture": "with_schedule",
+    "expectSuccess": true,
+    "expectReplyContains": "desktop schedules"
+  },
+  {
+    "command": "show schedules",
+    "capabilityId": "automation.workflow",
+    "fixture": "default",
+    "expectSuccess": true,
+    "expectReplyContains": "no desktop schedules"
+  },
+  {
+    "command": "desktop schedules",
+    "capabilityId": "automation.workflow",
+    "fixture": "with_schedule",
+    "expectSuccess": true,
+    "expectReplyContains": "eval project"
+  }
+]

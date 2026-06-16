@@ -1,5 +1,6 @@
 use super::{Agent, AgentContext, StepResult};
 use crate::commands::desktop::open_named_target;
+use crate::db::automation_store::find_saved_workflow_by_name;
 use crate::db::{find_routine_with_steps, RoutineStepRecord};
 use crate::gateway::types::GatewayAgentKind;
 
@@ -16,6 +17,9 @@ impl Agent for AutomationAgent {
         }
 
         let normalized = ctx.command.trim().to_lowercase();
+        if normalized.contains("schedule") {
+            return crate::agents::ocr_watch::run_desktop_schedules_terminal(ctx);
+        }
         if normalized.starts_with("run workflow ") || normalized.starts_with("start workflow ") {
             return run_saved_workflow(ctx);
         }
@@ -51,12 +55,43 @@ fn run_saved_workflow(ctx: &AgentContext) -> Result<StepResult, String> {
         )));
     }
 
-    Ok(StepResult::handoff(
-        "automation.workflow",
-        "run_workflow",
-        Some(name.clone()),
-        format!("Automation agent will run workflow \"{name}\" via the desktop bridge."),
-    ))
+    if let Some(workflow) = find_saved_workflow_by_name(&ctx.db_path, &name)? {
+        let mut executed = Vec::new();
+        for (index, step) in workflow.steps.iter().enumerate() {
+            match execute_workflow_step(&ctx.db_path, step) {
+                Ok(label) => executed.push(label),
+                Err(error) => {
+                    return Ok(StepResult::failed(format!(
+                        "Workflow \"{}\" failed on step {}: {error}",
+                        workflow.name,
+                        index + 1
+                    )));
+                }
+            }
+        }
+        return Ok(StepResult::ok(format!(
+            "Automation ran workflow \"{}\" in Rust ({} steps): {}",
+            workflow.name,
+            executed.len(),
+            executed.join("; ")
+        )));
+    }
+
+    Ok(StepResult::failed(format!(
+        "No saved workflow named \"{name}\" was found in SQLite."
+    )))
+}
+
+fn execute_workflow_step(db_path: &std::path::Path, step: &str) -> Result<String, String> {
+    let trimmed = step.trim();
+    if trimmed.is_empty() {
+        return Err("Workflow step was empty.".to_string());
+    }
+    let lower = trimmed.to_lowercase();
+    if let Some(target) = lower.strip_prefix("open ") {
+        return open_named_target(db_path, target.trim());
+    }
+    open_named_target(db_path, trimmed)
 }
 
 fn execute_routine_step(db_path: &std::path::Path, step: &RoutineStepRecord) -> Result<String, String> {

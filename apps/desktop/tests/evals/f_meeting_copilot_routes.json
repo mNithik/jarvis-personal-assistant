@@ -1,0 +1,7 @@
+[
+  { "phrase": "prep for my next meeting", "capabilityId": "memory.life" },
+  { "phrase": "prep me for my next meeting", "capabilityId": "memory.life" },
+  { "phrase": "what do I need for the standup", "capabilityId": "memory.life" },
+  { "phrase": "show meeting prep", "capabilityId": "memory.life" },
+  { "phrase": "what is on my calendar today", "capabilityId": "integrations.calendar" }
+]

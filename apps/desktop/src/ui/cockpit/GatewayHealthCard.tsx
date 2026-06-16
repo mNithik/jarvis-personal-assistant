@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 
-import type { GatewayConfig, GatewayEvent, LocalTurnApiStatus } from "../../services/jarvisApi";
+import type { GatewayConfig, GatewayEvent, JarvisServiceStatus, LocalTurnApiStatus } from "../../services/jarvisApi";
 import {
   gatewayMcpCallTool,
+  getJarvisServiceStatus,
   getLocalTurnApiStatus,
   getTriggerQueueStatus,
 } from "../../services/jarvisApi";
@@ -23,24 +24,28 @@ export default function GatewayHealthCard({ config, trace }: GatewayHealthCardPr
   const [mcpProbe, setMcpProbe] = useState<string | null>(null);
   const [testingMcp, setTestingMcp] = useState(false);
   const [apiStatus, setApiStatus] = useState<LocalTurnApiStatus | null>(null);
+  const [serviceStatus, setServiceStatus] = useState<JarvisServiceStatus | null>(null);
   const [pendingTriggers, setPendingTriggers] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const refresh = async () => {
       try {
-        const [api, pending] = await Promise.all([
+        const [api, pending, service] = await Promise.all([
           getLocalTurnApiStatus(),
           getTriggerQueueStatus(),
+          getJarvisServiceStatus(),
         ]);
         if (!cancelled) {
           setApiStatus(api);
           setPendingTriggers(pending);
+          setServiceStatus(service);
         }
       } catch {
         if (!cancelled) {
           setApiStatus(null);
           setPendingTriggers(null);
+          setServiceStatus(null);
         }
       }
     };
@@ -63,6 +68,22 @@ export default function GatewayHealthCard({ config, trace }: GatewayHealthCardPr
         label: "Gateway enabled",
         status: config.enabled ? "ok" : "warn",
         detail: config.enabled ? "Takeover active" : "Legacy router only",
+      },
+      {
+        id: "service",
+        label: "jarvis-service",
+        status:
+          serviceStatus === null
+            ? "unknown"
+            : serviceStatus.running
+              ? "ok"
+              : "warn",
+        detail:
+          serviceStatus === null
+            ? "Unknown"
+            : serviceStatus.running
+              ? `Running${serviceStatus.updatedAt ? ` · ${serviceStatus.updatedAt}` : ""}`
+              : "Stopped — install with install-jarvis-service.ps1",
       },
       {
         id: "triggers",
@@ -146,7 +167,7 @@ export default function GatewayHealthCard({ config, trace }: GatewayHealthCardPr
     }
 
     return rows;
-  }, [apiStatus, config, mcpProbe, pendingTriggers, trace]);
+  }, [apiStatus, config, mcpProbe, pendingTriggers, serviceStatus, trace]);
 
   useEffect(() => {
     setMcpProbe(null);

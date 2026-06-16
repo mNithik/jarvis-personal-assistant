@@ -7,6 +7,7 @@ use serde_json::{json, Value};
 
 use super::config::GatewayConfig;
 use super::mcp::McpHostEntry;
+use crate::env_local;
 
 static MCP_CALL_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -78,11 +79,20 @@ fn call_external_stdio_tool(
         return Err("MCP host command is empty.".to_string());
     }
 
-    let mut child = Command::new(parts[0])
+    let mut command = Command::new(parts[0]);
+    command
         .args(&parts[1..])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    if host.id.starts_with("github") {
+        env_local::init_local_env();
+        if let Some(token) = env_local::provider_api_key("github") {
+            command.env("GITHUB_PERSONAL_ACCESS_TOKEN", token);
+        }
+    }
+    apply_host_env(&host.id, &host.env, &mut command);
+    let mut child = command
         .spawn()
         .map_err(|error| format!("Failed to spawn MCP host '{}': {error}", host.id))?;
 
@@ -168,6 +178,47 @@ fn call_external_stdio_tool(
         .get("result")
         .map(|result| result.to_string())
         .ok_or_else(|| "MCP tool response missing result.".to_string())
+}
+
+fn apply_host_env(host_id: &str, env: &std::collections::HashMap<String, String>, command: &mut Command) {
+    for (key, value) in env {
+        if !value.trim().is_empty() {
+            command.env(key, value);
+        }
+    }
+    env_local::init_local_env();
+    if host_id.starts_with("jira") {
+        for (key, env_key) in [
+            ("JIRA_API_TOKEN", "JIRA_API_TOKEN"),
+            ("JIRA_BASE_URL", "JIRA_URL"),
+            ("JIRA_EMAIL", "JIRA_EMAIL"),
+        ] {
+            if let Ok(value) = std::env::var(env_key) {
+                let trimmed = value.trim();
+                if !trimmed.is_empty() {
+                    command.env(key, trimmed);
+                }
+            }
+        }
+    }
+    if host_id.starts_with("huggingface") || host_id.contains("hf") {
+        if let Some(token) = env_local::provider_api_key("huggingface") {
+            command.env("HF_TOKEN", token);
+        }
+    }
+    if host_id.starts_with("zapier") {
+        if let Ok(token) = std::env::var("ZAPIER_MCP_TOKEN").or_else(|_| std::env::var("ZAPIER_API_KEY")) {
+            let trimmed = token.trim();
+            if !trimmed.is_empty() {
+                command.env("ZAPIER_MCP_TOKEN", trimmed);
+            }
+        }
+    }
+    if host_id.starts_with("obsidian-rest") {
+        if let Some(key) = env.get("OBSIDIAN_API_KEY") {
+            command.env("OBSIDIAN_API_KEY", key);
+        }
+    }
 }
 
 static HOST_CACHE: Mutex<Option<Vec<McpHostEntry>>> = Mutex::new(None);

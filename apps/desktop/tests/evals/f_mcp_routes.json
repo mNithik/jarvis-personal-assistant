@@ -1,5 +1,13 @@
 [
   { "phrase": "mcp obsidian-local search_notes", "capabilityId": "integrations.mcp.host" },
   { "phrase": "mcp jarvis-builtin get_routines", "capabilityId": "integrations.mcp.host" },
-  { "phrase": "mcp github create_issue", "capabilityId": "integrations.mcp.host" }
+  { "phrase": "mcp github create_issue", "capabilityId": "integrations.mcp.host" },
+  { "phrase": "list github issues", "capabilityId": "integrations.mcp.github" },
+  { "phrase": "open prs on github", "capabilityId": "integrations.mcp.github" },
+  { "phrase": "search my github repos", "capabilityId": "integrations.mcp.github" },
+  { "phrase": "list jira issues", "capabilityId": "integrations.mcp.jira" },
+  { "phrase": "my jira tickets", "capabilityId": "integrations.mcp.jira" },
+  { "phrase": "search huggingface models", "capabilityId": "integrations.mcp.huggingface" },
+  { "phrase": "list my zaps", "capabilityId": "integrations.mcp.zapier" },
+  { "phrase": "show backlinks for daily note", "capabilityId": "memory.vault" }
 ]

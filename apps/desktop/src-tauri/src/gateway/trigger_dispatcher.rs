@@ -29,6 +29,8 @@ pub fn process_trigger_queue(
         "morning_brief" => dispatch_morning_brief(app, config),
         "ocr_watch" => dispatch_ocr_watch(app, &event.payload),
         "channel_turn" => dispatch_channel_turn(app, db_path, config, &event.payload),
+        "gmail_label_inbox" => dispatch_gmail_label_inbox(app, db_path, config, &event.payload),
+        "calendar_event_soon" => dispatch_calendar_event_soon(app, db_path, config, &event.payload),
         other => {
             let _ = complete_trigger(&conn, &event.id, false);
             return Err(format!("Unknown trigger kind: {other}"));
@@ -148,6 +150,144 @@ fn dispatch_channel_turn(
     Ok(response.result.reply.chars().take(120).collect())
 }
 
+fn dispatch_gmail_label_inbox(
+    app: &AppHandle,
+    db_path: &Path,
+    config: &GatewayConfig,
+    payload: &str,
+) -> Result<String, String> {
+    let parsed: serde_json::Value =
+        serde_json::from_str(payload).unwrap_or_else(|_| serde_json::json!({}));
+    let command = parsed
+        .get("command")
+        .and_then(|value| value.as_str())
+        .unwrap_or("scan expense emails in inbox")
+        .trim()
+        .to_string();
+    if command.is_empty() {
+        return Err("gmail_label_inbox trigger needs a command in payload.".to_string());
+    }
+
+    let gateway_state = app
+        .try_state::<GatewayState>()
+        .ok_or_else(|| "Gateway state unavailable".to_string())?;
+    let app_state = app
+        .try_state::<crate::AppState>()
+        .ok_or_else(|| "App state unavailable".to_string())?;
+
+    let session_id = format!(
+        "trigger-gmail-{}",
+        parsed
+            .get("label")
+            .and_then(|value| value.as_str())
+            .unwrap_or("inbox")
+    );
+    let turn_id = gateway_state.next_turn_id(&session_id)?;
+    let request = TurnRequest {
+        session_id: Some(session_id.clone()),
+        command,
+        source: Some(TurnSource::Automation),
+        idempotency_key: None,
+    };
+
+    let router_context = crate::gateway::router::RouterContext {
+        db_path: Some(db_path.to_path_buf()),
+        config: config.clone(),
+    };
+
+    let mut bus = gateway_state.bus.lock().map_err(|error| error.to_string())?;
+    let mut escalation = gateway_state
+        .escalation
+        .lock()
+        .map_err(|error| error.to_string())?;
+
+    let response = GatewayOrchestrator::run_turn(
+        request,
+        turn_id,
+        &session_id,
+        config,
+        &router_context,
+        &mut bus,
+        None,
+        Some(crate::gateway::orchestrator::TurnExecutionEnv {
+            db_path: &app_state.db_path,
+            app_data_dir: &app_state.app_data_dir,
+            escalation: &mut escalation,
+        }),
+    );
+
+    let _ = app.emit("gateway-turn-complete", &response);
+    Ok(response.result.reply.chars().take(120).collect())
+}
+
+fn dispatch_calendar_event_soon(
+    app: &AppHandle,
+    db_path: &Path,
+    config: &GatewayConfig,
+    payload: &str,
+) -> Result<String, String> {
+    let parsed: serde_json::Value =
+        serde_json::from_str(payload).unwrap_or_else(|_| serde_json::json!({}));
+    let command = parsed
+        .get("command")
+        .and_then(|value| value.as_str())
+        .unwrap_or("prep me for my next meeting")
+        .trim()
+        .to_string();
+    if command.is_empty() {
+        return Err("calendar_event_soon trigger needs a command in payload.".to_string());
+    }
+
+    let gateway_state = app
+        .try_state::<GatewayState>()
+        .ok_or_else(|| "Gateway state unavailable".to_string())?;
+    let app_state = app
+        .try_state::<crate::AppState>()
+        .ok_or_else(|| "App state unavailable".to_string())?;
+
+    let event_id = parsed
+        .get("eventId")
+        .and_then(|value| value.as_str())
+        .unwrap_or("soon");
+    let session_id = format!("trigger-meeting-{event_id}");
+    let turn_id = gateway_state.next_turn_id(&session_id)?;
+    let request = TurnRequest {
+        session_id: Some(session_id.clone()),
+        command,
+        source: Some(TurnSource::Automation),
+        idempotency_key: None,
+    };
+
+    let router_context = crate::gateway::router::RouterContext {
+        db_path: Some(db_path.to_path_buf()),
+        config: config.clone(),
+    };
+
+    let mut bus = gateway_state.bus.lock().map_err(|error| error.to_string())?;
+    let mut escalation = gateway_state
+        .escalation
+        .lock()
+        .map_err(|error| error.to_string())?;
+
+    let response = GatewayOrchestrator::run_turn(
+        request,
+        turn_id,
+        &session_id,
+        config,
+        &router_context,
+        &mut bus,
+        None,
+        Some(crate::gateway::orchestrator::TurnExecutionEnv {
+            db_path: &app_state.db_path,
+            app_data_dir: &app_state.app_data_dir,
+            escalation: &mut escalation,
+        }),
+    );
+
+    let _ = app.emit("gateway-turn-complete", &response);
+    Ok(response.result.reply.chars().take(120).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -157,18 +297,15 @@ mod tests {
     fn unknown_trigger_kind_fails() {
         let dir = std::env::temp_dir().join(format!(
             "jarvis-trigger-dispatch-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos())
-                .unwrap_or(0)
+            std::process::id()
         ));
         std::fs::create_dir_all(&dir).expect("dir");
         let db_path = dir.join("test.db");
         let conn = rusqlite::Connection::open(&db_path).expect("db");
+        crate::migrations::apply_pending_migrations(&conn, &db_path).expect("migrate");
         enqueue_trigger(&conn, "unknown_kind", "{}").expect("enqueue");
         drop(conn);
 
-        // Without AppHandle we only test queue claim/complete via trigger_queue tests.
         let conn = rusqlite::Connection::open(&db_path).expect("db");
         let claimed = claim_next_trigger(&conn).expect("claim").expect("event");
         assert_eq!(claimed.kind, "unknown_kind");

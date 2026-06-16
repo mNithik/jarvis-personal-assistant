@@ -16,9 +16,9 @@ export default function HomeSurface({
   return (
     <>
       {hero}
+      {appLaunchpad}
       {dataSphere}
       {shellSummary}
-      {appLaunchpad}
     </>
   );
 }

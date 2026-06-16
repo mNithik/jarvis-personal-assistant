@@ -1,0 +1,30 @@
+[
+  {
+    "command": "list pdfs",
+    "capabilityId": "command.files",
+    "fixture": "default",
+    "expectSuccess": true,
+    "expectReplyContains": "PDF"
+  },
+  {
+    "command": "search pdfs for jarvis-eval-missing-pdf",
+    "capabilityId": "command.files",
+    "fixture": "default",
+    "expectSuccess": true,
+    "expectReplyContains": "PDF search"
+  },
+  {
+    "command": "open pdf about jarvis-eval-not-a-real-document-xyz",
+    "capabilityId": "command.files",
+    "fixture": "default",
+    "expectSuccess": false,
+    "expectReplyContains": "No PDF matched"
+  },
+  {
+    "command": "summarize pdf about jarvis-eval-not-a-real-document-xyz",
+    "capabilityId": "command.files",
+    "fixture": "default",
+    "expectSuccess": false,
+    "expectReplyContains": "No PDF matched"
+  }
+]

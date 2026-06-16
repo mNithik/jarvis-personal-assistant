@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import type { GatewayConfig } from "../../services/jarvisApi";
+import { testMcpHostConnection } from "../../services/jarvisApi";
 import { findMcpPreset, presetToHostEntry } from "../../features/gateway/mcpPresets";
 
 type ObsidianSetupWizardProps = {
@@ -29,6 +30,10 @@ export default function ObsidianSetupWizard({ config, saving, onPersist }: Obsid
       const preset = findMcpPreset(mode === "rest" ? "obsidian-rest" : "obsidian-graph");
       if (preset) {
         const entry = presetToHostEntry(preset);
+        const trimmedKey = apiKey.trim();
+        if (trimmedKey) {
+          entry.env = { ...(entry.env ?? {}), OBSIDIAN_API_KEY: trimmedKey };
+        }
         const hosts = next.mcpHosts.filter((host) => host.id !== entry.id);
         hosts.push(entry);
         next.mcpHosts = hosts;
@@ -60,9 +65,22 @@ export default function ObsidianSetupWizard({ config, saving, onPersist }: Obsid
       </label>
       {mode !== "filesystem" ? (
         <label className="gateway-field">
-          <span>Obsidian API key (optional, stored in env for MCP host)</span>
+          <span>Obsidian API key (optional, stored on MCP host env)</span>
           <input value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="Paste from Local REST API plugin" disabled={saving} />
         </label>
+      ) : null}
+      {mode === "rest" ? (
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={saving}
+          onClick={() => {
+            applySetup();
+            void testMcpHostConnection("obsidian-rest");
+          }}
+        >
+          Save and test REST connection
+        </button>
       ) : null}
       <button className="secondary-button" type="button" disabled={saving} onClick={applySetup}>
         Save Obsidian setup

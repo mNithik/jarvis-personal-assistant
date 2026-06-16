@@ -1,0 +1,23 @@
+[
+  {
+    "command": "show ocr watches",
+    "capabilityId": "integrations.ocr_notion",
+    "fixture": "default",
+    "expectSuccess": true,
+    "expectReplyContains": "ocr watches"
+  },
+  {
+    "command": "pause ocr watches",
+    "capabilityId": "integrations.ocr_notion",
+    "fixture": "with_watch",
+    "expectSuccess": true,
+    "expectReplyContains": "paused"
+  },
+  {
+    "command": "stop ocr watch",
+    "capabilityId": "integrations.ocr_notion",
+    "fixture": "with_watch",
+    "expectSuccess": true,
+    "expectReplyContains": "stopped"
+  }
+]

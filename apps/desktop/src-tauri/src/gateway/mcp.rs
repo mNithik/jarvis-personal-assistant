@@ -33,6 +33,8 @@ pub struct McpHostEntry {
     pub command: Option<String>,
     pub read_only: bool,
     pub external: bool,
+    #[serde(default)]
+    pub env: std::collections::HashMap<String, String>,
 }
 
 pub struct McpHostRegistry {
@@ -50,6 +52,7 @@ impl Default for McpHostRegistry {
                 command: None,
                 read_only: true,
                 external: false,
+                env: std::collections::HashMap::new(),
             }],
             external: Vec::new(),
         }
@@ -130,6 +133,7 @@ mod tests {
             command: Some("obsidian-mcp".to_string()),
             read_only: true,
             external: true,
+            env: std::collections::HashMap::new(),
         }]);
 
         assert!(hosts.iter().any(|host| host.id == "jarvis-builtin"));

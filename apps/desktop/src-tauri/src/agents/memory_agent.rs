@@ -22,6 +22,7 @@ impl Agent for MemoryAgent {
 
         let knowledge = knowledge_router::recall_context_with_config(
             &ctx.db_path,
+            Some(&ctx.app_data_dir),
             Some(&ctx.config),
             &ctx.command,
             3,
@@ -33,7 +34,7 @@ impl Agent for MemoryAgent {
         };
 
         if brief::is_daily_brief_command(&ctx.command) {
-            let composed = brief::compose_daily_brief_v2(&ctx.db_path, Some(&ctx.config))?;
+            let composed = brief::compose_daily_brief_v2(&ctx.db_path, Some(&ctx.app_data_dir), Some(&ctx.config))?;
             if ctx.config.features.calendar || ctx.config.features.gmail {
                 return Ok(StepResult::handoff(
                     "memory.life",
@@ -47,13 +48,74 @@ impl Agent for MemoryAgent {
             return Ok(StepResult::ok(format!("{knowledge_prefix}{composed}")));
         }
 
+        if matches!(
+            memory::parse_memory_command(&ctx.command),
+            Some(memory::MemoryAction::MeetingCopilot)
+        ) {
+            return run_meeting_copilot(ctx, &knowledge_prefix);
+        }
+
         memory::run_memory_action(&ctx.db_path, &ctx.command).map(|reply| {
             StepResult::ok(format!("{knowledge_prefix}{reply}"))
         })
     }
 }
 
+fn run_meeting_copilot(ctx: &AgentContext, knowledge_prefix: &str) -> Result<StepResult, String> {
+    let (summary, start) = if ctx.config.features.calendar {
+        match crate::integrations::google::get_session_token("calendar") {
+            Ok(token) => {
+                match crate::integrations::google::calendar::find_event_starting_within(&token, 60) {
+                    Ok(Some(event)) => (Some(event.summary), event.start),
+                    Ok(None) => (None, None),
+                    Err(error) => {
+                        return Ok(StepResult::failed(format!(
+                            "I could not read your calendar for meeting prep: {error}"
+                        )));
+                    }
+                }
+            }
+            Err(_) => {
+                return Ok(StepResult::failed(
+                    "Google Calendar is not connected yet. Connect Google Calendar in Settings first.",
+                ));
+            }
+        }
+    } else {
+        (None, None)
+    };
+
+    let reply = memory::meeting::compose_meeting_copilot_reply(
+        &ctx.db_path,
+        summary.as_deref(),
+        start.as_deref(),
+    )?;
+    Ok(StepResult::ok(format!("{knowledge_prefix}{reply}")))
+}
+
 fn run_vault_search(ctx: &AgentContext) -> Result<StepResult, String> {
+    if let Some(note) = knowledge_router::parse_backlinks_query(&ctx.command) {
+        let host_id = ctx
+            .config
+            .knowledge
+            .obsidian_host_id
+            .as_deref()
+            .filter(|value| !value.is_empty())
+            .unwrap_or("obsidian-graph");
+        match knowledge_router::fetch_obsidian_backlinks(&ctx.config, host_id, &note) {
+            Ok(reply) => {
+                return Ok(StepResult::ok(format!(
+                    "Backlinks for \"{note}\":\n{reply}"
+                )));
+            }
+            Err(error) => {
+                return Ok(StepResult::failed(format!(
+                    "Could not fetch Obsidian backlinks for \"{note}\": {error}"
+                )));
+            }
+        }
+    }
+
     let query = knowledge_router::parse_vault_search_query(&ctx.command)
         .unwrap_or_else(|| ctx.command.trim().to_string());
     if query.is_empty() {
@@ -62,6 +124,7 @@ fn run_vault_search(ctx: &AgentContext) -> Result<StepResult, String> {
 
     let bundle = knowledge_router::recall_context_with_config(
         &ctx.db_path,
+        Some(&ctx.app_data_dir),
         Some(&ctx.config),
         &format!("search vault for {query}"),
         5,

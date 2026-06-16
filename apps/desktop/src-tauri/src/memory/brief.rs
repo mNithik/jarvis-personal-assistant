@@ -8,6 +8,7 @@ use super::{
 
 pub fn compose_daily_brief_v2(
     db_path: &Path,
+    app_data_dir: Option<&Path>,
     config: Option<&GatewayConfig>,
 ) -> Result<String, String> {
     let mut sections = Vec::new();
@@ -46,6 +47,7 @@ pub fn compose_daily_brief_v2(
 
     let knowledge = knowledge_router::recall_context_with_config(
         db_path,
+        app_data_dir,
         config,
         "search vault for today priorities",
         3,
@@ -89,7 +91,7 @@ mod tests {
                 .unwrap_or(0)
         ));
         db::init_database(&db_path).expect("init");
-        let brief = compose_daily_brief_v2(&db_path, None).expect("brief");
+        let brief = compose_daily_brief_v2(&db_path, None, None).expect("brief");
         assert!(brief.contains("Daily brief"));
         let _ = std::fs::remove_file(db_path);
     }

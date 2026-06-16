@@ -38,6 +38,10 @@ pub fn spawn_proactive_scheduler(app: AppHandle) {
                 continue;
             }
 
+            if crate::gateway::runtime::headless::service_is_running(gateway_state.app_data_dir()) {
+                continue;
+            }
+
             let now = chrono::Local::now();
             let minute_key = now.hour() * 60 + now.minute();
             let day_key = now.format("%Y-%m-%d").to_string();

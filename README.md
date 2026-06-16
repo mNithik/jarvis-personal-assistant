@@ -16,7 +16,9 @@ copy .env.example apps\desktop\.env   # add API keys as needed
 npm run tauri dev
 ```
 
-- **Gateway is off by default** — enable in Settings → Agent gateway, or use “Apply easy mode (dry-run)”.
+- **Gateway is on for new installs** — disable in Settings → Agent gateway if you need legacy-only routing, or use “Apply easy mode (dry-run)”.
+- **jarvis-service** sidecar runs proactive heartbeat, trigger queue, Discord, and Telegram when installed (`tools/install-jarvis-service.ps1`).
+- **Discord** uses Gateway WebSocket ingress (not long-poll).
 - **Free disk on PC:** `npm run clean:build` removes Rust `target/` (~11 GB). One-time: `npm run setup:lean-dev`.
 - **Releases:** push tag `v0.1.x` → GitHub Actions builds the Windows installer in the cloud.
 

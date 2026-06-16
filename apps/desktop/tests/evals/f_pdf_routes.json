@@ -1,0 +1,6 @@
+[
+  { "phrase": "list pdfs", "capabilityId": "command.files" },
+  { "phrase": "search pdfs for invoice", "capabilityId": "command.files" },
+  { "phrase": "open pdf 1", "capabilityId": "command.files" },
+  { "phrase": "summarize pdf 1", "capabilityId": "command.files" }
+]

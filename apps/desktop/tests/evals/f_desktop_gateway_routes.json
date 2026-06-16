@@ -1,0 +1,10 @@
+[
+  { "phrase": "open chrome", "capabilityId": "command.desktop" },
+  { "phrase": "open explorer", "capabilityId": "command.desktop" },
+  { "phrase": "focus chrome", "capabilityId": "command.desktop" },
+  { "phrase": "read my screen", "capabilityId": "vision.ocr" },
+  { "phrase": "take a screenshot", "capabilityId": "vision.ocr" },
+  { "phrase": "watch my screen", "capabilityId": "integrations.ocr_notion" },
+  { "phrase": "stop ocr watch", "capabilityId": "integrations.ocr_notion" },
+  { "phrase": "show ocr watches", "capabilityId": "integrations.ocr_notion" }
+]

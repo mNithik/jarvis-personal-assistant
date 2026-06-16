@@ -1,3 +1,5 @@
+import { saveGoogleSessionToken } from "./jarvisApi";
+
 const GOOGLE_OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events.owned";
 
@@ -141,6 +143,9 @@ export function completeGoogleRedirectAuthorizationIfNeeded() {
     saveStoredGoogleSession(pendingAuth.service, {
       accessToken,
       expiresAt: Date.now() + expiresIn * 1000,
+    });
+    void saveGoogleSessionToken(pendingAuth.service, accessToken).catch(() => {
+      // Keyring write is best-effort; session storage remains the UI source of truth.
     });
   }
 

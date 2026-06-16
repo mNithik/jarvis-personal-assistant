@@ -1,8 +1,8 @@
 use std::path::Path;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrainingTurnRecord {
     pub phrase: String,
@@ -12,6 +12,24 @@ pub struct TrainingTurnRecord {
     pub success: bool,
     pub latency_ms: u64,
     pub exported_at: String,
+}
+
+pub fn load_training_records(export_path: &Path) -> Result<Vec<TrainingTurnRecord>, String> {
+    if !export_path.exists() {
+        return Ok(Vec::new());
+    }
+    let raw = std::fs::read_to_string(export_path).map_err(|error| error.to_string())?;
+    let mut records = Vec::new();
+    for line in raw.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let record: TrainingTurnRecord =
+            serde_json::from_str(trimmed).map_err(|error| error.to_string())?;
+        records.push(record);
+    }
+    Ok(records)
 }
 
 pub fn append_training_record(

@@ -8,10 +8,29 @@ use crate::db::get_ollama_config;
 use super::l0::{
     build_route, classify_sensitivity, normalize_command, CapabilityRoute,
 };
+use crate::gateway::config::GatewayConfig;
 use crate::gateway::types::{GatewayAgentKind, GatewayModelTier, GatewayRoute, RouteLevel};
 
-pub fn route_l2(command: &str, db_path: &Path) -> Option<GatewayRoute> {
-    let (base_url, model_name) = ollama_config(db_path)?;
+pub fn route_l2(command: &str, db_path: &Path, config: &GatewayConfig) -> Option<GatewayRoute> {
+    let (base_url, fallback_model) = ollama_config(db_path)?;
+    let mut models = vec![fallback_model];
+    if config.routing.jarvis_router_enabled {
+        models.insert(0, "jarvis-router".to_string());
+    }
+
+    for model_name in models {
+        if let Some(route) = try_l2_route(command, &base_url, &model_name) {
+            return Some(route);
+        }
+    }
+    None
+}
+
+fn try_l2_route(
+    command: &str,
+    base_url: &str,
+    model_name: &str,
+) -> Option<GatewayRoute> {
     let normalized = normalize_command(command);
     let sensitivity = classify_sensitivity(&normalized);
     let prompt = format!(
@@ -21,7 +40,7 @@ Allowed capabilityId values: command.study, vision.ocr, integrations.spotify, in
 Command: {normalized}"
     );
 
-    let response = ollama_generate_json(&base_url, &model_name, &prompt).ok()?;
+    let response = ollama_generate_json(base_url, model_name, &prompt).ok()?;
     let capability_id = response
         .get("capabilityId")
         .and_then(|value| value.as_str())?;

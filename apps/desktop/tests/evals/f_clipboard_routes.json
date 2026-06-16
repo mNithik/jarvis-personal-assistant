@@ -1,0 +1,5 @@
+[
+  { "phrase": "read clipboard", "capabilityId": "command.clipboard" },
+  { "phrase": "copy hello to clipboard", "capabilityId": "command.clipboard" },
+  { "phrase": "show clipboard", "capabilityId": "command.clipboard" }
+]

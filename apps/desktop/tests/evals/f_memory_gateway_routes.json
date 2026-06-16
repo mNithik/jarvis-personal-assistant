@@ -1,0 +1,10 @@
+[
+  { "phrase": "when is mom's birthday", "capabilityId": "memory.life" },
+  { "phrase": "list upcoming birthdays", "capabilityId": "memory.life" },
+  { "phrase": "show travel checklist", "capabilityId": "memory.life" },
+  { "phrase": "weekly expenses", "capabilityId": "memory.life" },
+  { "phrase": "make my daily brief", "capabilityId": "memory.life" },
+  { "phrase": "delayed packages", "capabilityId": "memory.life" },
+  { "phrase": "meeting prep", "capabilityId": "memory.life" },
+  { "phrase": "search vault for project x", "capabilityId": "memory.vault" }
+]

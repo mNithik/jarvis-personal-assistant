@@ -78,6 +78,7 @@ export function presetToHostEntry(preset: McpHostPreset): McpHostEntry {
     command: preset.command,
     readOnly: preset.readOnly,
     external: preset.external,
+    env: {},
   };
 }
 

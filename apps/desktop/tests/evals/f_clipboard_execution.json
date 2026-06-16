@@ -1,0 +1,30 @@
+[
+  {
+    "command": "read clipboard",
+    "capabilityId": "command.clipboard",
+    "fixture": "default",
+    "expectSuccess": true,
+    "expectReplyContains": "Clipboard"
+  },
+  {
+    "command": "copy jarvis-eval-clipboard to clipboard",
+    "capabilityId": "command.clipboard",
+    "fixture": "default",
+    "expectSuccess": true,
+    "expectReplyContains": "Copied"
+  },
+  {
+    "command": "show clipboard",
+    "capabilityId": "command.clipboard",
+    "fixture": "default",
+    "expectSuccess": true,
+    "expectReplyContains": "Clipboard"
+  },
+  {
+    "command": "paste from clipboard",
+    "capabilityId": "command.clipboard",
+    "fixture": "default",
+    "expectSuccess": false,
+    "expectReplyContains": "Clipboard commands"
+  }
+]

@@ -57,6 +57,11 @@ fn provider_env_keys(provider: &str) -> &'static [&'static str] {
         "google" | "google_calendar" | "gmail" => {
             &["JARVIS_GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_ID"]
         }
+        "github" => &[
+            "JARVIS_GITHUB_TOKEN",
+            "GITHUB_PERSONAL_ACCESS_TOKEN",
+            "GITHUB_TOKEN",
+        ],
         _ => &[],
     }
 }

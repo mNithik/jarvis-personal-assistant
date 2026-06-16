@@ -9,7 +9,7 @@ use crate::providers::escalation::EscalationTracker;
 
 use super::{
     bus::EventBus,
-    config::{load_gateway_config, save_gateway_config, GatewayConfig},
+    config::{ensure_default_gateway_config, load_gateway_config, save_gateway_config, GatewayConfig},
     orchestrator::GatewayTurnResponse,
     types::{ApprovalRequest, GatewayEvent},
 };
@@ -41,7 +41,7 @@ struct IdempotencyCacheEntry {
 
 impl GatewayState {
     pub fn new(app_data_dir: PathBuf) -> Self {
-        let config = load_gateway_config(&app_data_dir);
+        let config = ensure_default_gateway_config(&app_data_dir);
         Self {
             config: Mutex::new(config),
             app_data_dir,

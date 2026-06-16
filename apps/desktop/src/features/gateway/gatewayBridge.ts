@@ -15,7 +15,6 @@ import type { SpotifyPlaybackState } from "../../services/spotify";
 
 import type { CommandIntent } from "../command/jarvisCommandTypes";
 import { builtInBrowserAliases, canonicalHostRoots } from "../command/jarvisCommandTypes";
-import { parseCalendarCommandIntent } from "../command/parsers/explicitIntent";
 import { parseExplicitCommandIntent } from "../command/parsers/explicitIntent";
 import { isStudyAppsCommand } from "../command/parsers/desktopIntentUtils";
 import { normalizeControlCommand } from "../semantic/intentRanking";
@@ -243,8 +242,40 @@ export function isCalendarGatewayCommand(command: string) {
   );
 }
 
+export function isOcrWatchGatewayCommand(command: string) {
+  const normalized = command.trim().toLowerCase();
+  if (
+    normalized === "stop watching screen" ||
+    normalized === "stop screen watch" ||
+    normalized === "stop ocr watch" ||
+    normalized === "pause ocr watches" ||
+    normalized === "resume ocr watches" ||
+    normalized === "show ocr watches" ||
+    normalized === "show screen watches" ||
+    normalized === "show watch dashboard" ||
+    normalized === "show ocr history" ||
+    normalized.startsWith("search ocr history")
+  ) {
+    return true;
+  }
+  return normalized.startsWith("watch ");
+}
+
+export function isScreenshotGatewayCommand(command: string) {
+  const normalized = command.trim().toLowerCase();
+  return (
+    normalized.includes("screenshot") ||
+    normalized === "capture screen" ||
+    normalized === "capture desktop"
+  );
+}
+
 export function isOcrNotionGatewayCommand(command: string) {
   const normalized = command.trim().toLowerCase();
+
+  if (isOcrWatchGatewayCommand(command)) {
+    return true;
+  }
 
   if (
     normalized === "save ocr history to notion" ||
@@ -253,24 +284,8 @@ export function isOcrNotionGatewayCommand(command: string) {
     normalized === "save screen text to notion" ||
     normalized === "save screenshot text to notion" ||
     normalized === "ocr screen to notion" ||
-    normalized === "read screen and save to notion" ||
-    normalized === "stop watching screen" ||
-    normalized === "stop screen watch" ||
-    normalized === "stop ocr watch" ||
-    normalized === "pause ocr watches" ||
-    normalized === "pause screen watches" ||
-    normalized === "pause watching screen" ||
-    normalized === "resume ocr watches" ||
-    normalized === "resume screen watches" ||
-    normalized === "resume watching screen" ||
-    normalized === "show ocr watches" ||
-    normalized === "show screen watches" ||
-    normalized === "show watch dashboard"
+    normalized === "read screen and save to notion"
   ) {
-    return true;
-  }
-
-  if (normalized.startsWith("watch ")) {
     return true;
   }
 
@@ -375,31 +390,8 @@ export function mapIntegrationHandoffToIntent(handoff: IntegrationHandoff): Comm
   }
 
   if (handoff.capabilityId === "integrations.google") {
-    switch (handoff.action) {
-      case "list_unread":
-        return { kind: "list_unread_emails" };
-      case "search":
-        if (handoff.payload?.trim()) {
-          return { kind: "search_emails", query: handoff.payload.trim() };
-        }
-        return null;
-      case "read_current_email":
-        return { kind: "read_current_email" };
-      case "read_email_by_index": {
-        const index = Number.parseInt(handoff.payload ?? "", 10);
-        if (Number.isFinite(index) && index > 0) {
-          return { kind: "read_email_by_index", index };
-        }
-        return null;
-      }
-      case "read_email_by_query":
-        if (handoff.payload?.trim()) {
-          return { kind: "read_email_by_query", query: handoff.payload.trim() };
-        }
-        return null;
-      default:
-        return null;
-    }
+    // Gmail executes in the Rust gateway; avoid TS re-entry via handoff.
+    return null;
   }
 
   if (
@@ -421,57 +413,14 @@ export function mapIntegrationHandoffToIntent(handoff: IntegrationHandoff): Comm
     switch (handoff.action) {
       case "list_recent_files":
         return { kind: "list_recent_files" };
-      case "list_pdfs":
-        return { kind: "list_pdfs" };
-      case "search_pdfs":
-        if (handoff.payload?.trim()) {
-          return { kind: "search_pdfs", query: handoff.payload.trim() };
-        }
-        return null;
-      case "open_current_pdf":
-        return { kind: "open_current_pdf" };
-      case "open_pdf_by_index": {
-        const index = parsePositiveInteger(handoff.payload);
-        return index ? { kind: "open_pdf_by_index", index } : null;
-      }
-      case "open_pdf_by_query":
-        if (handoff.payload?.trim()) {
-          return { kind: "open_pdf_by_query", query: handoff.payload.trim() };
-        }
-        return null;
-      case "read_current_pdf":
-        return { kind: "read_current_pdf" };
-      case "read_pdf_by_index": {
-        const index = parsePositiveInteger(handoff.payload);
-        return index ? { kind: "read_pdf_by_index", index } : null;
-      }
-      case "read_pdf_by_query":
-        if (handoff.payload?.trim()) {
-          return { kind: "read_pdf_by_query", query: handoff.payload.trim() };
-        }
-        return null;
       default:
         return null;
     }
   }
 
   if (handoff.capabilityId === "integrations.calendar") {
-    switch (handoff.action) {
-      case "list_today":
-        return { kind: "list_today_calendar_events" };
-      case "create_from_nl":
-        if (handoff.payload?.trim()) {
-          const parsed = parseCalendarCommandIntent(handoff.payload.trim());
-          if (parsed) {
-            return parsed;
-          }
-        }
-        return null;
-      case "create_from_email":
-        return { kind: "create_calendar_event_from_current_email" };
-      default:
-        return null;
-    }
+    // Calendar executes in the Rust gateway; avoid TS re-entry via handoff.
+    return null;
   }
 
   if (handoff.capabilityId === "integrations.ocr_notion") {
@@ -507,9 +456,9 @@ export function mapIntegrationHandoffToIntent(handoff: IntegrationHandoff): Comm
   if (handoff.capabilityId === "integrations.email_notion") {
     switch (handoff.action) {
       case "save_current_email":
-        return { kind: "save_current_email_to_notion" };
       case "save_latest_email":
-        return { kind: "save_latest_email_to_notion" };
+        // Executed in Rust when gateway email_notion is enabled.
+        return null;
       case "save_email_digest":
         return { kind: "save_email_digest_to_notion" };
       case "save_first_emails": {
@@ -811,6 +760,15 @@ export function shouldDelegateToGateway(command: string, config: GatewayConfig) 
   if (isReadScreenCommand(command) && config.features.screenOcr) {
     return true;
   }
+  if (isScreenshotGatewayCommand(command) && config.features.screenOcr) {
+    return true;
+  }
+  if (
+    isOcrWatchGatewayCommand(command) &&
+    (config.features.ocrNotion || config.features.screenOcr)
+  ) {
+    return true;
+  }
   if (isSearchFilesCommand(command)) {
     return true;
   }
@@ -908,7 +866,43 @@ export function isSupervisorGatewayCommand(command: string) {
 }
 
 export function isMcpGatewayCommand(command: string) {
-  return command.trim().toLowerCase().startsWith("mcp ");
+  const normalized = command.trim().toLowerCase();
+  return (
+    normalized.startsWith("mcp ") ||
+    isGithubMcpGatewayCommand(command) ||
+    isJiraMcpGatewayCommand(command) ||
+    isHuggingFaceMcpGatewayCommand(command) ||
+    isZapierMcpGatewayCommand(command)
+  );
+}
+
+export function isJiraMcpGatewayCommand(command: string) {
+  const normalized = command.trim().toLowerCase();
+  return normalized.includes("jira issues") || normalized.includes("jira issue") || normalized.includes("my jira tickets") || normalized.includes("search jira");
+}
+
+export function isHuggingFaceMcpGatewayCommand(command: string) {
+  const normalized = command.trim().toLowerCase();
+  return normalized.includes("huggingface") || normalized.includes("hf models");
+}
+
+export function isZapierMcpGatewayCommand(command: string) {
+  const normalized = command.trim().toLowerCase();
+  return normalized.includes("zapier") || normalized.includes("my zaps");
+}
+
+export function isGithubMcpGatewayCommand(command: string) {
+  const normalized = command.trim().toLowerCase();
+  return (
+    normalized.includes("github issues") ||
+    normalized.includes("github issue") ||
+    normalized.includes("list github issues") ||
+    normalized.includes("github pr") ||
+    normalized.includes("github pull") ||
+    normalized.includes("open prs") ||
+    normalized.includes("my github repos") ||
+    normalized.includes("search github repos")
+  );
 }
 
 export function isVaultGatewayCommand(command: string) {
@@ -917,6 +911,9 @@ export function isVaultGatewayCommand(command: string) {
     normalized.startsWith("search vault") ||
     normalized.startsWith("search my vault") ||
     normalized.startsWith("search obsidian") ||
+    normalized.startsWith("backlinks for") ||
+    normalized.startsWith("show backlinks") ||
+    normalized.startsWith("what links to") ||
     normalized.startsWith("find in vault")
   );
 }
@@ -939,7 +936,9 @@ export function isPdfGatewayCommand(command: string) {
     normalized.startsWith("find pdf") ||
     normalized.startsWith("open pdf") ||
     normalized.startsWith("read pdf") ||
-    normalized.startsWith("show pdf")
+    normalized.startsWith("show pdf") ||
+    normalized.startsWith("summarize pdf") ||
+    normalized === "summarize this pdf"
   );
 }
 

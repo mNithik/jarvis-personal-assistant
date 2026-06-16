@@ -38,12 +38,21 @@ Ingress (voice, UI, POST /turn, Telegram, Discord*)
   → Egress (TTS, integrations handoff, channel replies)
   → Opt-in training JSONL → local router improvement
 
-* Discord long-poll ships in Phase 2; token can be configured now.
+* Discord Gateway WebSocket ingress (replaces long-poll stub).
 ```
 
-New installs can opt into gateway easy mode: set `JARVIS_GATEWAY_EASY=1` before first launch.
+New installs use gateway-on by default via `ensure_default_gateway_config()`. Opt into easy dry-run: set `JARVIS_GATEWAY_EASY=1` before first launch.
 
 Sidecar: `jarvis-service` binary (set `JARVIS_APP_DATA` to app data dir).
+
+Install as a Windows service (admin PowerShell):
+
+```powershell
+cd apps/desktop/scripts
+.\install-jarvis-service.ps1
+```
+
+Console dev mode: `cargo run --release --bin jarvis-service -- --console`
 
 Verify gate:
 

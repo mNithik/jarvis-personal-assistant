@@ -1,0 +1,30 @@
+[
+  {
+    "command": "check my email",
+    "capabilityId": "integrations.google",
+    "fixture": "gmail_list_unread",
+    "expectSuccess": true,
+    "expectReplyContains": "unread emails"
+  },
+  {
+    "command": "search gmail for invoices",
+    "capabilityId": "integrations.google",
+    "fixture": "gmail_search",
+    "expectSuccess": true,
+    "expectReplyContains": "invoices"
+  },
+  {
+    "command": "read email 1",
+    "capabilityId": "integrations.google",
+    "fixture": "gmail_session_read",
+    "expectSuccess": true,
+    "expectReplyContains": "here is the email"
+  },
+  {
+    "command": "check gmail",
+    "capabilityId": "integrations.google",
+    "fixture": "missing_token",
+    "expectSuccess": false,
+    "expectReplyContains": "Gmail is not connected"
+  }
+]

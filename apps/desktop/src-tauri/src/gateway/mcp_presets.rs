@@ -74,6 +74,7 @@ pub fn preset_to_host(preset: &McpHostPreset) -> McpHostEntry {
         command: Some(preset.command.clone()),
         read_only: preset.read_only,
         external: true,
+        env: std::collections::HashMap::new(),
     }
 }
 
@@ -81,6 +82,54 @@ pub fn test_mcp_host_connection(
     config: &crate::gateway::config::GatewayConfig,
     host_id: &str,
 ) -> Result<String, String> {
+    let host = crate::gateway::mcp::list_mcp_hosts(&config.mcp_hosts)
+        .into_iter()
+        .find(|entry| entry.id == host_id)
+        .ok_or_else(|| {
+            format!(
+                "MCP host '{host_id}' is not configured. Add the preset under Gateway settings → MCP hosts."
+            )
+        })?;
+
+    if host_id.starts_with("github") && crate::env_local::provider_api_key("github").is_none() {
+        return Err(
+            "Missing GitHub token. Set GITHUB_TOKEN or JARVIS_GITHUB_TOKEN in .env.".to_string(),
+        );
+    }
+    if host_id.starts_with("jira") {
+        crate::env_local::init_local_env();
+        if std::env::var("JIRA_API_TOKEN").unwrap_or_default().trim().is_empty() {
+            return Err(
+                "Missing Jira token. Set JIRA_API_TOKEN (and JIRA_URL, JIRA_EMAIL) in .env.".to_string(),
+            );
+        }
+    }
+    if (host_id.starts_with("huggingface") || host_id.contains("hf"))
+        && crate::env_local::provider_api_key("huggingface").is_none()
+    {
+        return Err(
+            "Missing HuggingFace token. Set HF_TOKEN or JARVIS_HUGGINGFACE_API_KEY in .env.".to_string(),
+        );
+    }
+    if host_id.starts_with("zapier") {
+        crate::env_local::init_local_env();
+        if std::env::var("ZAPIER_MCP_TOKEN")
+            .or_else(|_| std::env::var("ZAPIER_API_KEY"))
+            .unwrap_or_default()
+            .trim()
+            .is_empty()
+        {
+            return Err("Missing Zapier token. Set ZAPIER_MCP_TOKEN or ZAPIER_API_KEY in .env.".to_string());
+        }
+    }
+    if host_id.starts_with("obsidian-rest")
+        && host.env.get("OBSIDIAN_API_KEY").map(|value| value.trim()).unwrap_or("").is_empty()
+    {
+        return Err(
+            "Missing Obsidian REST API key. Save it in the Obsidian setup wizard or set OBSIDIAN_API_KEY on the MCP host.".to_string(),
+        );
+    }
+
     let tool = if host_id.starts_with("obsidian") {
         "search_notes"
     } else if host_id.starts_with("github") {

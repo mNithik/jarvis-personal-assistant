@@ -1,0 +1,7 @@
+[
+  { "phrase": "search huggingface models", "capabilityId": "integrations.mcp.huggingface" },
+  { "phrase": "find a model on huggingface", "capabilityId": "integrations.mcp.huggingface" },
+  { "phrase": "list github issues", "capabilityId": "integrations.mcp.github" },
+  { "phrase": "list jira issues", "capabilityId": "integrations.mcp.jira" },
+  { "phrase": "list my zaps", "capabilityId": "integrations.mcp.zapier" }
+]

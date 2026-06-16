@@ -87,6 +87,7 @@ impl GatewayOrchestrator {
             {
                 let bundle = knowledge_router::recall_context_with_config(
                     env.db_path,
+                    Some(env.app_data_dir),
                     Some(config),
                     &request.command,
                     3,

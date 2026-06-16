@@ -1,3 +1,5 @@
+pub mod automation_store;
+
 use std::{fs, path::Path};
 
 use rusqlite::{params, Connection};
@@ -175,6 +177,7 @@ pub fn init_database(path: &Path) -> Result<(), String> {
         )
         .map_err(|error| error.to_string())?;
 
+    crate::migrations::apply_pending_migrations(&connection, path)?;
     seed_study_routine(&connection)?;
     crate::memory::schema::migrate(path)?;
 

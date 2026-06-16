@@ -1,0 +1,23 @@
+[
+  {
+    "command": "what's on my calendar today",
+    "capabilityId": "integrations.calendar",
+    "fixture": "calendar_list_today",
+    "expectSuccess": true,
+    "expectReplyContains": "Standup"
+  },
+  {
+    "command": "add gym tomorrow at 6 PM to my calendar",
+    "capabilityId": "integrations.calendar",
+    "fixture": "calendar_create_event",
+    "expectSuccess": true,
+    "expectReplyContains": "gym"
+  },
+  {
+    "command": "what's on my calendar today",
+    "capabilityId": "integrations.calendar",
+    "fixture": "missing_token",
+    "expectSuccess": false,
+    "expectReplyContains": "Google Calendar is not connected"
+  }
+]

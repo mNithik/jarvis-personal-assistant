@@ -101,13 +101,14 @@ export type CommandRouterStateDeps = {
   desktopSchedules?: DesktopScheduleRecord[];
   expenseMemory?: ExpenseMemoryRecord[];
   gatewayConfig?: GatewayConfig | null;
+  gatewayEnabled?: boolean;
   gatewaySessionRef?: MutableRefObject<string>;
   currentRouteLabelRef?: MutableRefObject<string | undefined>;
   gmailAccessToken?: string | null;
   googleCalendarAccessToken?: string | null;
   lastConversationTopic?: ConversationTopicRecord | null;
   lastOcrText?: string;
-  lastScreenshotPath?: string;
+  lastScreenshotPath?: string | null;
   lastSemanticIntentMatches?: SemanticIntentDebugMatch[];
   latestGeneratedDraft?: GeneratedModelDraft | null;
   learnedIntentMappings?: LearnedIntentRecord[];
@@ -126,7 +127,7 @@ export type CommandRouterStateDeps = {
   semanticConversationMemory?: SemanticConversationMemoryRecord[];
   semanticIntentFeedback?: SemanticIntentFeedbackRecord[];
   spotifyAccessToken?: string | null;
-  teachingTargetPhrase?: string;
+  teachingTargetPhrase?: string | null;
   trainingModeSession?: TrainingModeSession | null;
   travelMemory?: TravelMemoryRecord[];
   userPreferenceMemory?: UserPreferenceMemory;
@@ -150,12 +151,12 @@ export type CommandRouterSetterDeps = {
   setDesktopPermissionSettings?: Setter<DesktopPermissionSettings>;
   setDesktopProjects?: Setter<DesktopProjectRecord[]>;
   setDesktopSchedules?: Setter<DesktopScheduleRecord[]>;
-  setGatewayPreview?: Setter<GatewayPreview | null>;
-  setGatewayPreviewError?: Setter<string | null>;
+  setGatewayPreview?: ((value: GatewayPreview | null) => void) | Setter<GatewayPreview | null>;
+  setGatewayPreviewError?: ((value: string | null) => void) | Setter<string | null>;
   setHandoffArtifact?: Setter<BuildHandoffArtifact | null>;
   setIsRoutingCommand?: Setter<boolean>;
   setLastOcrText?: Setter<string>;
-  setLastScreenshotPath?: Setter<string>;
+  setLastScreenshotPath?: Setter<string | null>;
   setLastSemanticIntentMatches?: Setter<SemanticIntentDebugMatch[]>;
   setMissingSkillPlan?: Setter<MissingSkillPlan | null>;
   setMissingSkillRequest?: Setter<string | null>;
@@ -169,7 +170,10 @@ export type CommandRouterSetterDeps = {
   setPendingGatewayTeaching?: Setter<PendingGatewayTeaching | null>;
   setPendingWorkflowExecution?: Setter<PendingWorkflowExecution | null>;
   setPlannerTasks?: Setter<PlannerTaskRecord[]>;
-  setPreferredModelProvider?: Setter<ModelProviderId>;
+  setPreferredModelProvider?: (
+    taskType: "chat" | "coding" | "reasoning",
+    providerId: ModelProviderId,
+  ) => void;
   setPresentedCollectionContext?: Setter<PresentedCollectionContext | null>;
   setProactiveCrossSuggestion?: Setter<CrossFeatureSuggestionRecord | null>;
   setRecentEmails?: Setter<EmailRecord[]>;
@@ -188,7 +192,9 @@ export type CommandRouterSetterDeps = {
 export type CommandRouterHandlerDeps = {
   appendConversationTurn?: Function;
   beginOcrSelection?: Function;
-  buildCachedSemanticIntentEmbedding?: (text: string) => Promise<number[] | null>;
+  buildCachedSemanticIntentEmbedding?: (
+    text: string,
+  ) => Promise<{ embedding: number[]; backend: EmbeddingBackend }>;
   buildCrossFeatureSuggestionsForEmail?: Function;
   buildCrossFeatureSuggestionsForState?: Function;
   buildSemanticEmbeddingWithFallback?: (text: string) => Promise<{ embedding: number[]; backend: EmbeddingBackend }>;
@@ -209,7 +215,7 @@ export type CommandRouterHandlerDeps = {
   handleTrainingReviewCleanupCommand?: Function;
   isSensitiveModelPrompt?: Function;
   loadMemoryView?: Function;
-  loadPlannerTaskRecords?: Function;
+  loadPlannerTaskRecords?: () => Promise<PlannerTaskRecord[]>;
   loadRecentNotes?: Function;
   minimizeJarvisPanel?: Function;
   openFollowUpWindow?: Function;
@@ -231,7 +237,7 @@ export type CommandRouterHandlerDeps = {
   rememberSuccessfulPhrase?: Function;
   rememberTravelSummary?: Function;
   rememberWorkflowSequence?: Function;
-  resolveModelRoute?: Function;
+  resolveModelRoute?: (prompt: string, taskType?: ModelTaskType) => ModelRouteDecision;
   returnToArmedWakeMode?: Function;
   runModelBenchmark?: Function;
   shouldKeepFollowUpWindowOpen?: Function;
@@ -240,12 +246,19 @@ export type CommandRouterHandlerDeps = {
   stopHandsFreeSession?: Function;
   teachJarvisMeaning?: Function;
   teachJarvisWorkflow?: Function;
-  updateDesktopProject?: Function;
+  updateDesktopProject?: (
+    query: string,
+    updater: (entry: DesktopProjectRecord) => DesktopProjectRecord,
+  ) => DesktopProjectRecord | null;
   updateModelRouterConfig?: Function;
-  updatePersonMemory?: Function;
+  updatePersonMemory?: (
+    query: string,
+    updater: (entry: PersonMemoryRecord) => PersonMemoryRecord,
+  ) => PersonMemoryRecord | null;
   dispatchUi?: Function;
 };
 
 export type CommandRouterDeps = Partial<
   CommandRouterStateDeps & CommandRouterSetterDeps & CommandRouterHandlerDeps
->;
+> &
+  Record<string, unknown>;

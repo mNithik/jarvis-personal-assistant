@@ -52,11 +52,24 @@ impl JarvisMcpServer {
         Ok(CallToolResult::success(vec![Content::text(payload.to_string())]))
     }
 
-    #[tool(description = "Proxy read-only get_recent_history metadata from the gateway tool registry.")]
-    async fn get_recent_history() -> Result<CallToolResult, McpError> {
+    #[tool(description = "Summarize a gateway capability family from the read-only catalog.")]
+    async fn describe_jarvis_capability(
+        Parameters(request): Parameters<DescribeCapabilityRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let tools = list_mcp_tools(true);
+        let matches: Vec<_> = tools
+            .iter()
+            .filter(|tool| {
+                request.capability_id.is_empty()
+                    || tool.category.contains(&request.capability_id)
+                    || tool.name.contains(&request.capability_id)
+            })
+            .take(12)
+            .collect();
         let payload = serde_json::json!({
-            "tool": "get_recent_history",
-            "available": list_mcp_tools(true).iter().any(|tool| tool.name == "get_recent_history")
+            "capabilityId": request.capability_id,
+            "matches": matches,
+            "totalReadOnlyTools": tools.len(),
         });
         Ok(CallToolResult::success(vec![Content::text(payload.to_string())]))
     }
@@ -66,6 +79,12 @@ impl JarvisMcpServer {
 struct ListToolsRequest {
     #[serde(default)]
     include_write_tools: bool,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+struct DescribeCapabilityRequest {
+    #[serde(default)]
+    capability_id: String,
 }
 
 #[tool_handler]

@@ -63,6 +63,7 @@ impl Default for GatewayFeatures {
 pub struct GatewayRoutingConfig {
     pub l2_enabled: bool,
     pub prefer_local_for_personal: bool,
+    pub jarvis_router_enabled: bool,
 }
 
 impl Default for GatewayRoutingConfig {
@@ -70,6 +71,7 @@ impl Default for GatewayRoutingConfig {
         Self {
             l2_enabled: false,
             prefer_local_for_personal: true,
+            jarvis_router_enabled: false,
         }
     }
 }
@@ -209,14 +211,35 @@ impl Default for GatewayChannelsConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", default)]
+pub struct GatewayPaidModeConfig {
+    pub enabled: bool,
+    /// Hard cap on paid-provider requests per day (0 = paid mode off).
+    pub max_daily_requests: u32,
+    pub require_user_opt_in: bool,
+}
+
+impl Default for GatewayPaidModeConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            max_daily_requests: 0,
+            require_user_opt_in: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", default)]
 pub struct GatewayTrainingConfig {
     pub export_enabled: bool,
+    pub eval_min_accuracy_pct: u32,
 }
 
 impl Default for GatewayTrainingConfig {
     fn default() -> Self {
         Self {
             export_enabled: false,
+            eval_min_accuracy_pct: 95,
         }
     }
 }
@@ -236,6 +259,7 @@ pub struct GatewayConfig {
     pub knowledge: GatewayKnowledgeConfig,
     pub channels: GatewayChannelsConfig,
     pub training: GatewayTrainingConfig,
+    pub paid: GatewayPaidModeConfig,
     pub mcp_hosts: Vec<McpHostEntry>,
 }
 
@@ -254,8 +278,38 @@ impl Default for GatewayConfig {
             knowledge: GatewayKnowledgeConfig::default(),
             channels: GatewayChannelsConfig::default(),
             training: GatewayTrainingConfig::default(),
+            paid: GatewayPaidModeConfig::default(),
             mcp_hosts: Vec::new(),
         }
+    }
+}
+
+/// Default for fresh installs: gateway on with core features, local-first quotas.
+pub fn gateway_default_install_preset() -> GatewayConfig {
+    GatewayConfig {
+        enabled: true,
+        mode: GatewayMode::Execute,
+        features: GatewayFeatures {
+            study_routine: true,
+            screen_ocr: true,
+            memory: true,
+            builder: true,
+            ..GatewayFeatures::default()
+        },
+        routing: GatewayRoutingConfig {
+            l2_enabled: false,
+            prefer_local_for_personal: true,
+            jarvis_router_enabled: false,
+        },
+        proactive: GatewayProactiveConfig {
+            heartbeat_enabled: true,
+            heartbeat_interval_minutes: 30,
+            morning_brief_enabled: true,
+            morning_brief_time: "07:30".to_string(),
+            ocr_watch_tick_enabled: true,
+        },
+        paid: GatewayPaidModeConfig::default(),
+        ..GatewayConfig::default()
     }
 }
 
@@ -299,7 +353,7 @@ pub fn load_gateway_config(app_data_dir: &Path) -> GatewayConfig {
         {
             return gateway_easy_mode_preset();
         }
-        return GatewayConfig::default();
+        return gateway_default_install_preset();
     }
 
     let raw = match fs::read_to_string(&path) {
@@ -308,6 +362,23 @@ pub fn load_gateway_config(app_data_dir: &Path) -> GatewayConfig {
     };
 
     serde_json::from_str(&raw).unwrap_or_default()
+}
+
+pub fn ensure_default_gateway_config(app_data_dir: &Path) -> GatewayConfig {
+    let path = gateway_config_path(app_data_dir);
+    if path.exists() {
+        return load_gateway_config(app_data_dir);
+    }
+    let config = if std::env::var("JARVIS_GATEWAY_EASY")
+        .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+    {
+        gateway_easy_mode_preset()
+    } else {
+        gateway_default_install_preset()
+    };
+    let _ = save_gateway_config(app_data_dir, &config);
+    config
 }
 
 pub fn save_gateway_config(app_data_dir: &Path, config: &GatewayConfig) -> Result<(), String> {
@@ -339,6 +410,7 @@ mod tests {
             routing: GatewayRoutingConfig {
                 l2_enabled: true,
                 prefer_local_for_personal: true,
+                jarvis_router_enabled: false,
             },
             voice: GatewayVoiceConfig {
                 stt_provider: GatewaySttProvider::Groq,
@@ -357,6 +429,24 @@ mod tests {
     #[test]
     fn default_gateway_mode_is_execute() {
         assert_eq!(GatewayConfig::default().mode, GatewayMode::Execute);
+    }
+
+    #[test]
+    fn default_install_preset_enables_gateway() {
+        let preset = gateway_default_install_preset();
+        assert!(preset.enabled);
+        assert_eq!(preset.mode, GatewayMode::Execute);
+        assert!(preset.features.memory);
+        assert!(preset.features.screen_ocr);
+    }
+
+    #[test]
+    fn ensure_default_gateway_config_seeds_file() {
+        let dir = temp_dir();
+        let config = ensure_default_gateway_config(&dir);
+        assert!(config.enabled);
+        assert!(gateway_config_path(&dir).exists());
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -379,6 +469,7 @@ mod tests {
                 command: Some("obsidian-mcp".to_string()),
                 read_only: true,
                 external: true,
+                env: std::collections::HashMap::new(),
             }],
             ..GatewayConfig::default()
         };
@@ -393,7 +484,7 @@ mod tests {
     #[test]
     fn defaults_when_file_missing() {
         let dir = temp_dir();
-        assert_eq!(load_gateway_config(&dir), GatewayConfig::default());
+        assert_eq!(load_gateway_config(&dir), gateway_default_install_preset());
         let _ = fs::remove_dir_all(dir);
     }
 }

@@ -1,3 +1,4 @@
+pub mod google;
 pub mod notion;
 
 use serde::{Deserialize, Serialize};

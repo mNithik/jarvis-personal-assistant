@@ -4,13 +4,16 @@ import { MCP_HOST_PRESETS, presetToHostEntry } from "../../features/gateway/mcpP
 import {
   GatewayCapabilityRecord,
   GatewayConfig,
+  anonymizeTrainingExport,
   applyGatewayEasyPreset,
   getGatewayConfig,
   listGatewayCapabilities,
   listMcpHostRegistry,
   McpHostEntry,
+  runTrainingEvalGate,
   saveGatewayConfig,
   testMcpHostConnection,
+  type TrainingEvalGateResult,
 } from "../../services/jarvisApi";
 import ObsidianSetupWizard from "./ObsidianSetupWizard";
 import GatewayOnboardingBanner from "./GatewayOnboardingBanner";
@@ -21,6 +24,8 @@ export default function GatewayConfigPanel() {
   const [mcpHosts, setMcpHosts] = useState<McpHostEntry[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [evalGate, setEvalGate] = useState<TrainingEvalGateResult | null>(null);
+  const [trainingMessage, setTrainingMessage] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -51,7 +56,7 @@ export default function GatewayConfigPanel() {
           telegramEnabled: false,
           discordEnabled: false,
         },
-        training: next.training ?? { exportEnabled: false },
+        training: next.training ?? { exportEnabled: false, evalMinAccuracyPct: 95 },
       });
       setCapabilities(capabilityRows);
       setMcpHosts(hostRows);
@@ -548,17 +553,108 @@ export default function GatewayConfigPanel() {
       <label className="toggle-row">
         <input
           type="checkbox"
+          checked={config.routing?.jarvisRouterEnabled ?? false}
+          onChange={(event) =>
+            void persist({
+              ...config,
+              routing: {
+                l2Enabled: config.routing?.l2Enabled ?? false,
+                preferLocalForPersonal: config.routing?.preferLocalForPersonal ?? true,
+                jarvisRouterEnabled: event.target.checked,
+              },
+            })
+          }
+          disabled={saving}
+        />
+        <span>Prefer jarvis-router Ollama model for L2 (run create-jarvis-router.ps1 first)</span>
+      </label>
+      <label className="toggle-row">
+        <input
+          type="checkbox"
           checked={config.training?.exportEnabled ?? false}
           onChange={(event) =>
             void persist({
               ...config,
-              training: { exportEnabled: event.target.checked },
+              training: {
+                exportEnabled: event.target.checked,
+                evalMinAccuracyPct: config.training?.evalMinAccuracyPct ?? 95,
+              },
             })
           }
           disabled={saving}
         />
         <span>Opt-in JSONL export on gateway turns</span>
       </label>
+      <label className="gateway-field">
+        <span>Eval gate minimum accuracy (%)</span>
+        <input
+          type="number"
+          min={50}
+          max={100}
+          value={config.training?.evalMinAccuracyPct ?? 95}
+          onChange={(event) =>
+            void persist({
+              ...config,
+              training: {
+                exportEnabled: config.training?.exportEnabled ?? false,
+                evalMinAccuracyPct: Number(event.target.value) || 95,
+              },
+            })
+          }
+          disabled={saving}
+        />
+      </label>
+      <div className="workflow-actions">
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={saving}
+          onClick={() => {
+            void (async () => {
+              try {
+                const result = await runTrainingEvalGate();
+                setEvalGate(result);
+                setTrainingMessage(
+                  result.passed
+                    ? `Eval gate passed: ${result.accuracyPct.toFixed(1)}% (${result.correctCases}/${result.totalCases})`
+                    : `Eval gate failed: ${result.accuracyPct.toFixed(1)}% vs baseline ${result.baselinePct.toFixed(1)}%`,
+                );
+              } catch (gateError) {
+                setTrainingMessage(
+                  gateError instanceof Error ? gateError.message : String(gateError),
+                );
+              }
+            })();
+          }}
+        >
+          Run eval gate
+        </button>
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={saving}
+          onClick={() => {
+            void (async () => {
+              try {
+                const message = await anonymizeTrainingExport();
+                setTrainingMessage(message);
+              } catch (anonymizeError) {
+                setTrainingMessage(
+                  anonymizeError instanceof Error ? anonymizeError.message : String(anonymizeError),
+                );
+              }
+            })();
+          }}
+        >
+          Anonymize export
+        </button>
+      </div>
+      {trainingMessage ? <p className="memory-meta">{trainingMessage}</p> : null}
+      {evalGate ? (
+        <p className="memory-meta">
+          Scanned {evalGate.evalFilesScanned} eval files · export records {evalGate.exportRecordCount}
+        </p>
+      ) : null}
       <p className="section-kicker">Capability registry</p>
       <div className="memory-list">
         {capabilities.map((capability) => (

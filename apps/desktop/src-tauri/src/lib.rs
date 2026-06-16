@@ -12,6 +12,8 @@ mod training;
 pub mod providers;
 mod tools;
 
+pub use db::init_database;
+
 use std::{
     fs,
     io::Write,
@@ -34,7 +36,7 @@ use crate::{
         delete_provider_credential_metadata, generate_study_proposal, get_executor_config,
         get_google_calendar_config, get_local_tts_backend_config, get_local_voice_backend_config,
         get_notion_config, get_ollama_config, get_provider_credential_metadata,
-        get_secrets_migration_version, get_spotify_config, get_wake_mode_config, init_database,
+        get_secrets_migration_version, get_spotify_config, get_wake_mode_config,
         list_browser_aliases, list_history, list_learned_intents,
         list_legacy_model_provider_secrets, list_proposal_steps, list_proposals,
         list_provider_credential_metadata, list_routines, list_voice_corrections, log_action,
@@ -156,6 +158,18 @@ fn has_provider_key_in_keyring(provider: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn save_google_session_token_to_keyring(kind: &str, token: &str) -> Result<(), String> {
+    crate::integrations::google::auth::save_session_token_to_keyring(kind, token)
+}
+
+fn get_google_session_token_from_keyring(kind: &str) -> Result<String, String> {
+    crate::integrations::google::auth::get_session_token_from_keyring(kind)
+}
+
+fn clear_google_session_token_from_keyring(kind: &str) -> Result<(), String> {
+    crate::integrations::google::auth::clear_session_token_from_keyring(kind)
+}
+
 fn user_documents_dir() -> Result<PathBuf, String> {
     let user_profile = std::env::var("USERPROFILE")
         .map_err(|error| format!("Could not resolve USERPROFILE for file search: {}", error))?;
@@ -216,9 +230,11 @@ fn save_gateway_config(
     config: crate::gateway::config::GatewayConfig,
 ) -> Result<(), String> {
     gateway_state.save_config(&config)?;
+    crate::memory::cag::invalidate_cag_cache();
+    let _ = crate::memory::cag::ensure_default_cag_policy(gateway_state.app_data_dir());
     crate::gateway::local_turn_api::sync_local_turn_api(app.clone());
     crate::gateway::telegram::sync_telegram_bot(app.clone());
-    crate::gateway::discord::sync_discord_bot(&config);
+    crate::gateway::discord::sync_discord_bot(app.clone());
     Ok(())
 }
 
@@ -234,9 +250,11 @@ fn apply_gateway_easy_preset(
 ) -> Result<crate::gateway::config::GatewayConfig, String> {
     let preset = crate::gateway::config::gateway_easy_mode_preset();
     gateway_state.save_config(&preset)?;
+    crate::memory::cag::invalidate_cag_cache();
+    let _ = crate::memory::cag::ensure_default_cag_policy(gateway_state.app_data_dir());
     crate::gateway::local_turn_api::sync_local_turn_api(app.clone());
     crate::gateway::telegram::sync_telegram_bot(app.clone());
-    crate::gateway::discord::sync_discord_bot(&preset);
+    crate::gateway::discord::sync_discord_bot(app.clone());
     Ok(preset)
 }
 
@@ -257,6 +275,13 @@ fn list_trigger_events(
 #[tauri::command]
 fn get_local_turn_api_status() -> crate::gateway::local_turn_api::LocalTurnApiStatus {
     crate::gateway::local_turn_api::get_local_turn_api_status()
+}
+
+#[tauri::command]
+fn get_jarvis_service_status(
+    app_state: State<'_, AppState>,
+) -> crate::gateway::runtime::headless::JarvisServiceStatus {
+    crate::gateway::runtime::headless::read_service_status(&app_state.app_data_dir)
 }
 
 #[tauri::command]
@@ -512,6 +537,31 @@ fn export_training_turn(
     };
     crate::training::training_export::append_training_record(&export_path, &record)?;
     Ok(export_path.display().to_string())
+}
+
+#[tauri::command]
+fn run_training_eval_gate(
+    app_state: State<'_, AppState>,
+    gateway_state: State<'_, crate::gateway::state::GatewayState>,
+) -> Result<crate::training::eval_gate::TrainingEvalGateResult, String> {
+    let config = gateway_state.config.lock().map_err(|error| error.to_string())?.clone();
+    let export_path = app_state.app_data_dir.join("training-export.jsonl");
+    crate::training::eval_gate::run_training_eval_gate(&config, &export_path)
+}
+
+#[tauri::command]
+fn anonymize_training_export(
+    app_state: State<'_, AppState>,
+) -> Result<String, String> {
+    let input_path = app_state.app_data_dir.join("training-export.jsonl");
+    let output_path = app_state
+        .app_data_dir
+        .join("training-export-anonymized.jsonl");
+    let count = crate::training::eval_gate::anonymize_export_file(&input_path, &output_path)?;
+    Ok(format!(
+        "Anonymized {count} records to {}",
+        output_path.display()
+    ))
 }
 
 #[tauri::command]
@@ -1147,6 +1197,21 @@ fn test_provider_key(
     get_model_provider_secret_status(state, provider)
 }
 
+#[tauri::command]
+fn save_google_session_token(kind: String, token: String) -> Result<(), String> {
+    save_google_session_token_to_keyring(&kind, &token)
+}
+
+#[tauri::command]
+fn get_google_session_token(kind: String) -> Result<String, String> {
+    get_google_session_token_from_keyring(&kind)
+}
+
+#[tauri::command]
+fn clear_google_session_token(kind: String) -> Result<(), String> {
+    clear_google_session_token_from_keyring(&kind)
+}
+
 fn migrate_legacy_provider_secrets(path: &Path) -> Result<(), String> {
     if get_secrets_migration_version(path)? >= 1 {
         return Ok(());
@@ -1456,13 +1521,11 @@ fn search_local_files(
 }
 
 #[tauri::command]
-fn list_recent_local_files(_state: State<'_, AppState>) -> Result<Vec<FileRecord>, String> {
-    let base_dir = user_documents_dir()?;
-    let mut files = Vec::new();
-    collect_files_recursively(&base_dir, &mut files)?;
-    files.sort_by(|left, right| right.modified_at.cmp(&left.modified_at));
-    files.truncate(10);
-    Ok(files)
+fn list_recent_local_files(
+    _state: State<'_, AppState>,
+    limit: Option<usize>,
+) -> Result<Vec<FileRecord>, String> {
+    commands::files::list_recent_local_files(limit.unwrap_or(10))
 }
 
 #[tauri::command]
@@ -3747,6 +3810,7 @@ pub fn run() {
 
             init_database(&db_path)?;
             migrate_legacy_provider_secrets(&db_path)?;
+            let _ = crate::memory::cag::ensure_default_cag_policy(&app_data_dir);
             app.manage(AppState {
                 db_path,
                 app_data_dir: app_data_dir.clone(),
@@ -3755,11 +3819,7 @@ pub fn run() {
             crate::gateway::heartbeat::spawn_proactive_scheduler(app.handle().clone());
             crate::gateway::local_turn_api::sync_local_turn_api(app.handle().clone());
             crate::gateway::telegram::sync_telegram_bot(app.handle().clone());
-            if let Some(state) = app.try_state::<crate::gateway::state::GatewayState>() {
-                if let Ok(config) = state.config.lock() {
-                    crate::gateway::discord::sync_discord_bot(&config);
-                }
-            }
+            crate::gateway::discord::sync_discord_bot(app.handle().clone());
 
             Ok(())
         })
@@ -3771,6 +3831,7 @@ pub fn run() {
             apply_gateway_easy_preset,
             list_trigger_events,
             get_local_turn_api_status,
+            get_jarvis_service_status,
             get_trigger_queue_status,
             get_telegram_bot_status,
             get_discord_bot_status,
@@ -3786,7 +3847,18 @@ pub fn run() {
             test_mcp_host_connection,
             gateway_channel_turn,
             export_training_turn,
+            run_training_eval_gate,
+            anonymize_training_export,
             prepare_database_migrations,
+            crate::commands::automation::list_ocr_watches_cmd,
+            crate::commands::automation::save_ocr_watch_cmd,
+            crate::commands::automation::delete_ocr_watch_cmd,
+            crate::commands::automation::list_desktop_schedules_cmd,
+            crate::commands::automation::save_desktop_schedule_cmd,
+            crate::commands::automation::delete_desktop_schedule_cmd,
+            crate::commands::automation::list_saved_workflows_cmd,
+            crate::commands::automation::save_saved_workflow_cmd,
+            crate::commands::automation::import_automation_from_local_storage,
             list_provider_presets,
             list_provider_defaults,
             transcribe_groq_audio,
@@ -3863,6 +3935,9 @@ pub fn run() {
             delete_provider_key,
             list_provider_key_status,
             test_provider_key,
+            save_google_session_token,
+            get_google_session_token,
+            clear_google_session_token,
             create_build_handoff_artifact,
             get_executor_status,
             save_executor_status,

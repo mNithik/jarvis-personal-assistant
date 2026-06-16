@@ -8,6 +8,7 @@ use super::{
     channels::ChannelTurnRequest,
     config::GatewayConfig,
     local_turn_api::run_channel_turn_internal,
+    runtime::headless::HeadlessGatewayContext,
     types::TurnRequest,
 };
 
@@ -74,7 +75,7 @@ pub fn sync_telegram_bot(app: AppHandle) {
             .as_deref()
             .is_some_and(|token| !token.trim().is_empty())
     {
-        spawn_poller(app, config);
+        spawn_poller(TelegramPollTarget::Desktop(app), config);
     } else {
         runtime().shutdown.store(true, Ordering::SeqCst);
         if let Ok(mut status) = runtime().status.lock() {
@@ -83,7 +84,34 @@ pub fn sync_telegram_bot(app: AppHandle) {
     }
 }
 
-fn spawn_poller(app: AppHandle, config: GatewayConfig) {
+pub fn sync_telegram_bot_headless(ctx: Arc<HeadlessGatewayContext>) {
+    let config = ctx.config();
+    let enabled = config.enabled
+        && config.channels.telegram_enabled
+        && config
+            .channels
+            .telegram_bot_token
+            .as_deref()
+            .is_some_and(|token| !token.trim().is_empty());
+
+    if enabled {
+        runtime().shutdown.store(false, Ordering::SeqCst);
+        spawn_poller(TelegramPollTarget::Headless(ctx), config);
+        if let Ok(mut status) = runtime().status.lock() {
+            status.running = true;
+            status.last_error = None;
+        }
+    } else {
+        runtime().shutdown.store(true, Ordering::SeqCst);
+    }
+}
+
+enum TelegramPollTarget {
+    Desktop(AppHandle),
+    Headless(Arc<HeadlessGatewayContext>),
+}
+
+fn spawn_poller(target: TelegramPollTarget, config: GatewayConfig) {
     {
         let already_running = runtime()
             .status
@@ -105,7 +133,6 @@ fn spawn_poller(app: AppHandle, config: GatewayConfig) {
         .telegram_bot_token
         .clone()
         .unwrap_or_default();
-    let app_handle = app.clone();
 
     tauri::async_runtime::spawn(async move {
         let mut offset: i64 = 0;
@@ -151,17 +178,27 @@ fn spawn_poller(app: AppHandle, config: GatewayConfig) {
                     }
 
                     touch_message(&chat_id);
+                    log_telegram_activity(&target, &format!("inbound from {chat_id}: {text}"));
                     let channel_request = ChannelTurnRequest {
                         channel: "telegram".to_string(),
                         session_id: Some(format!("telegram-{chat_id}")),
                         command: text.clone(),
                     };
                     let turn_request: TurnRequest = channel_request.into();
-                    let reply = match run_channel_turn_internal(&app_handle, turn_request) {
-                        Ok(response) => response.result.reply,
-                        Err(error) => format!("JARVIS error: {error}"),
+                    let reply = match &target {
+                        TelegramPollTarget::Headless(ctx) => match ctx.run_turn(turn_request) {
+                            Ok(response) => response.result.reply,
+                            Err(error) => format!("JARVIS error: {error}"),
+                        },
+                        TelegramPollTarget::Desktop(app) => {
+                            match run_channel_turn_internal(app, turn_request) {
+                                Ok(response) => response.result.reply,
+                                Err(error) => format!("JARVIS error: {error}"),
+                            }
+                        }
                     };
                     let _ = send_telegram_message(&client, &token, &chat_id, &reply).await;
+                    log_telegram_activity(&target, &format!("reply to {chat_id}: {}", reply.chars().take(80).collect::<String>()));
                 }
             }
         }
@@ -204,6 +241,21 @@ fn touch_message(chat_id: &str) {
     }
 }
 
+fn log_telegram_activity(target: &TelegramPollTarget, line: &str) {
+    if let TelegramPollTarget::Headless(ctx) = target {
+        let path = ctx.app_data_dir.join("service.log");
+        let stamp = chrono::Utc::now().to_rfc3339();
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .and_then(|mut file| {
+                use std::io::Write;
+                writeln!(file, "[{stamp}] telegram: {line}")
+            });
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct TelegramUpdatesResponse {
     ok: bool,
@@ -229,7 +281,12 @@ struct TelegramChat {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
+    use crate::gateway::config::{save_gateway_config, GatewayConfig};
+    use crate::gateway::runtime::headless::HeadlessGatewayContext;
+    use crate::migrations::apply_pending_migrations;
 
     #[test]
     fn default_status_is_stopped() {
@@ -240,5 +297,57 @@ mod tests {
             last_message_at: None,
         };
         assert!(!status.running);
+    }
+
+    #[test]
+    fn sync_headless_marks_running_when_enabled() {
+        runtime().shutdown.store(true, Ordering::SeqCst);
+        if let Ok(mut status) = runtime().status.lock() {
+            status.running = false;
+        }
+
+        let dir = std::env::temp_dir().join(format!("jarvis-telegram-h-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let db_path = dir.join("jarvis.db");
+        let conn = rusqlite::Connection::open(&db_path).expect("open");
+        apply_pending_migrations(&conn, &db_path).expect("migrate");
+        drop(conn);
+
+        let mut config = GatewayConfig::default();
+        config.enabled = true;
+        config.channels.telegram_enabled = true;
+        config.channels.telegram_bot_token = Some("test-bot-token".into());
+        save_gateway_config(&dir, &config).expect("save config");
+
+        let ctx = Arc::new(HeadlessGatewayContext::new(dir.clone(), db_path));
+        sync_telegram_bot_headless(ctx);
+
+        let status = get_telegram_bot_status();
+        assert!(status.running);
+
+        runtime().shutdown.store(true, Ordering::SeqCst);
+        if let Ok(mut status) = runtime().status.lock() {
+            status.running = false;
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn headless_activity_logs_to_service_log() {
+        let dir = std::env::temp_dir().join(format!("jarvis-telegram-log-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let db_path = dir.join("jarvis.db");
+        let ctx = Arc::new(HeadlessGatewayContext::new(dir.clone(), db_path));
+
+        log_telegram_activity(
+            &TelegramPollTarget::Headless(ctx),
+            "inbound from 42: prep me for my next meeting",
+        );
+
+        let log_path = dir.join("service.log");
+        let log = std::fs::read_to_string(&log_path).expect("service log");
+        assert!(log.contains("telegram: inbound from 42"));
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

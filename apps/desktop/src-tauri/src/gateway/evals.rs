@@ -118,6 +118,11 @@ mod tests {
     }
 
     #[test]
+    fn eval_golden_f_meeting_copilot_routes() {
+        run_golden_file("f_meeting_copilot_routes.json");
+    }
+
+    #[test]
     fn eval_golden_f18_memory_hardening_routes() {
         run_golden_file("f18_memory_hardening.json");
     }
@@ -158,6 +163,21 @@ mod tests {
     }
 
     #[test]
+    fn eval_golden_f_clipboard_routes() {
+        run_golden_file("f_clipboard_routes.json");
+    }
+
+    #[test]
+    fn eval_golden_f_pdf_routes() {
+        run_golden_file("f_pdf_routes.json");
+    }
+
+    #[test]
+    fn eval_golden_f_files_routes() {
+        run_golden_file("f_files_routes.json");
+    }
+
+    #[test]
     fn eval_golden_f_research_routes() {
         run_golden_file("f_research_routes.json");
     }
@@ -190,6 +210,165 @@ mod tests {
     #[test]
     fn eval_golden_f_l3_supervisor_routes() {
         run_golden_file("f_l3_supervisor.json");
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct FabricIndexEntry {
+        id: String,
+        eval: Option<String>,
+        #[serde(rename = "executionEval")]
+        execution_eval: Option<String>,
+    }
+
+    #[test]
+    fn eval_golden_f_desktop_gateway_routes() {
+        run_golden_file("f_desktop_gateway_routes.json");
+    }
+
+    #[test]
+    fn eval_golden_f_memory_gateway_routes() {
+        run_golden_file("f_memory_gateway_routes.json");
+    }
+
+    #[test]
+    fn eval_golden_f21_model_router_routes() {
+        run_golden_file("f21_model_router_routes.json");
+    }
+
+    #[test]
+    fn eval_fabric_f1_f2_voice_wake_config_roundtrip() {
+        use crate::gateway::config::{GatewayConfig, GatewaySttProvider, GatewayVoiceConfig};
+
+        let mut config = GatewayConfig::default();
+        config.voice = GatewayVoiceConfig {
+            stt_provider: GatewaySttProvider::Groq,
+            talker_enabled: true,
+        };
+        let dir = std::env::temp_dir().join(format!("jarvis-voice-eval-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        crate::gateway::config::save_gateway_config(&dir, &config).expect("save");
+        let loaded = crate::gateway::config::load_gateway_config(&dir);
+        assert_eq!(loaded.voice.stt_provider, GatewaySttProvider::Groq);
+        assert!(loaded.voice.talker_enabled);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn eval_fabric_f35_proactive_heartbeat_trace() {
+        use crate::gateway::state::GatewayState;
+        use crate::gateway::types::GatewayEventKind;
+
+        let dir = std::env::temp_dir().join(format!("jarvis-hygiene-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let gateway_state = GatewayState::new(dir.clone());
+        {
+            let mut config = gateway_state.config.lock().expect("lock config");
+            config.enabled = true;
+            config.proactive.heartbeat_enabled = true;
+        }
+
+        let heartbeat_path = dir.join("HEARTBEAT.md");
+        std::fs::write(&heartbeat_path, "# JARVIS Heartbeat\n\n- tick\n").expect("write heartbeat");
+
+        let mut bus = gateway_state.bus.lock().expect("lock bus");
+        bus.publish(crate::gateway::types::GatewayEvent {
+            id: "heartbeat-eval".to_string(),
+            session_id: "proactive-heartbeat".to_string(),
+            turn_id: None,
+            kind: GatewayEventKind::Reply,
+            message: "Heartbeat: # JARVIS Heartbeat".to_string(),
+            created_at: chrono::Utc::now().timestamp().to_string(),
+            approval: None,
+        });
+        assert!(
+            bus.recent(5)
+                .iter()
+                .any(|event| event.session_id == "proactive-heartbeat"),
+            "heartbeat trace should publish proactive-heartbeat session events"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn eval_golden_f_email_trigger_inbox_routes() {
+        run_golden_file("f_email_trigger_inbox.json");
+    }
+
+    #[test]
+    fn eval_fabric_f21_provider_resolution() {
+        use crate::gateway::config::GatewayConfig;
+        use crate::gateway::types::{
+            GatewayAgentKind, GatewayConfidenceBand, GatewayDecisionPolicy, GatewayModelTier,
+            GatewayRoute, GatewaySensitivity, RouteLevel,
+        };
+        use crate::providers::resolve_provider;
+
+        let config = GatewayConfig::default();
+        let route = GatewayRoute {
+            capability_id: "command.general".to_string(),
+            capability_label: "General".to_string(),
+            agent: GatewayAgentKind::Command,
+            tier: GatewayModelTier::Talker,
+            sensitivity: GatewaySensitivity::Public,
+            score: 3,
+            confidence: GatewayConfidenceBand::High,
+            decision_policy: GatewayDecisionPolicy::Execute,
+            decision_reason: "eval".to_string(),
+            reason: "eval".to_string(),
+            route_level: RouteLevel::L0,
+            resolved_provider: None,
+        };
+        let resolved = resolve_provider(&route, &config);
+        assert!(!resolved.provider_id.is_empty());
+    }
+
+    #[test]
+    fn eval_golden_f_fabric_index() {
+        let path = eval_path("f_fabric_index.json");
+        let raw = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+        let entries: Vec<FabricIndexEntry> =
+            serde_json::from_str(&raw).expect("fabric index json should parse");
+        assert_eq!(entries.len(), 42, "fabric index should cover F1–F42");
+
+        let mut route_files = std::collections::BTreeSet::new();
+        let mut execution_files = std::collections::BTreeSet::new();
+        for entry in &entries {
+            if let Some(file) = &entry.eval {
+                route_files.insert(file.clone());
+            }
+            if let Some(file) = &entry.execution_eval {
+                execution_files.insert(file.clone());
+            }
+        }
+        assert!(
+            route_files.len() >= 25,
+            "expected at least 25 unique route golden files, got {}",
+            route_files.len()
+        );
+
+        for file in route_files {
+            run_golden_file(&file);
+        }
+
+        for file in execution_files {
+            if !file.ends_with("_execution.json") {
+                continue;
+            }
+            match file.as_str() {
+                "f10_gmail_execution.json" | "f12_calendar_execution.json" => {
+                    run_execution_file(&file);
+                }
+                "f_clipboard_execution.json"
+                | "f_files_execution.json"
+                | "f_pdf_execution.json" => {
+                    run_command_execution_file(&file);
+                }
+                _ => {
+                    // Automation/OCR/schedule execution evals have dedicated #[test] hooks.
+                }
+            }
+        }
     }
 
     #[test]
@@ -334,5 +513,576 @@ mod tests {
                 .iter()
                 .any(|event| event.message.contains("Provider quota"))
         );
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct ExecutionEvalCase {
+        command: String,
+        #[serde(rename = "capabilityId")]
+        capability_id: String,
+        fixture: String,
+        #[serde(rename = "expectSuccess")]
+        expect_success: bool,
+        #[serde(rename = "expectReplyContains")]
+        expect_reply_contains: String,
+    }
+
+    fn install_google_execution_fixture(fixture: &str) {
+        use std::collections::HashMap;
+
+        use crate::gateway::models::{clear_all_session_emails, store_session_emails, GmailMessageRecord};
+        use crate::integrations::google::{auth, client};
+
+        clear_all_session_emails();
+        client::clear_mock_responses();
+        auth::clear_test_tokens();
+
+        match fixture {
+            "missing_token" => {}
+            "gmail_list_unread" => {
+                auth::set_test_tokens(HashMap::from([("gmail".to_string(), "token".to_string())]));
+                client::set_mock_responses(HashMap::from([
+                    (
+                        "/users/me/messages?labelIds=INBOX".to_string(),
+                        r#"{"messages":[{"id":"msg-1","threadId":"thread-1"}]}"#.to_string(),
+                    ),
+                    (
+                        "/users/me/messages/msg-1?format=full".to_string(),
+                        r#"{"id":"msg-1","threadId":"thread-1","payload":{"mimeType":"text/plain","headers":[{"name":"Subject","value":"Invoice due"},{"name":"From","value":"billing@example.com"}],"body":{"data":"SW52b2ljZQ=="}}}"#
+                            .to_string(),
+                    ),
+                ]));
+            }
+            "gmail_search" => {
+                auth::set_test_tokens(HashMap::from([("gmail".to_string(), "token".to_string())]));
+                client::set_mock_responses(HashMap::from([
+                    (
+                        "/users/me/messages?maxResults".to_string(),
+                        r#"{"messages":[{"id":"msg-2","threadId":"thread-2"}]}"#.to_string(),
+                    ),
+                    (
+                        "/users/me/messages/msg-2?format=full".to_string(),
+                        r#"{"id":"msg-2","threadId":"thread-2","payload":{"mimeType":"text/plain","headers":[{"name":"Subject","value":"Invoice reminder"},{"name":"From","value":"billing@example.com"}],"body":{"data":"SW52b2ljZXM="}}}"#
+                            .to_string(),
+                    ),
+                ]));
+            }
+            "gmail_session_read" => {
+                auth::set_test_tokens(HashMap::from([("gmail".to_string(), "token".to_string())]));
+                store_session_emails(
+                    "eval-session",
+                    vec![GmailMessageRecord {
+                        id: "msg-1".into(),
+                        thread_id: "thread-1".into(),
+                        subject: "Invoice due".into(),
+                        from: "billing@example.com".into(),
+                        snippet: String::new(),
+                        date: String::new(),
+                        body: "Invoice body".into(),
+                    }],
+                );
+            }
+            "calendar_list_today" => {
+                auth::set_test_tokens(HashMap::from([(
+                    "calendar".to_string(),
+                    "token".to_string(),
+                )]));
+                client::set_mock_responses(HashMap::from([(
+                    "/calendars/primary/events".to_string(),
+                    r#"{"items":[{"id":"evt-1","summary":"Standup","start":{"dateTime":"2026-06-14T09:00:00-04:00"},"end":{"dateTime":"2026-06-14T09:30:00-04:00"}}]}"#
+                        .to_string(),
+                )]));
+            }
+            "calendar_create_event" => {
+                auth::set_test_tokens(HashMap::from([(
+                    "calendar".to_string(),
+                    "token".to_string(),
+                )]));
+                client::set_mock_responses(HashMap::from([(
+                    "/calendars/primary/events".to_string(),
+                    r#"{"id":"evt-2","summary":"gym","htmlLink":"https://calendar.google.com/event?eid=2"}"#
+                        .to_string(),
+                )]));
+            }
+            other => panic!("unknown google execution fixture: {other}"),
+        }
+    }
+
+    fn run_execution_file(file_name: &str) {
+        use crate::agents::{Agent, AgentContext, integrations::IntegrationsAgent};
+        use crate::gateway::config::GatewayConfig;
+        use crate::gateway::models::clear_all_session_emails;
+        use crate::gateway::types::{
+            GatewayAgentKind, GatewayConfidenceBand, GatewayDecisionPolicy, GatewayModelTier,
+            GatewayRoute, GatewaySensitivity, RouteLevel,
+        };
+        use crate::integrations::google::{auth, client};
+
+        let path = eval_path(file_name);
+        let raw = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+        let cases: Vec<ExecutionEvalCase> =
+            serde_json::from_str(&raw).expect("execution eval json should parse");
+        assert!(
+            cases.len() >= 3,
+            "{file_name} should contain at least 3 execution cases"
+        );
+
+        for case in cases {
+            install_google_execution_fixture(&case.fixture);
+
+            let mut config = GatewayConfig::default();
+            config.enabled = true;
+            config.features.gmail = true;
+            config.features.calendar = true;
+
+            let ctx = AgentContext {
+                db_path: std::env::temp_dir().join(format!(
+                    "jarvis-eval-exec-{}-{}",
+                    file_name,
+                    case.command.len()
+                )),
+                app_data_dir: std::env::temp_dir(),
+                config,
+                route: GatewayRoute {
+                    capability_id: case.capability_id.clone(),
+                    capability_label: "Execution".into(),
+                    agent: GatewayAgentKind::Integrations,
+                    tier: GatewayModelTier::Worker,
+                    sensitivity: GatewaySensitivity::Personal,
+                    score: 3,
+                    confidence: GatewayConfidenceBand::High,
+                    decision_policy: GatewayDecisionPolicy::Execute,
+                    decision_reason: "test".into(),
+                    reason: "test".into(),
+                    route_level: RouteLevel::L0,
+                    resolved_provider: None,
+                },
+                session_id: "eval-session".into(),
+                turn_id: 1,
+                command: case.command.clone(),
+                step_description: case.command.clone(),
+                step_kind: "integration".into(),
+            };
+
+            let result = IntegrationsAgent.run_step(&ctx).expect("integration step");
+            assert_eq!(
+                result.success, case.expect_success,
+                "command {:?} fixture {}",
+                case.command, case.fixture
+            );
+            assert!(
+                result.reply.contains(&case.expect_reply_contains),
+                "command {:?} expected reply to contain {:?}, got {:?}",
+                case.command, case.expect_reply_contains, result.reply
+            );
+            assert!(result.integration_handoff.is_none());
+
+            client::clear_mock_responses();
+            auth::clear_test_tokens();
+            clear_all_session_emails();
+        }
+    }
+
+    fn install_command_execution_fixture(fixture: &str) {
+        match fixture {
+            "default" => {}
+            other => panic!("unknown command execution fixture: {other}"),
+        }
+    }
+
+    fn run_command_execution_file(file_name: &str) {
+        use crate::agents::{command::CommandAgent, Agent, AgentContext};
+        use crate::gateway::config::GatewayConfig;
+        use crate::gateway::types::{
+            GatewayAgentKind, GatewayConfidenceBand, GatewayDecisionPolicy, GatewayModelTier,
+            GatewayRoute, GatewaySensitivity, RouteLevel,
+        };
+
+        let path = eval_path(file_name);
+        let raw = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+        let cases: Vec<ExecutionEvalCase> =
+            serde_json::from_str(&raw).expect("execution eval json should parse");
+        assert!(
+            cases.len() >= 3,
+            "{file_name} should contain at least 3 execution cases"
+        );
+
+        for case in cases {
+            install_command_execution_fixture(&case.fixture);
+
+            let mut config = GatewayConfig::default();
+            config.enabled = true;
+
+            let ctx = AgentContext {
+                db_path: std::env::temp_dir().join(format!(
+                    "jarvis-eval-cmd-exec-{}-{}",
+                    file_name,
+                    case.command.len()
+                )),
+                app_data_dir: std::env::temp_dir(),
+                config,
+                route: GatewayRoute {
+                    capability_id: case.capability_id.clone(),
+                    capability_label: "Execution".into(),
+                    agent: GatewayAgentKind::Command,
+                    tier: GatewayModelTier::Local,
+                    sensitivity: GatewaySensitivity::Public,
+                    score: 3,
+                    confidence: GatewayConfidenceBand::High,
+                    decision_policy: GatewayDecisionPolicy::Execute,
+                    decision_reason: "test".into(),
+                    reason: "test".into(),
+                    route_level: RouteLevel::L0,
+                    resolved_provider: None,
+                },
+                session_id: "eval-session".into(),
+                turn_id: 1,
+                command: case.command.clone(),
+                step_description: case.command.clone(),
+                step_kind: "command_execution".into(),
+            };
+
+            let result = match CommandAgent.run_step(&ctx) {
+                Ok(result) => result,
+                Err(message) => crate::agents::StepResult::failed(message),
+            };
+            assert_eq!(
+                result.success, case.expect_success,
+                "command {:?} fixture {}",
+                case.command, case.fixture
+            );
+            assert!(
+                result.reply.to_lowercase().contains(&case.expect_reply_contains.to_lowercase()),
+                "command {:?} expected reply to contain {:?}, got {:?}",
+                case.command, case.expect_reply_contains, result.reply
+            );
+            assert!(result.integration_handoff.is_none());
+        }
+    }
+
+    fn install_memory_execution_fixture(fixture: &str, db_path: &std::path::Path) {
+        use std::collections::HashMap;
+
+        use chrono::{Duration, Local};
+        use crate::integrations::google::{auth, client};
+        use crate::memory::{self, meeting};
+        use crate::models::MeetingPrepMemoryRecord;
+
+        client::clear_mock_responses();
+        auth::clear_test_tokens();
+
+        match fixture {
+            "missing_token" => {
+                memory::ensure_schema(db_path).expect("migrate");
+            }
+            "meeting_copilot_calendar" | "meeting_copilot_with_saved_prep" => {
+                memory::ensure_schema(db_path).expect("migrate");
+                auth::set_test_tokens(HashMap::from([(
+                    "calendar".to_string(),
+                    "token".to_string(),
+                )]));
+                let start = (Local::now() + Duration::minutes(10)).to_rfc3339();
+                let end = (Local::now() + Duration::minutes(40)).to_rfc3339();
+                client::set_mock_responses(HashMap::from([(
+                    "/calendars/primary/events".to_string(),
+                    format!(
+                        r#"{{"items":[{{"id":"evt-review","summary":"Product review","start":{{"dateTime":"{start}"}},"end":{{"dateTime":"{end}"}}}}]}}"#
+                    ),
+                )]));
+                if fixture == "meeting_copilot_with_saved_prep" {
+                    meeting::upsert_meeting_prep(
+                        db_path,
+                        &MeetingPrepMemoryRecord {
+                            id: "meeting-1".into(),
+                            event_title: "Product review".into(),
+                            summary_title: "Product review prep".into(),
+                            focus_summary: "Review launch checklist".into(),
+                            action_items: vec!["Confirm demo flow".into()],
+                            related_people: vec!["Alex".into()],
+                            changes_since_last_prep: None,
+                            summary: "Prep notes".into(),
+                            created_at: "2026-01-01T00:00:00Z".into(),
+                        },
+                    )
+                    .expect("seed meeting prep");
+                }
+            }
+            other => panic!("unknown memory execution fixture: {other}"),
+        }
+    }
+
+    fn run_memory_execution_file(file_name: &str) {
+        use crate::agents::{Agent, AgentContext, MemoryAgent};
+        use crate::gateway::config::GatewayConfig;
+        use crate::gateway::types::{
+            GatewayAgentKind, GatewayConfidenceBand, GatewayDecisionPolicy, GatewayModelTier,
+            GatewayRoute, GatewaySensitivity, RouteLevel,
+        };
+        use crate::integrations::google::{auth, client};
+
+        let path = eval_path(file_name);
+        let raw = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+        let cases: Vec<ExecutionEvalCase> =
+            serde_json::from_str(&raw).expect("execution eval json should parse");
+        assert!(
+            cases.len() >= 3,
+            "{file_name} should contain at least 3 execution cases"
+        );
+
+        for case in cases {
+            let db_path = std::env::temp_dir().join(format!(
+                "jarvis-eval-memory-exec-{}-{}",
+                file_name,
+                case.command.len()
+            ));
+            let _ = std::fs::remove_file(&db_path);
+            install_memory_execution_fixture(&case.fixture, &db_path);
+
+            let mut config = GatewayConfig::default();
+            config.enabled = true;
+            config.features.memory = true;
+            config.features.calendar = true;
+
+            let ctx = AgentContext {
+                db_path: db_path.clone(),
+                app_data_dir: std::env::temp_dir(),
+                config,
+                route: GatewayRoute {
+                    capability_id: case.capability_id.clone(),
+                    capability_label: "Execution".into(),
+                    agent: GatewayAgentKind::Memory,
+                    tier: GatewayModelTier::Embed,
+                    sensitivity: GatewaySensitivity::Personal,
+                    score: 3,
+                    confidence: GatewayConfidenceBand::High,
+                    decision_policy: GatewayDecisionPolicy::Execute,
+                    decision_reason: "test".into(),
+                    reason: "test".into(),
+                    route_level: RouteLevel::L0,
+                    resolved_provider: None,
+                },
+                session_id: "eval-session".into(),
+                turn_id: 1,
+                command: case.command.clone(),
+                step_description: case.command.clone(),
+                step_kind: "memory".into(),
+            };
+
+            let result = MemoryAgent.run_step(&ctx).expect("memory step");
+            assert_eq!(
+                result.success, case.expect_success,
+                "command {:?} fixture {}",
+                case.command, case.fixture
+            );
+            assert!(
+                result
+                    .reply
+                    .to_lowercase()
+                    .contains(&case.expect_reply_contains.to_lowercase()),
+                "command {:?} expected reply to contain {:?}, got {:?}",
+                case.command, case.expect_reply_contains, result.reply
+            );
+
+            client::clear_mock_responses();
+            auth::clear_test_tokens();
+            let _ = std::fs::remove_file(db_path);
+        }
+    }
+
+    #[test]
+    fn eval_golden_f10_gmail_execution() {
+        run_execution_file("f10_gmail_execution.json");
+    }
+
+    #[test]
+    fn eval_golden_f12_calendar_execution() {
+        run_execution_file("f12_calendar_execution.json");
+    }
+
+    #[test]
+    fn eval_golden_f_meeting_copilot_execution() {
+        run_memory_execution_file("f_meeting_copilot_execution.json");
+    }
+
+    #[test]
+    fn eval_golden_f_clipboard_execution() {
+        run_command_execution_file("f_clipboard_execution.json");
+    }
+
+    #[test]
+    fn eval_golden_f_files_execution() {
+        run_command_execution_file("f_files_execution.json");
+    }
+
+    #[test]
+    fn eval_golden_f_pdf_execution() {
+        run_command_execution_file("f_pdf_execution.json");
+    }
+
+    fn install_automation_execution_fixture(db_path: &std::path::Path, fixture: &str) {
+        use crate::db::automation_store::{
+            save_desktop_schedule, save_ocr_watch, save_saved_workflow, DesktopScheduleRecord,
+            OcrWatchRecord, SavedWorkflowRecord,
+        };
+
+        let _ = crate::db::init_database(db_path);
+
+        match fixture {
+            "default" => {}
+            "morning_workflow" => {
+                save_saved_workflow(
+                    db_path,
+                    &SavedWorkflowRecord {
+                        id: "wf-eval-morning".into(),
+                        name: "eval morning".into(),
+                        trigger_phrase: "run workflow eval morning".into(),
+                        steps: vec!["open explorer".into()],
+                        created_at: "2026-01-01T00:00:00Z".into(),
+                        based_on_count: 1,
+                    },
+                )
+                .expect("save workflow");
+            }
+            "with_watch" => {
+                save_ocr_watch(
+                    db_path,
+                    &OcrWatchRecord {
+                        id: "watch-eval".into(),
+                        name: "Eval watch".into(),
+                        scope: "screen".into(),
+                        app_name: None,
+                        region: None,
+                        rect: None,
+                        status: "active".into(),
+                        interval_ms: 60_000,
+                        log_to_notion: Some(false),
+                        create_task_on_match: Some(false),
+                        action: None,
+                        rule: Some(serde_json::json!({ "type": "any_change" })),
+                        last_text: None,
+                        last_match_key: None,
+                        last_checked_at: None,
+                    },
+                )
+                .expect("save watch");
+            }
+            "with_schedule" => {
+                save_desktop_schedule(
+                    db_path,
+                    &DesktopScheduleRecord {
+                        id: "schedule-eval".into(),
+                        project_name: "eval project".into(),
+                        action_label: "open explorer".into(),
+                        due_at: "2026-01-01T12:00:00Z".into(),
+                        created_at: "2026-01-01T00:00:00Z".into(),
+                    },
+                )
+                .expect("save schedule");
+            }
+            other => panic!("unknown automation execution fixture: {other}"),
+        }
+    }
+
+    fn run_automation_execution_file(file_name: &str) {
+        use crate::agents::{automation::AutomationAgent, integrations::IntegrationsAgent, Agent, AgentContext};
+        use crate::gateway::config::GatewayConfig;
+        use crate::gateway::types::{
+            GatewayAgentKind, GatewayConfidenceBand, GatewayDecisionPolicy, GatewayModelTier,
+            GatewayRoute, GatewaySensitivity, RouteLevel,
+        };
+
+        let path = eval_path(file_name);
+        let raw = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+        let cases: Vec<ExecutionEvalCase> =
+            serde_json::from_str(&raw).expect("execution eval json should parse");
+        assert!(
+            cases.len() >= 3,
+            "{file_name} should contain at least 3 execution cases"
+        );
+
+        for case in cases {
+            let db_path = std::env::temp_dir().join(format!(
+                "jarvis-eval-auto-exec-{}-{}",
+                file_name,
+                case.command.len()
+            ));
+            let _ = std::fs::remove_file(&db_path);
+            install_automation_execution_fixture(&db_path, &case.fixture);
+
+            let mut config = GatewayConfig::default();
+            config.enabled = true;
+            config.features.ocr_notion = true;
+
+            let agent_kind = if case.capability_id == "integrations.ocr_notion" {
+                GatewayAgentKind::Integrations
+            } else {
+                GatewayAgentKind::Automation
+            };
+
+            let ctx = AgentContext {
+                db_path: db_path.clone(),
+                app_data_dir: std::env::temp_dir(),
+                config,
+                route: GatewayRoute {
+                    capability_id: case.capability_id.clone(),
+                    capability_label: "Execution".into(),
+                    agent: agent_kind.clone(),
+                    tier: GatewayModelTier::Local,
+                    sensitivity: GatewaySensitivity::Public,
+                    score: 3,
+                    confidence: GatewayConfidenceBand::High,
+                    decision_policy: GatewayDecisionPolicy::Execute,
+                    decision_reason: "test".into(),
+                    reason: "test".into(),
+                    route_level: RouteLevel::L0,
+                    resolved_provider: None,
+                },
+                session_id: "eval-session".into(),
+                turn_id: 1,
+                command: case.command.clone(),
+                step_description: case.command.clone(),
+                step_kind: "automation_execution".into(),
+            };
+
+            let result = match agent_kind {
+                GatewayAgentKind::Integrations => IntegrationsAgent.run_step(&ctx),
+                _ => AutomationAgent.run_step(&ctx),
+            }
+            .expect("automation step");
+            assert_eq!(
+                result.success, case.expect_success,
+                "command {:?} fixture {}",
+                case.command, case.fixture
+            );
+            assert!(
+                result
+                    .reply
+                    .to_lowercase()
+                    .contains(&case.expect_reply_contains.to_lowercase()),
+                "command {:?} expected reply to contain {:?}, got {:?}",
+                case.command, case.expect_reply_contains, result.reply
+            );
+            assert!(result.integration_handoff.is_none());
+            let _ = std::fs::remove_file(db_path);
+        }
+    }
+
+    #[test]
+    fn eval_golden_f_automation_execution() {
+        run_automation_execution_file("f_automation_execution.json");
+    }
+
+    #[test]
+    fn eval_golden_f_ocr_watch_execution() {
+        run_automation_execution_file("f_ocr_watch_execution.json");
+    }
+
+    #[test]
+    fn eval_golden_f_schedule_execution() {
+        run_automation_execution_file("f_schedule_execution.json");
     }
 }

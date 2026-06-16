@@ -144,6 +144,7 @@ export type GatewayFeatures = {
 export type GatewayRoutingConfig = {
   l2Enabled: boolean;
   preferLocalForPersonal: boolean;
+  jarvisRouterEnabled?: boolean;
 };
 
 export type GatewaySttProvider = "browser" | "local" | "groq";
@@ -196,6 +197,13 @@ export type GatewayChannelsConfig = {
 
 export type GatewayTrainingConfig = {
   exportEnabled: boolean;
+  evalMinAccuracyPct?: number;
+};
+
+export type GatewayPaidModeConfig = {
+  enabled: boolean;
+  maxDailyRequests: number;
+  requireUserOptIn: boolean;
 };
 
 export type GatewayConfig = {
@@ -211,6 +219,7 @@ export type GatewayConfig = {
   knowledge?: GatewayKnowledgeConfig;
   channels?: GatewayChannelsConfig;
   training?: GatewayTrainingConfig;
+  paid?: GatewayPaidModeConfig;
   mcpHosts: McpHostEntry[];
 };
 
@@ -245,6 +254,12 @@ export type McpHostEntry = {
   command?: string;
   readOnly: boolean;
   external: boolean;
+  env?: Record<string, string>;
+};
+
+export type JarvisServiceStatus = {
+  running: boolean;
+  updatedAt?: string;
 };
 
 export type ModelPreset = {
@@ -315,6 +330,17 @@ export function saveGatewayConfig(config: GatewayConfig) {
   return invoke<void>("save_gateway_config", { config });
 }
 
+export type DiscordBotStatus = {
+  running: boolean;
+  lastError?: string | null;
+  lastChannelId?: string | null;
+  lastMessageAt?: string | null;
+};
+
+export function getDiscordBotStatus() {
+  return invoke<DiscordBotStatus>("get_discord_bot_status");
+}
+
 export function listGatewayTools() {
   return invoke<GatewayToolDefinition[]>("list_gateway_tools");
 }
@@ -371,6 +397,25 @@ export function exportTrainingTurn(input: {
   return invoke<string>("export_training_turn", input);
 }
 
+export type TrainingEvalGateResult = {
+  totalCases: number;
+  correctCases: number;
+  accuracyPct: number;
+  baselinePct: number;
+  minAccuracyPct: number;
+  passed: boolean;
+  exportRecordCount: number;
+  evalFilesScanned: number;
+};
+
+export function runTrainingEvalGate() {
+  return invoke<TrainingEvalGateResult>("run_training_eval_gate");
+}
+
+export function anonymizeTrainingExport() {
+  return invoke<string>("anonymize_training_export");
+}
+
 export function applyGatewayEasyPreset() {
   return invoke<GatewayConfig>("apply_gateway_easy_preset");
 }
@@ -385,6 +430,10 @@ export function getLocalTurnApiStatus() {
 
 export function getTriggerQueueStatus() {
   return invoke<number>("get_trigger_queue_status");
+}
+
+export function getJarvisServiceStatus() {
+  return invoke<JarvisServiceStatus>("get_jarvis_service_status");
 }
 
 export function prepareDatabaseMigrations() {
@@ -499,8 +548,8 @@ export function searchLocalFiles(query: string) {
   return invoke<FileRecord[]>("search_local_files", { query });
 }
 
-export function listRecentLocalFiles() {
-  return invoke<FileRecord[]>("list_recent_local_files");
+export function listRecentLocalFiles(limit?: number) {
+  return invoke<FileRecord[]>("list_recent_local_files", { limit });
 }
 
 export function openLocalFile(path: string) {
@@ -817,6 +866,21 @@ export function testProviderKey(providerId: string) {
   return invoke<ModelProviderSecretStatus>("test_provider_key", { providerId });
 }
 
+export function saveGoogleSessionToken(
+  kind: "calendar" | "gmail",
+  token: string,
+) {
+  return invoke<void>("save_google_session_token", { kind, token });
+}
+
+export function getGoogleSessionToken(kind: "calendar" | "gmail") {
+  return invoke<string>("get_google_session_token", { kind });
+}
+
+export function clearGoogleSessionToken(kind: "calendar" | "gmail") {
+  return invoke<void>("clear_google_session_token", { kind });
+}
+
 export function createBuildHandoffArtifact(request: SkillBuildRequest) {
   return invoke<BuildHandoffArtifact>("create_build_handoff_artifact", { request });
 }
@@ -997,4 +1061,75 @@ export function memoryListSchoolPlans() {
 
 export function importSchoolPlanMemory(records: SchoolPlanMemoryRecord[]) {
   return invoke<number>("import_school_plan_memory", { records });
+}
+
+export type OcrWatchRecord = {
+  id: string;
+  name: string;
+  scope: string;
+  appName?: string;
+  region?: unknown;
+  rect?: unknown;
+  status: string;
+  intervalMs: number;
+  logToNotion?: boolean;
+  createTaskOnMatch?: boolean;
+  action?: unknown;
+  rule?: unknown;
+  lastText?: string;
+  lastMatchKey?: string;
+  lastCheckedAt?: string;
+};
+
+export type DesktopScheduleDbRecord = {
+  id: string;
+  projectName: string;
+  actionLabel: string;
+  dueAt: string;
+  createdAt: string;
+};
+
+export type SavedWorkflowDbRecord = {
+  id: string;
+  name: string;
+  triggerPhrase: string;
+  steps: string[];
+  createdAt: string;
+  basedOnCount: number;
+};
+
+export type LocalStorageImportPayload = {
+  ocrWatches: OcrWatchRecord[];
+  desktopSchedules: DesktopScheduleDbRecord[];
+  savedWorkflows: SavedWorkflowDbRecord[];
+};
+
+export type LocalStorageImportResult = {
+  ocrWatchesImported: number;
+  desktopSchedulesImported: number;
+  savedWorkflowsImported: number;
+};
+
+export function listOcrWatches() {
+  return invoke<OcrWatchRecord[]>("list_ocr_watches_cmd");
+}
+
+export function saveOcrWatch(watch: OcrWatchRecord) {
+  return invoke<void>("save_ocr_watch_cmd", { watch });
+}
+
+export function listDesktopSchedulesDb() {
+  return invoke<DesktopScheduleDbRecord[]>("list_desktop_schedules_cmd");
+}
+
+export function saveDesktopSchedule(schedule: DesktopScheduleDbRecord) {
+  return invoke<void>("save_desktop_schedule_cmd", { schedule });
+}
+
+export function listSavedWorkflowsDb() {
+  return invoke<SavedWorkflowDbRecord[]>("list_saved_workflows_cmd");
+}
+
+export function importAutomationFromLocalStorage(payload: LocalStorageImportPayload) {
+  return invoke<LocalStorageImportResult>("import_automation_from_local_storage", { payload });
 }

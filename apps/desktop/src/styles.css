@@ -1,6 +1,22 @@
 :root {
   font-family: "Segoe UI Variable", "Aptos", "Trebuchet MS", sans-serif;
   color: #f4efe6;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-pill: 999px;
+  --color-surface-1: rgba(12, 24, 42, 0.82);
+  --color-surface-2: rgba(18, 34, 58, 0.92);
+  --color-border: rgba(125, 229, 255, 0.14);
+  --z-quickbar: 40;
+  --z-drawer: 36;
+  --z-cockpit: 35;
   background:
     radial-gradient(circle at top, rgba(77, 170, 255, 0.28), transparent 38%),
     radial-gradient(circle at bottom right, rgba(255, 174, 66, 0.18), transparent 32%),
@@ -1871,4 +1887,38 @@ button {
   .glass-panel h2 {
     line-height: 1;
   }
+}
+
+.home-hero-compact {
+  gap: var(--space-6);
+  margin-bottom: var(--space-4);
+}
+
+.system-drawer-tabs {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.system-drawer-tablist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.system-drawer-tab {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-1);
+  color: inherit;
+  padding: var(--space-2) var(--space-4);
+}
+
+.system-drawer-tab.active {
+  background: var(--color-surface-2);
+  border-color: rgba(125, 229, 255, 0.35);
+}
+
+.system-drawer-tabpanel {
+  display: grid;
+  gap: var(--space-4);
 }

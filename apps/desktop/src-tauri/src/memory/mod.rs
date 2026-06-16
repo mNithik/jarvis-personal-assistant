@@ -1,4 +1,5 @@
 pub mod brief;
+pub mod cag;
 pub mod embed;
 pub mod knowledge_router;
 pub mod vault;
@@ -51,6 +52,7 @@ pub enum MemoryAction {
     ListPackagesArrivingTomorrow,
     ListDelayedPackages,
     ListMeetingPrep,
+    MeetingCopilot,
     ListSchoolPlans,
     CreateDailyBrief,
     ListWeeklyExpenses,
@@ -120,9 +122,24 @@ pub fn parse_memory_command(command: &str) -> Option<MemoryAction> {
 
     if matches!(
         normalized.as_str(),
+        "prep for my next meeting"
+            | "prep me for my next meeting"
+            | "prepare me for my next meeting"
+    ) {
+        return Some(MemoryAction::MeetingCopilot);
+    }
+
+    if matches!(
+        normalized.as_str(),
         "show meeting prep memory" | "list meeting prep memory" | "show meeting prep"
     ) {
         return Some(MemoryAction::ListMeetingPrep);
+    }
+
+    if (normalized.contains("standup") || normalized.contains("next meeting"))
+        && (normalized.contains("need") || normalized.contains("prep"))
+    {
+        return Some(MemoryAction::MeetingCopilot);
     }
 
     if matches!(
@@ -258,6 +275,9 @@ pub fn is_memory_command(command: &str) -> bool {
         || n.contains("arriving tomorrow")
         || n.contains("delayed packages")
         || n.contains("meeting prep")
+        || n.contains("next meeting")
+        || n.contains("prep for")
+        || n.contains("standup")
         || n.contains("school memory")
         || n.contains("school plans")
         || n.starts_with("remember ")
@@ -324,6 +344,7 @@ pub fn run_memory_action(path: &Path, command: &str) -> Result<String, String> {
         MemoryAction::ListPackagesArrivingTomorrow => format_arriving_tomorrow_summary(path),
         MemoryAction::ListDelayedPackages => format_delayed_package_summary(path),
         MemoryAction::ListMeetingPrep => format_meeting_prep_summary(path),
+        MemoryAction::MeetingCopilot => meeting::compose_meeting_copilot_reply(path, None, None),
         MemoryAction::ListSchoolPlans => format_school_plan_summary(path),
         MemoryAction::CreateDailyBrief => {
             Err("Daily brief requires a desktop handoff.".to_string())

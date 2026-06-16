@@ -4,6 +4,8 @@ pub mod finance;
 pub mod builder;
 pub mod integrations;
 mod memory_agent;
+pub use memory_agent::MemoryAgent;
+pub mod ocr_watch;
 pub mod research;
 pub mod supervisor;
 pub mod vision;
@@ -202,6 +204,9 @@ pub enum PdfCommandAction {
     ReadCurrent,
     ReadByIndex { index: u32 },
     ReadByQuery { query: String },
+    SummarizeCurrent,
+    SummarizeByIndex { index: u32 },
+    SummarizeByQuery { query: String },
 }
 
 pub fn parse_pdf_command_action(command: &str) -> Option<PdfCommandAction> {
@@ -218,6 +223,10 @@ pub fn parse_pdf_command_action(command: &str) -> Option<PdfCommandAction> {
 
     if matches!(normalized.as_str(), "read this pdf" | "show this pdf") {
         return Some(PdfCommandAction::ReadCurrent);
+    }
+
+    if normalized == "summarize this pdf" {
+        return Some(PdfCommandAction::SummarizeCurrent);
     }
 
     for prefix in ["search pdfs for ", "find pdf about "] {
@@ -276,6 +285,26 @@ pub fn parse_pdf_command_action(command: &str) -> Option<PdfCommandAction> {
         }
     }
 
+    for prefix in ["summarize pdf ", "summarize the pdf "] {
+        if normalized.starts_with(prefix) {
+            let index = trimmed[prefix.len()..].trim();
+            if let Ok(index) = index.parse::<u32>() {
+                return Some(PdfCommandAction::SummarizeByIndex { index });
+            }
+        }
+    }
+
+    for prefix in ["summarize the pdf about ", "summarize pdf about "] {
+        if normalized.starts_with(prefix) {
+            let query = trimmed[prefix.len()..].trim();
+            if !query.is_empty() {
+                return Some(PdfCommandAction::SummarizeByQuery {
+                    query: query.to_string(),
+                });
+            }
+        }
+    }
+
     None
 }
 
@@ -288,6 +317,42 @@ pub fn extract_pdf_search_query(command: &str) -> Option<String> {
         Some(PdfCommandAction::Search { query }) => Some(query),
         _ => None,
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClipboardCommandAction {
+    Read,
+    Write { text: String },
+}
+
+pub fn parse_clipboard_command(command: &str) -> Option<ClipboardCommandAction> {
+    let trimmed = command.trim();
+    let normalized = trimmed.to_lowercase();
+
+    if normalized.contains("read clipboard")
+        || normalized == "clipboard"
+        || normalized == "show clipboard"
+    {
+        return Some(ClipboardCommandAction::Read);
+    }
+
+    for prefix in ["copy ", "write clipboard ", "copy to clipboard "] {
+        if normalized.starts_with(prefix) {
+            let text = trimmed[prefix.len()..].trim();
+            let text = text
+                .strip_suffix(" to clipboard")
+                .or_else(|| text.strip_suffix(" to the clipboard"))
+                .unwrap_or(text)
+                .trim();
+            if !text.is_empty() {
+                return Some(ClipboardCommandAction::Write {
+                    text: text.to_string(),
+                });
+            }
+        }
+    }
+
+    None
 }
 
 pub fn parse_then_steps(command: &str) -> Option<(String, String)> {

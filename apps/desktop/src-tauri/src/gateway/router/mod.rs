@@ -44,7 +44,7 @@ fn route_turn_internal(command: &str, context: &RouterContext) -> GatewayRoute {
     }
     if context.config.routing.l2_enabled {
         if let Some(db_path) = context.db_path.as_deref() {
-            if let Some(route) = l2::route_l2(command, db_path) {
+            if let Some(route) = l2::route_l2(command, db_path, &context.config) {
                 return route;
             }
         }

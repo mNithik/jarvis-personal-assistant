@@ -170,6 +170,10 @@ export type MemorySectionProps = {
   rustPeopleMemory: PersonMemoryRecord[] | null;
   rustSchoolPlanMemory: SchoolPlanMemoryRecord[] | null;
   rustTravelMemory: Array<{ title: string }> | null;
+  googleCalendarAccessToken?: string | null;
+  nextMeetingEvent?: { summary: string; start?: string | null } | null;
+  meetingPrepStatus?: string;
+  runCommand?: (command: string) => void | Promise<unknown>;
 };
 
 export type AutomationSectionProps = {

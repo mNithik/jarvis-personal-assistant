@@ -61,6 +61,53 @@ pub fn format_meeting_prep_summary(path: &Path) -> Result<String, String> {
     ))
 }
 
+fn format_event_start_label(start: Option<&str>) -> String {
+    let Some(raw) = start else {
+        return "soon".to_string();
+    };
+    chrono::DateTime::parse_from_rfc3339(raw)
+        .map(|timestamp| timestamp.format("%I:%M %p").to_string())
+        .unwrap_or_else(|_| raw.to_string())
+}
+
+pub fn compose_meeting_copilot_reply(
+    path: &Path,
+    next_event_summary: Option<&str>,
+    next_event_start: Option<&str>,
+) -> Result<String, String> {
+    let items = list_meeting_prep(path)?;
+
+    if let Some(summary) = next_event_summary {
+        let summary_lower = summary.to_lowercase();
+        if let Some(item) = items.iter().find(|entry| {
+            let title = entry.event_title.to_lowercase();
+            title.contains(&summary_lower) || summary_lower.contains(&title)
+        }) {
+            let actions = if item.action_items.is_empty() {
+                "No action items saved.".to_string()
+            } else {
+                item.action_items
+                    .iter()
+                    .map(|action| format!("- {action}"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            };
+            return Ok(format!(
+                "Meeting prep for \"{}\":\nFocus: {}\nAction items:\n{}",
+                item.event_title, item.focus_summary, actions
+            ));
+        }
+
+        return Ok(format!(
+            "\"{}\" starts at {} — you do not have saved prep for it yet. Say \"show meeting prep\" to review saved items.",
+            summary,
+            format_event_start_label(next_event_start)
+        ));
+    }
+
+    format_meeting_prep_summary(path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,0 +1,23 @@
+[
+  {
+    "command": "run workflow eval morning",
+    "capabilityId": "automation.workflow",
+    "fixture": "morning_workflow",
+    "expectSuccess": true,
+    "expectReplyContains": "eval morning"
+  },
+  {
+    "command": "start workflow eval morning",
+    "capabilityId": "automation.workflow",
+    "fixture": "morning_workflow",
+    "expectSuccess": true,
+    "expectReplyContains": "eval morning"
+  },
+  {
+    "command": "run workflow missing workflow",
+    "capabilityId": "automation.workflow",
+    "fixture": "default",
+    "expectSuccess": false,
+    "expectReplyContains": "no saved workflow"
+  }
+]

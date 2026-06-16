@@ -8,7 +8,7 @@ use crate::agents::{
     parse_pdf_command_action, parse_then_steps, AgentContext,
     PdfCommandAction,
 };
-use crate::gateway::router::{route_turn, RouterContext};
+use crate::gateway::router::{route_turn, replan_supervisor_step, verify_with_builder, RouterContext};
 use crate::gateway::types::TurnRequest;
 use crate::db::{list_active_tasks, save_task_state, TaskStateRecord};
 use crate::gateway::types::GatewayRoute;
@@ -55,6 +55,8 @@ pub struct TaskStep {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TaskStepsPayload {
     pub failure_count: u32,
+    #[serde(default)]
+    pub supervisor_recoveries: u32,
     pub steps: Vec<TaskStep>,
 }
 
@@ -80,7 +82,7 @@ pub struct TaskLoopOutcome {
     pub integration_handoff: Option<crate::gateway::types::IntegrationHandoff>,
 }
 
-pub fn start_or_resume_turn(ctx: TaskLoopContext<'_>) -> Result<TaskLoopOutcome, String> {
+pub fn start_or_resume_turn(mut ctx: TaskLoopContext<'_>) -> Result<TaskLoopOutcome, String> {
     let mut events = Vec::new();
     let task = load_or_create_task(&ctx)?;
 
@@ -187,9 +189,7 @@ pub fn start_or_resume_turn(ctx: TaskLoopContext<'_>) -> Result<TaskLoopOutcome,
         format!("Ralph step {}: {}", step_index + 1, step.description),
     ));
 
-    let agent_ctx = agent_context_for_step(&ctx, &step);
-
-    let step_result = match dispatch_step(&agent_ctx, ctx.bus) {
+    let step_result = match execute_step_with_recovery(&mut ctx, &step, &mut payload, &mut events) {
         Ok(result) => result,
         Err(error) => {
             payload.failure_count += 1;
@@ -317,6 +317,7 @@ fn load_or_create_task(ctx: &TaskLoopContext<'_>) -> Result<TaskStateRecord, Str
     let steps = plan_steps(ctx.command, ctx.route);
     let payload = TaskStepsPayload {
         failure_count: 0,
+        supervisor_recoveries: 0,
         steps,
     };
     let record = TaskStateRecord {
@@ -383,6 +384,15 @@ pub fn plan_steps(command: &str, route: &GatewayRoute) -> Vec<TaskStep> {
                 PdfCommandAction::ReadCurrent => ("Read current PDF", "read_current_pdf"),
                 PdfCommandAction::ReadByIndex { .. } => ("Read PDF by index", "read_pdf_by_index"),
                 PdfCommandAction::ReadByQuery { .. } => ("Read PDF by query", "read_pdf_by_query"),
+                PdfCommandAction::SummarizeCurrent => {
+                    ("Summarize current PDF", "summarize_current_pdf")
+                }
+                PdfCommandAction::SummarizeByIndex { .. } => {
+                    ("Summarize PDF by index", "summarize_pdf_by_index")
+                }
+                PdfCommandAction::SummarizeByQuery { .. } => {
+                    ("Summarize PDF by query", "summarize_pdf_by_query")
+                }
             };
             return vec![task_step("step-1", description, kind)];
         }
@@ -391,6 +401,10 @@ pub fn plan_steps(command: &str, route: &GatewayRoute) -> Vec<TaskStep> {
 
     if route.capability_id == "command.desktop" {
         return vec![task_step("step-1", command, "open_desktop")];
+    }
+
+    if route.capability_id == "command.clipboard" {
+        return vec![task_step("step-1", "Clipboard", "clipboard_action")];
     }
 
     if route.agent == GatewayAgentKind::Integrations {
@@ -490,7 +504,12 @@ pub fn plan_steps(command: &str, route: &GatewayRoute) -> Vec<TaskStep> {
         return vec![task_step("step-1", "Search knowledge vault", "vault_search")];
     }
 
-    if route.capability_id == "integrations.mcp.host" || command.trim().to_lowercase().starts_with("mcp ")
+    if route.capability_id == "integrations.mcp.host"
+        || route.capability_id == "integrations.mcp.github"
+        || route.capability_id == "integrations.mcp.jira"
+        || route.capability_id == "integrations.mcp.huggingface"
+        || route.capability_id == "integrations.mcp.zapier"
+        || command.trim().to_lowercase().starts_with("mcp ")
     {
         return vec![task_step("step-1", command, "mcp_call")];
     }
@@ -500,6 +519,97 @@ pub fn plan_steps(command: &str, route: &GatewayRoute) -> Vec<TaskStep> {
     }
 
     vec![task_step("step-1", command, "fake_step")]
+}
+
+fn execute_step_with_recovery(
+    ctx: &mut TaskLoopContext<'_>,
+    step: &TaskStep,
+    payload: &mut TaskStepsPayload,
+    events: &mut Vec<GatewayEvent>,
+) -> Result<crate::agents::StepResult, String> {
+    let agent_ctx = agent_context_for_step(ctx, step);
+    let mut result = dispatch_step(&agent_ctx, ctx.bus)?;
+
+    if result.success || ctx.route.capability_id != "supervisor.delegate" {
+        return Ok(result);
+    }
+
+    if payload.supervisor_recoveries > 0 {
+        return Ok(result);
+    }
+
+    let router_context = RouterContext {
+        db_path: Some(ctx.db_path.to_path_buf()),
+        config: ctx.config.clone(),
+    };
+
+    if let Some(replan_route) =
+        replan_supervisor_step(&step.description, &router_context)
+    {
+        payload.supervisor_recoveries += 1;
+        events.push(tool_event(
+            ctx.session_id,
+            ctx.turn_id,
+            GatewayEventKind::Thinking,
+            format!(
+                "L3 supervisor replan → {} ({})",
+                replan_route.capability_id, replan_route.reason
+            ),
+        ));
+
+        let recovered_kind = step_kind_for_command(&step.description, &replan_route);
+        let recovered_ctx = AgentContext {
+            db_path: ctx.db_path.to_path_buf(),
+            app_data_dir: ctx.app_data_dir.to_path_buf(),
+            config: ctx.config.clone(),
+            route: replan_route.clone(),
+            session_id: ctx.session_id.to_string(),
+            turn_id: ctx.turn_id,
+            command: step.description.clone(),
+            step_description: step.description.clone(),
+            step_kind: recovered_kind,
+        };
+        result = dispatch_step(&recovered_ctx, ctx.bus)?;
+        if result.success {
+            return Ok(result);
+        }
+    }
+
+    if let Some(builder_route) = verify_with_builder(&step.description, &router_context) {
+        payload.supervisor_recoveries += 1;
+        events.push(tool_event(
+            ctx.session_id,
+            ctx.turn_id,
+            GatewayEventKind::Thinking,
+            format!(
+                "L4 builder verify → {} ({})",
+                builder_route.capability_id, builder_route.reason
+            ),
+        ));
+
+        let verify_ctx = AgentContext {
+            db_path: ctx.db_path.to_path_buf(),
+            app_data_dir: ctx.app_data_dir.to_path_buf(),
+            config: ctx.config.clone(),
+            route: builder_route,
+            session_id: ctx.session_id.to_string(),
+            turn_id: ctx.turn_id,
+            command: step.description.clone(),
+            step_description: step.description.clone(),
+            step_kind: "builder_verify".to_string(),
+        };
+        let verify_result = dispatch_step(&verify_ctx, ctx.bus)?;
+        if verify_result.success {
+            return Ok(crate::agents::StepResult {
+                reply: format!("L4 recovery: {}", verify_result.reply),
+                done: true,
+                success: true,
+                integration_handoff: None,
+            });
+        }
+    }
+
+    Ok(result)
 }
 
 fn agent_context_for_step(ctx: &TaskLoopContext<'_>, step: &TaskStep) -> AgentContext {
@@ -572,12 +682,23 @@ fn step_kind_for_command(command: &str, route: &GatewayRoute) -> String {
                 PdfCommandAction::ReadCurrent => "read_current_pdf",
                 PdfCommandAction::ReadByIndex { .. } => "read_pdf_by_index",
                 PdfCommandAction::ReadByQuery { .. } => "read_pdf_by_query",
+                PdfCommandAction::SummarizeCurrent => "summarize_current_pdf",
+                PdfCommandAction::SummarizeByIndex { .. } => "summarize_pdf_by_index",
+                PdfCommandAction::SummarizeByQuery { .. } => "summarize_pdf_by_query",
             }
             .to_string();
         }
         return "list_recent_files".to_string();
     }
-    if route.capability_id == "integrations.mcp.host" || command.trim().to_lowercase().starts_with("mcp ")
+    if route.capability_id == "command.clipboard" {
+        return "clipboard_action".to_string();
+    }
+    if route.capability_id == "integrations.mcp.host"
+        || route.capability_id == "integrations.mcp.github"
+        || route.capability_id == "integrations.mcp.jira"
+        || route.capability_id == "integrations.mcp.huggingface"
+        || route.capability_id == "integrations.mcp.zapier"
+        || command.trim().to_lowercase().starts_with("mcp ")
     {
         return "mcp_call".to_string();
     }
@@ -1009,6 +1130,7 @@ mod tests {
         let command = "start study mode";
         let payload = TaskStepsPayload {
             failure_count: 0,
+            supervisor_recoveries: 0,
             steps: plan_steps(command, &route),
         };
         save_task_state(
@@ -1070,6 +1192,7 @@ mod tests {
         let command = "start study mode";
         let payload = TaskStepsPayload {
             failure_count: 2,
+            supervisor_recoveries: 0,
             steps: plan_steps(command, &route),
         };
         save_task_state(

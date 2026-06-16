@@ -1,3 +1,5 @@
+pub mod runtime;
+pub mod schedule_runner;
 pub mod approval;
 pub mod bus;
 pub mod capabilities;
@@ -12,6 +14,7 @@ pub mod trigger_dispatcher;
 pub mod trigger_queue;
 #[cfg(test)]
 mod evals;
+pub mod models;
 pub mod mcp;
 pub mod mcp_host;
 pub mod orchestrator;

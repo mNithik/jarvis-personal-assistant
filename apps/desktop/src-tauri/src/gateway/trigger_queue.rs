@@ -11,18 +11,21 @@ pub struct TriggerEvent {
 }
 
 pub fn ensure_trigger_table(conn: &Connection) -> Result<(), String> {
-    conn.execute_batch(
-        "
-        CREATE TABLE IF NOT EXISTS trigger_events (
-            id TEXT PRIMARY KEY,
-            kind TEXT NOT NULL,
-            payload TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'pending',
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    let exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'trigger_events'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|count| count > 0)
+        .unwrap_or(false);
+    if !exists {
+        return Err(
+            "trigger_events table missing — run database migrations before using the trigger queue."
+                .to_string(),
         );
-        ",
-    )
-    .map_err(|error| error.to_string())
+    }
+    Ok(())
 }
 
 pub fn enqueue_trigger(conn: &Connection, kind: &str, payload: &str) -> Result<TriggerEvent, String> {
@@ -139,10 +142,16 @@ mod tests {
 
     #[test]
     fn enqueue_and_claim_trigger() {
-        let conn = Connection::open_in_memory().expect("memory db");
+        let path = std::env::temp_dir().join(format!(
+            "jarvis-trigger-queue-{}",
+            std::process::id()
+        ));
+        let conn = Connection::open(&path).expect("open db");
+        crate::migrations::apply_pending_migrations(&conn, &path).expect("migrate");
         enqueue_trigger(&conn, "ocr_watch", r#"{"watchId":"w1"}"#).expect("enqueue");
         let claimed = claim_next_trigger(&conn).expect("claim").expect("event");
         assert_eq!(claimed.kind, "ocr_watch");
         complete_trigger(&conn, &claimed.id, true).expect("complete");
+        let _ = std::fs::remove_file(path);
     }
 }

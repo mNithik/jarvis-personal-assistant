@@ -1,0 +1,5 @@
+[
+  { "phrase": "search gmail for invoices", "capabilityId": "integrations.google" },
+  { "phrase": "save expense from the email about netflix to notion", "capabilityId": "integrations.email_notion" },
+  { "phrase": "save package from email", "capabilityId": "integrations.email_notion" }
+]

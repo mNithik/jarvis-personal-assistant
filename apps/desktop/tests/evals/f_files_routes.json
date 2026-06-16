@@ -1,0 +1,5 @@
+[
+  { "phrase": "recent files", "capabilityId": "command.files" },
+  { "phrase": "show recent files", "capabilityId": "command.files" },
+  { "phrase": "show my recent files", "capabilityId": "command.files" }
+]

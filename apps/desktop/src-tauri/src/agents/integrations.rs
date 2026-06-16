@@ -2,13 +2,17 @@ use serde_json::{json, Value};
 
 use super::{Agent, AgentContext, StepResult};
 use crate::gateway::mcp_host::call_mcp_tool;
+use crate::gateway::models::{
+    find_email_by_query, get_current_email, get_email_by_index, store_session_emails,
+};
 use crate::gateway::tools::list_tool_definitions;
 use crate::gateway::types::{ApprovalRisk, GatewayAgentKind};
 use crate::integrations::{
+    google::{self, calendar as google_calendar, gmail as google_gmail},
     notion::{self, format_notes_reply},
     parse_calendar_command, parse_email_notion_command, parse_gmail_command, parse_notion_command,
     parse_ocr_notion_command, parse_ocr_watch_command, parse_spotify_command, CalendarAction,
-    EmailNotionAction, GmailAction, NotionAction, OcrNotionAction, OcrWatchAction, SpotifyAction,
+    EmailNotionAction, GmailAction, NotionAction, OcrNotionAction, SpotifyAction,
 };
 
 pub struct IntegrationsAgent;
@@ -44,7 +48,11 @@ impl Agent for IntegrationsAgent {
             "integrations.calendar" => run_calendar(ctx),
             "integrations.ocr_notion" => run_ocr_notion(ctx),
             "integrations.email_notion" => run_email_notion(ctx),
-            "integrations.mcp.host" => run_mcp(ctx),
+            "integrations.mcp.host"
+            | "integrations.mcp.github"
+            | "integrations.mcp.jira"
+            | "integrations.mcp.huggingface"
+            | "integrations.mcp.zapier" => run_mcp(ctx),
             _ => Ok(StepResult::ok(format!(
                 "Integrations agent stub for {}.",
                 ctx.route.capability_label
@@ -130,27 +138,50 @@ fn run_gmail(ctx: &AgentContext) -> Result<StepResult, String> {
         ));
     }
 
-    let action = parse_gmail_command(&ctx.command).unwrap_or(GmailAction::ListUnread);
-    let (action_name, payload) = match action {
-        GmailAction::ListUnread => ("list_unread", None),
-        GmailAction::Search { query } => ("search", Some(query)),
-        GmailAction::ReadCurrentEmail => ("read_current_email", None),
-        GmailAction::ReadEmailByIndex { index } => ("read_email_by_index", Some(index.to_string())),
-        GmailAction::ReadEmailByQuery { query } => ("read_email_by_query", Some(query)),
+    let token = match google::get_session_token("gmail") {
+        Ok(token) => token,
+        Err(_) => {
+            return Ok(StepResult::failed(
+                "Gmail is not connected yet. Connect Gmail in Settings first.",
+            ));
+        }
     };
 
-    Ok(StepResult::handoff(
-        "integrations.google",
-        action_name,
-        payload,
-        gmail_bridge_reply(action_name),
-    ))
-}
-
-fn gmail_bridge_reply(action_name: &str) -> String {
-    format!(
-        "Handing off Gmail action `{action_name}` to the desktop mail client. Gmail bridge degraded mode: if this does not complete, check Google auth, Gmail service status, and the legacy desktop mail bridge with gateway disabled."
-    )
+    let action = parse_gmail_command(&ctx.command).unwrap_or(GmailAction::ListUnread);
+    match action {
+        GmailAction::ListUnread => {
+            let emails = google_gmail::list_unread(&token, 5)?;
+            store_session_emails(&ctx.session_id, emails.clone());
+            Ok(StepResult::ok(google_gmail::format_unread_reply(&emails)))
+        }
+        GmailAction::Search { query } => {
+            let emails = google_gmail::search(&token, &query, 5)?;
+            store_session_emails(&ctx.session_id, emails.clone());
+            Ok(StepResult::ok(google_gmail::format_search_reply(&query, &emails)))
+        }
+        GmailAction::ReadCurrentEmail => {
+            let email = get_current_email(&ctx.session_id).ok_or_else(|| {
+                "There is no loaded email to read yet. Ask JARVIS to show unread emails or search Gmail first.".to_string()
+            })?;
+            Ok(StepResult::ok(google_gmail::format_read_reply(&email)))
+        }
+        GmailAction::ReadEmailByIndex { index } => {
+            let email = get_email_by_index(&ctx.session_id, index).ok_or_else(|| {
+                format!(
+                    "Email {index} is not loaded right now. Load emails first and then choose a visible email number."
+                )
+            })?;
+            Ok(StepResult::ok(google_gmail::format_read_reply(&email)))
+        }
+        GmailAction::ReadEmailByQuery { query } => {
+            let email = find_email_by_query(&ctx.session_id, &query).ok_or_else(|| {
+                format!(
+                    "I could not find a loaded email about {query}. Load or search Gmail first."
+                )
+            })?;
+            Ok(StepResult::ok(google_gmail::format_read_reply(&email)))
+        }
+    }
 }
 
 fn run_calendar(ctx: &AgentContext) -> Result<StepResult, String> {
@@ -160,19 +191,55 @@ fn run_calendar(ctx: &AgentContext) -> Result<StepResult, String> {
         ));
     }
 
-    let action = parse_calendar_command(&ctx.command).unwrap_or(CalendarAction::CreateFromNl);
-    let (action_name, payload) = match action {
-        CalendarAction::ListToday => ("list_today", None),
-        CalendarAction::CreateFromNl => ("create_from_nl", Some(ctx.command.clone())),
-        CalendarAction::CreateFromEmail => ("create_from_email", None),
+    let token = match google::get_session_token("calendar") {
+        Ok(token) => token,
+        Err(_) => {
+            return Ok(StepResult::failed(
+                "Google Calendar is not connected yet. Connect Google Calendar in Settings first.",
+            ));
+        }
     };
 
-    Ok(StepResult::handoff(
-        "integrations.calendar",
-        action_name,
-        payload,
-        format!("Handing off Calendar action `{action_name}` to the desktop calendar client."),
-    ))
+    let action = parse_calendar_command(&ctx.command).unwrap_or(CalendarAction::CreateFromNl);
+    match action {
+        CalendarAction::ListToday => {
+            let events = google_calendar::list_today(&token)?;
+            Ok(StepResult::ok(google_calendar::format_today_reply(&events)))
+        }
+        CalendarAction::CreateFromNl => {
+            let parsed = google_calendar::parse_calendar_from_nl(&ctx.command).ok_or_else(|| {
+                "I could not parse a calendar time from that command. Try something like \"add gym tomorrow at 6 PM to my calendar\".".to_string()
+            })?;
+            let created = google_calendar::create_event(
+                &token,
+                &parsed.title,
+                parsed.start,
+                parsed.end,
+            )?;
+            Ok(StepResult::ok(google_calendar::format_create_reply(
+                &created.summary,
+                created.html_link.as_deref(),
+            )))
+        }
+        CalendarAction::CreateFromEmail => {
+            let email = get_current_email(&ctx.session_id).ok_or_else(|| {
+                "There is no loaded email to schedule yet. Load or read an email first.".to_string()
+            })?;
+            let parsed = google_calendar::build_calendar_from_email(&email).ok_or_else(|| {
+                "I could not find a meeting time in the current email.".to_string()
+            })?;
+            let created = google_calendar::create_event(
+                &token,
+                &parsed.title,
+                parsed.start,
+                parsed.end,
+            )?;
+            Ok(StepResult::ok(google_calendar::format_create_reply(
+                &created.summary,
+                created.html_link.as_deref(),
+            )))
+        }
+    }
 }
 
 fn run_ocr_notion(ctx: &AgentContext) -> Result<StepResult, String> {
@@ -183,19 +250,8 @@ fn run_ocr_notion(ctx: &AgentContext) -> Result<StepResult, String> {
     }
 
     if let Some(watch_action) = parse_ocr_watch_command(&ctx.command) {
-        let (action_name, payload) = match watch_action {
-            OcrWatchAction::StartWatch => ("start_ocr_watch", Some(ctx.command.clone())),
-            OcrWatchAction::StopWatch => ("stop_ocr_watch", None),
-            OcrWatchAction::ShowWatches => ("show_ocr_watches", None),
-            OcrWatchAction::PauseWatches => ("pause_ocr_watches", None),
-            OcrWatchAction::ResumeWatches => ("resume_ocr_watches", None),
-        };
-        return Ok(StepResult::handoff(
-            "integrations.ocr_notion",
-            action_name,
-            payload,
-            format!("Handing off OCR watch action `{action_name}` to the desktop automation bridge."),
-        ));
+        let _ = watch_action;
+        return crate::agents::ocr_watch::run_ocr_watch_terminal(ctx);
     }
 
     let action = parse_ocr_notion_command(&ctx.command).ok_or_else(|| {
@@ -239,9 +295,9 @@ fn run_email_notion(ctx: &AgentContext) -> Result<StepResult, String> {
             "Email to Notion is disabled. Enable gateway.features.email_notion first.",
         ));
     }
-    if !ctx.config.features.gmail {
+    if !ctx.config.features.notion {
         return Ok(StepResult::failed(
-            "Email to Notion requires Gmail to be enabled in gateway features.",
+            "Notion integration is disabled. Enable gateway.features.notion first.",
         ));
     }
 
@@ -249,50 +305,101 @@ fn run_email_notion(ctx: &AgentContext) -> Result<StepResult, String> {
         "Could not parse an email to Notion command.".to_string()
     })?;
 
-    let (action_name, payload) = match action {
-        EmailNotionAction::SaveCurrentEmail => ("save_current_email", None),
-        EmailNotionAction::SaveLatestEmail => ("save_latest_email", None),
-        EmailNotionAction::SaveEmailDigest => ("save_email_digest", None),
-        EmailNotionAction::SaveFirstEmails { count } => {
-            ("save_first_emails", Some(count.to_string()))
+    match action {
+        EmailNotionAction::SaveCurrentEmail => {
+            let Some(email) = get_current_email(&ctx.session_id) else {
+                return Ok(StepResult::failed(
+                    "There is no active email in the conversation yet. Open, read, or analyze an email first.",
+                ));
+            };
+            let note = match notion::create_note(
+                &ctx.db_path,
+                &google_gmail::format_email_for_notion(&email),
+            ) {
+                Ok(note) => note,
+                Err(error) => return Ok(StepResult::failed(error)),
+            };
+            Ok(StepResult::ok(format!(
+                "Saved \"{}\" to Notion as \"{}\" at {}",
+                email.subject, note.title, note.url
+            )))
         }
-        EmailNotionAction::SaveTravelCurrent => ("save_travel_current", None),
-        EmailNotionAction::SaveExpenseCurrent => ("save_expense_current", None),
-        EmailNotionAction::SavePackageCurrent => ("save_package_current", None),
-        EmailNotionAction::SaveEmailByIndex { index } => {
-            ("save_email_by_index", Some(index.to_string()))
+        EmailNotionAction::SaveLatestEmail => {
+            let Some(email) = get_current_email(&ctx.session_id) else {
+                return Ok(StepResult::failed(
+                    "There is no loaded email to save yet. Ask JARVIS to show unread emails or search Gmail first.",
+                ));
+            };
+            let note = match notion::create_note(
+                &ctx.db_path,
+                &google_gmail::format_email_for_notion(&email),
+            ) {
+                Ok(note) => note,
+                Err(error) => return Ok(StepResult::failed(error)),
+            };
+            Ok(StepResult::ok(format!(
+                "Saved \"{}\" to Notion as \"{}\" at {}",
+                email.subject, note.title, note.url
+            )))
         }
-        EmailNotionAction::SaveEmailByQuery { query } => ("save_email_by_query", Some(query)),
-        EmailNotionAction::SaveTravelByIndex { index } => {
-            ("save_travel_by_index", Some(index.to_string()))
-        }
-        EmailNotionAction::SaveTravelByQuery { query } => ("save_travel_by_query", Some(query)),
-        EmailNotionAction::SaveExpenseByIndex { index } => {
-            ("save_expense_by_index", Some(index.to_string()))
-        }
-        EmailNotionAction::SaveExpenseByQuery { query } => {
-            ("save_expense_by_query", Some(query))
-        }
-        EmailNotionAction::SavePackageByIndex { index } => {
-            ("save_package_by_index", Some(index.to_string()))
-        }
-        EmailNotionAction::SavePackageByQuery { query } => {
-            ("save_package_by_query", Some(query))
-        }
-    };
+        _ => {
+            let (action_name, payload) = match action {
+                EmailNotionAction::SaveEmailDigest => ("save_email_digest", None),
+                EmailNotionAction::SaveFirstEmails { count } => {
+                    ("save_first_emails", Some(count.to_string()))
+                }
+                EmailNotionAction::SaveTravelCurrent => ("save_travel_current", None),
+                EmailNotionAction::SaveExpenseCurrent => ("save_expense_current", None),
+                EmailNotionAction::SavePackageCurrent => ("save_package_current", None),
+                EmailNotionAction::SaveEmailByIndex { index } => {
+                    ("save_email_by_index", Some(index.to_string()))
+                }
+                EmailNotionAction::SaveEmailByQuery { query } => {
+                    ("save_email_by_query", Some(query))
+                }
+                EmailNotionAction::SaveTravelByIndex { index } => {
+                    ("save_travel_by_index", Some(index.to_string()))
+                }
+                EmailNotionAction::SaveTravelByQuery { query } => {
+                    ("save_travel_by_query", Some(query))
+                }
+                EmailNotionAction::SaveExpenseByIndex { index } => {
+                    ("save_expense_by_index", Some(index.to_string()))
+                }
+                EmailNotionAction::SaveExpenseByQuery { query } => {
+                    ("save_expense_by_query", Some(query))
+                }
+                EmailNotionAction::SavePackageByIndex { index } => {
+                    ("save_package_by_index", Some(index.to_string()))
+                }
+                EmailNotionAction::SavePackageByQuery { query } => {
+                    ("save_package_by_query", Some(query))
+                }
+                EmailNotionAction::SaveCurrentEmail | EmailNotionAction::SaveLatestEmail => {
+                    unreachable!("handled above")
+                }
+            };
 
-    Ok(StepResult::handoff(
-        "integrations.email_notion",
-        action_name,
-        payload,
-        format!("Handing off email to Notion action `{action_name}` to the desktop bridge."),
-    ))
+            Ok(StepResult::handoff(
+                "integrations.email_notion",
+                action_name,
+                payload,
+                format!("Handing off email to Notion action `{action_name}` to the desktop bridge."),
+            ))
+        }
+    }
 }
 
 fn run_mcp(ctx: &AgentContext) -> Result<StepResult, String> {
-    let Some((host_id, tool_name, arguments)) = parse_mcp_command(&ctx.command) else {
+    let parsed = parse_mcp_command(&ctx.command)
+        .or_else(|| parse_github_nl_command(&ctx.command))
+        .or_else(|| parse_jira_nl_command(&ctx.command))
+        .or_else(|| parse_huggingface_nl_command(&ctx.command))
+        .or_else(|| parse_zapier_nl_command(&ctx.command));
+
+    let Some((host_id, tool_name, arguments)) = parsed else {
         return Ok(StepResult::failed(
-            "MCP commands use: mcp <host-id> <tool-name> [json-args]",
+            "MCP commands use: mcp <host-id> <tool-name> [json-args], or try 'list github issues'.",
         ));
     };
 
@@ -309,10 +416,124 @@ fn run_mcp(ctx: &AgentContext) -> Result<StepResult, String> {
         }
     }
 
-    match call_mcp_tool(&ctx.config, &host_id, &tool_name, arguments) {
+    let config = config_with_preset_host(&ctx.config, &host_id);
+    match call_mcp_tool(&config, &host_id, &tool_name, arguments) {
         Ok(reply) => Ok(StepResult::ok(reply)),
         Err(error) => Ok(StepResult::failed(error)),
     }
+}
+
+fn config_with_preset_host(config: &crate::gateway::config::GatewayConfig, host_id: &str) -> crate::gateway::config::GatewayConfig {
+    if config.mcp_hosts.iter().any(|entry| entry.id == host_id) {
+        return config.clone();
+    }
+    if let Some(preset) = crate::gateway::mcp_presets::list_mcp_presets()
+        .into_iter()
+        .find(|entry| entry.id == host_id)
+    {
+        let mut next = config.clone();
+        next.mcp_hosts.push(crate::gateway::mcp_presets::preset_to_host(&preset));
+        return next;
+    }
+    config.clone()
+}
+
+fn parse_github_nl_command(command: &str) -> Option<(String, String, Value)> {
+    let normalized = command.trim().to_lowercase();
+    if !normalized.contains("github")
+        && !normalized.contains("pull request")
+        && !normalized.contains(" prs")
+        && !normalized.contains("issues")
+    {
+        return None;
+    }
+
+    let host_id = "github".to_string();
+    let default_repo = std::env::var("JARVIS_GITHUB_DEFAULT_REPO")
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+
+    if normalized.contains("pull request")
+        || normalized.contains(" open pr")
+        || normalized.contains(" prs")
+        || normalized.contains("github pr")
+    {
+        let args = github_repo_args(default_repo.as_deref());
+        return Some((host_id, "list_pull_requests".to_string(), args));
+    }
+
+    if normalized.contains("issue") || normalized.contains("github") {
+        let args = github_repo_args(default_repo.as_deref());
+        return Some((host_id, "list_issues".to_string(), args));
+    }
+
+    if normalized.contains("repo") {
+        let query = normalized
+            .replace("search github repos", "")
+            .replace("my github repos", "")
+            .trim()
+            .to_string();
+        return Some((
+            host_id,
+            "search_repositories".to_string(),
+            json!({ "query": if query.is_empty() { "jarvis" } else { query.as_str() } }),
+        ));
+    }
+
+    None
+}
+
+fn github_repo_args(default_repo: Option<&str>) -> Value {
+    if let Some(repo) = default_repo {
+        if let Some((owner, repo_name)) = repo.split_once('/') {
+            return json!({ "owner": owner, "repo": repo_name });
+        }
+    }
+    json!({})
+}
+
+fn parse_jira_nl_command(command: &str) -> Option<(String, String, Value)> {
+    let normalized = command.trim().to_lowercase();
+    if !normalized.contains("jira") {
+        return None;
+    }
+    Some((
+        "jira".to_string(),
+        "search_issues".to_string(),
+        json!({ "jql": "order by updated DESC" }),
+    ))
+}
+
+fn parse_huggingface_nl_command(command: &str) -> Option<(String, String, Value)> {
+    let normalized = command.trim().to_lowercase();
+    if !normalized.contains("huggingface") && !normalized.contains("hf models") {
+        return None;
+    }
+    let query = normalized
+        .replace("search huggingface models", "")
+        .replace("search huggingface", "")
+        .replace("huggingface models", "")
+        .replace("hf models", "")
+        .replace("find a model on huggingface", "")
+        .trim()
+        .to_string();
+    Some((
+        "huggingface".to_string(),
+        "search_models".to_string(),
+        json!({ "query": if query.is_empty() { "llama" } else { query.as_str() } }),
+    ))
+}
+
+fn parse_zapier_nl_command(command: &str) -> Option<(String, String, Value)> {
+    let normalized = command.trim().to_lowercase();
+    if !normalized.contains("zapier") && !normalized.contains("zaps") {
+        return None;
+    }
+    Some((
+        "zapier".to_string(),
+        "list_actions".to_string(),
+        json!({}),
+    ))
 }
 
 fn parse_mcp_command(command: &str) -> Option<(String, String, Value)> {
@@ -400,28 +621,143 @@ mod tests {
     }
 
     #[test]
+    fn gmail_execution_lists_unread_when_token_present() {
+        use std::collections::HashMap;
+
+        use crate::gateway::models::clear_all_session_emails;
+        use crate::integrations::google::{auth, client};
+
+        const LIST_FIXTURE: &str = r#"{"messages":[{"id":"msg-1","threadId":"thread-1"}]}"#;
+        const MESSAGE_FIXTURE: &str = r#"{
+          "id":"msg-1","threadId":"thread-1","snippet":"Hello",
+          "payload":{"mimeType":"text/plain","headers":[{"name":"Subject","value":"Hello"},{"name":"From","value":"a@example.com"}],"body":{"data":"SGVsbG8="}}
+        }"#;
+
+        auth::set_test_tokens(HashMap::from([("gmail".to_string(), "token".to_string())]));
+        client::set_mock_responses(HashMap::from([
+            (
+                "/users/me/messages?labelIds=INBOX".to_string(),
+                LIST_FIXTURE.to_string(),
+            ),
+            (
+                "/users/me/messages/msg-1?format=full".to_string(),
+                MESSAGE_FIXTURE.to_string(),
+            ),
+        ]));
+
+        clear_all_session_emails();
+        let ctx = integration_ctx("check gmail", "integrations.google");
+        let result = IntegrationsAgent.run_step(&ctx).expect("step");
+        assert!(result.success);
+        assert!(result.integration_handoff.is_none());
+        assert!(result.reply.contains("unread emails"));
+
+        client::clear_mock_responses();
+        auth::clear_test_tokens();
+        clear_all_session_emails();
+    }
+
+    #[test]
+    fn gmail_fails_with_clear_message_when_token_missing() {
+        let ctx = integration_ctx("check gmail", "integrations.google");
+        let result = IntegrationsAgent.run_step(&ctx).expect("step");
+        assert!(!result.success);
+        assert!(result.reply.contains("Gmail is not connected"));
+    }
+
+    #[test]
+    fn calendar_execution_lists_today_when_token_present() {
+        use std::collections::HashMap;
+
+        use crate::integrations::google::{auth, client};
+
+        auth::set_test_tokens(HashMap::from([(
+            "calendar".to_string(),
+            "token".to_string(),
+        )]));
+        client::set_mock_responses(HashMap::from([(
+            "/calendars/primary/events".to_string(),
+            r#"{"items":[{"id":"evt-1","summary":"Standup","start":{"dateTime":"2026-06-14T09:00:00-04:00"},"end":{"dateTime":"2026-06-14T09:30:00-04:00"}}]}"#
+                .to_string(),
+        )]));
+
+        let ctx = integration_ctx(
+            "what's on my calendar today",
+            "integrations.calendar",
+        );
+        let result = IntegrationsAgent.run_step(&ctx).expect("step");
+        assert!(result.success);
+        assert!(result.integration_handoff.is_none());
+        assert!(result.reply.contains("Standup"));
+
+        client::clear_mock_responses();
+        auth::clear_test_tokens();
+    }
+
+    #[test]
     fn calendar_handoff_for_nl_create() {
+        use std::collections::HashMap;
+
+        use crate::integrations::google::{auth, client};
+
+        auth::set_test_tokens(HashMap::from([(
+            "calendar".to_string(),
+            "token".to_string(),
+        )]));
+        client::set_mock_responses(HashMap::from([(
+            "/calendars/primary/events".to_string(),
+            r#"{"id":"evt-2","summary":"gym","htmlLink":"https://calendar.google.com/event?eid=2"}"#
+                .to_string(),
+        )]));
+
         let ctx = integration_ctx(
             "add gym tomorrow at 6 PM to my calendar",
             "integrations.calendar",
         );
         let result = IntegrationsAgent.run_step(&ctx).expect("step");
         assert!(result.success);
-        assert_eq!(
-            result.integration_handoff.as_ref().map(|h| h.action.as_str()),
-            Some("create_from_nl")
-        );
+        assert!(result.integration_handoff.is_none());
+        assert!(result.reply.contains("gym"));
+
+        client::clear_mock_responses();
+        auth::clear_test_tokens();
     }
 
     #[test]
-    fn email_notion_handoff_for_current_email() {
-        let ctx = integration_ctx("save this email to notion", "integrations.email_notion");
-        let result = IntegrationsAgent.run_step(&ctx).expect("step");
-        assert!(result.success);
-        assert_eq!(
-            result.integration_handoff.as_ref().map(|h| h.action.as_str()),
-            Some("save_current_email")
+    fn email_notion_save_current_skips_handoff_without_notion_config() {
+        use crate::db::init_database;
+        use crate::gateway::models::{
+            clear_session_emails, get_current_email, store_session_emails, GmailMessageRecord,
+        };
+
+        let session = format!("email-notion-save-current-{}", std::process::id());
+        clear_session_emails(&session);
+        store_session_emails(
+            &session,
+            vec![GmailMessageRecord {
+                id: "1".into(),
+                thread_id: "t1".into(),
+                subject: "Invoice".into(),
+                from: "billing@example.com".into(),
+                snippet: String::new(),
+                date: String::new(),
+                body: "Please pay".into(),
+            }],
         );
+        assert!(get_current_email(&session).is_some());
+
+        let db_path = std::env::temp_dir().join(format!("jarvis-email-notion-agent-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&db_path);
+        init_database(&db_path).expect("init db");
+
+        let mut ctx = integration_ctx("save this email to notion", "integrations.email_notion");
+        ctx.session_id = session.clone();
+        ctx.db_path = db_path;
+
+        let result = IntegrationsAgent.run_step(&ctx).expect("step");
+        assert!(result.integration_handoff.is_none());
+
+        clear_session_emails(&session);
     }
 
     #[test]
@@ -440,37 +776,82 @@ mod tests {
     }
 
     #[test]
-    fn gmail_handoff_for_read_email_by_index() {
+    fn gmail_read_by_index_uses_session_email_store() {
+        use crate::gateway::models::{clear_all_session_emails, store_session_emails, GmailMessageRecord};
+        use std::collections::HashMap;
+
+        use crate::integrations::google::auth;
+
+        auth::set_test_tokens(HashMap::from([("gmail".to_string(), "token".to_string())]));
+        clear_all_session_emails();
+        store_session_emails(
+            "session",
+            vec![
+                GmailMessageRecord {
+                    id: "1".into(),
+                    thread_id: "t1".into(),
+                    subject: "First".into(),
+                    from: "a@example.com".into(),
+                    snippet: String::new(),
+                    date: String::new(),
+                    body: "First body".into(),
+                },
+                GmailMessageRecord {
+                    id: "2".into(),
+                    thread_id: "t2".into(),
+                    subject: "Second".into(),
+                    from: "b@example.com".into(),
+                    snippet: String::new(),
+                    date: String::new(),
+                    body: "Second body".into(),
+                },
+            ],
+        );
+
         let ctx = integration_ctx("read email 2", "integrations.google");
         let result = IntegrationsAgent.run_step(&ctx).expect("step");
         assert!(result.success);
-        assert_eq!(
-            result.integration_handoff.as_ref().map(|h| h.action.as_str()),
-            Some("read_email_by_index")
-        );
+        assert!(result.reply.contains("Second"));
+
+        auth::clear_test_tokens();
+        clear_all_session_emails();
     }
 
     #[test]
-    fn gmail_handoff_reply_names_degraded_bridge_path() {
-        let ctx = integration_ctx("check gmail", "integrations.google");
-        let result = IntegrationsAgent.run_step(&ctx).expect("step");
+    fn ocr_watch_terminal_for_start_watch() {
+        let db_path = std::env::temp_dir().join(format!(
+            "jarvis-ocr-watch-terminal-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&db_path);
+        let _ = crate::db::init_database(&db_path);
 
-        assert!(result.success);
-        assert!(result.reply.contains("Gmail bridge degraded mode"));
-        assert!(result.reply.contains("desktop mail client"));
-    }
-
-    #[test]
-    fn ocr_watch_handoff_for_start_watch() {
-        let ctx = integration_ctx(
+        let mut ctx = integration_ctx(
             "watch chrome every 30 seconds and log to notion",
             "integrations.ocr_notion",
         );
+        ctx.db_path = db_path.clone();
         let result = IntegrationsAgent.run_step(&ctx).expect("step");
         assert!(result.success);
-        assert_eq!(
-            result.integration_handoff.as_ref().map(|h| h.action.as_str()),
-            Some("start_ocr_watch")
-        );
+        assert!(result.integration_handoff.is_none());
+        assert!(result.reply.to_lowercase().contains("ocr watch"));
+        let _ = std::fs::remove_file(db_path);
+    }
+
+    #[test]
+    fn github_nl_command_maps_to_list_issues() {
+        let parsed = super::parse_github_nl_command("list github issues");
+        assert!(parsed.is_some());
+        let (_, tool, _) = parsed.unwrap();
+        assert_eq!(tool, "list_issues");
+    }
+
+    #[test]
+    fn jira_nl_command_maps_to_search_issues() {
+        let parsed = super::parse_jira_nl_command("list jira issues");
+        assert!(parsed.is_some());
+        let (host, tool, _) = parsed.unwrap();
+        assert_eq!(host, "jira");
+        assert_eq!(tool, "search_issues");
     }
 }

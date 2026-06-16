@@ -9,13 +9,10 @@ import type {
   VoiceBackend,
   VoiceSessionPhase,
 } from "../types/voice";
-import type { VoiceReplyMode } from "../features/command/jarvisCommandTypes";
+import type { VoiceReplyMode, FollowUpWindow } from "../features/command/jarvisCommandTypes";
 import type { VoiceCorrectionRecord } from "../types/jarvis";
 
-type FollowUpWindow = {
-  active: boolean;
-  reason: "wake" | "reply" | "clarification";
-} | null;
+type FollowUpWindowState = FollowUpWindow | null;
 
 type BrowserRecognitionHandle = ReturnType<typeof createVoiceRecognition>;
 
@@ -36,7 +33,7 @@ export function useJarvisVoiceSession() {
   const [localModelPath, setLocalModelPath] = useState("");
   const [localTtsExecutablePath, setLocalTtsExecutablePath] = useState("");
   const [localTtsModelPath, setLocalTtsModelPath] = useState("");
-  const [followUpWindow, setFollowUpWindow] = useState<FollowUpWindow>(null);
+  const [followUpWindow, setFollowUpWindow] = useState<FollowUpWindowState>(null);
 
   const commandRecognitionRef = useRef<BrowserRecognitionHandle | null>(null);
   const wakeRecognitionRef = useRef<BrowserRecognitionHandle | null>(null);
