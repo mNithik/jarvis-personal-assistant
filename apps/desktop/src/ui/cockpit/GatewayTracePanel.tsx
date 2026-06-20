@@ -5,12 +5,14 @@ import type { GatewayPreview } from "../../services/jarvisApi";
 import { formatGatewayPreview } from "../../features/gateway/gatewayBridge";
 import GatewayHealthCard from "./GatewayHealthCard";
 import AgentCockpitCards from "./AgentCockpitCards";
+import MissionControlPanel from "./MissionControlPanel";
 import SemanticLearningPanel from "./SemanticLearningPanel";
 
 type GatewayTracePanelProps = {
   livePreview?: GatewayPreview | null;
   livePreviewError?: string | null;
   isPreviewing?: boolean;
+  onRunCommand?: (command: string) => void | Promise<unknown>;
 };
 
 const TRACE_FILTERS = [
@@ -86,9 +88,21 @@ export default function GatewayTracePanel({
   livePreview = null,
   livePreviewError = null,
   isPreviewing = false,
+  onRunCommand,
 }: GatewayTracePanelProps) {
-  const { config, trace, pendingApprovals, lastTurn, loading, error, approve, deny, refresh } =
-    useJarvisGateway();
+  const {
+    config,
+    trace,
+    pendingApprovals,
+    auditLog,
+    taskRuns,
+    lastTurn,
+    loading,
+    error,
+    approve,
+    deny,
+    refresh,
+  } = useJarvisGateway();
   const [traceFilter, setTraceFilter] = useState<TraceFilterId>("all");
 
   const filteredTrace = useMemo(
@@ -112,6 +126,17 @@ export default function GatewayTracePanel({
       </div>
 
       <GatewayHealthCard config={config} trace={trace} />
+      <MissionControlPanel
+        trace={trace}
+        pendingApprovals={pendingApprovals}
+        auditLog={auditLog}
+        taskRuns={taskRuns}
+        loading={loading}
+        onRefresh={() => void refresh()}
+        onApprove={(id) => void approve(id)}
+        onDeny={(id) => void deny(id)}
+        onResumeTask={onRunCommand ? () => void onRunCommand("resume last task") : undefined}
+      />
       <AgentCockpitCards lastTurn={lastTurn} pendingApprovals={pendingApprovals} />
       <SemanticLearningPanel />
 

@@ -1,0 +1,23 @@
+[
+  {
+    "command": "bundle meeting follow-up",
+    "capabilityId": "labs.bundle",
+    "fixture": "default",
+    "expectSuccess": true,
+    "expectReplyContains": "lab"
+  },
+  {
+    "command": "create project bundle",
+    "capabilityId": "labs.bundle",
+    "fixture": "default",
+    "expectSuccess": true,
+    "expectReplyContains": "disabled"
+  },
+  {
+    "command": "bundle meeting follow-up",
+    "capabilityId": "labs.bundle",
+    "fixture": "lab_enabled",
+    "expectSuccess": true,
+    "expectReplyContains": "bundle"
+  }
+]

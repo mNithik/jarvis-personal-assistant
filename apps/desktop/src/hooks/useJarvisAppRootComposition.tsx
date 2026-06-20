@@ -2310,6 +2310,7 @@ export function useJarvisAppRootComposition(): ReactNode {
       rustSchoolPlanMemory,
       rustTravelMemory,
       googleCalendarAccessToken,
+      gmailAccessToken,
       nextMeetingEvent,
       meetingPrepStatus,
       runCommand,

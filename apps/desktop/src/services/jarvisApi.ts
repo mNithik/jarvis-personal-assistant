@@ -206,6 +206,13 @@ export type GatewayPaidModeConfig = {
   requireUserOptIn: boolean;
 };
 
+export type GatewayLabsConfig = {
+  projectBundlePilot: boolean;
+  councilVerifier: boolean;
+  proactiveAnomaly: boolean;
+  worldModelQueries: boolean;
+};
+
 export type GatewayConfig = {
   enabled: boolean;
   mode: GatewayMode;
@@ -220,6 +227,7 @@ export type GatewayConfig = {
   channels?: GatewayChannelsConfig;
   training?: GatewayTrainingConfig;
   paid?: GatewayPaidModeConfig;
+  labs?: GatewayLabsConfig;
   mcpHosts: McpHostEntry[];
 };
 
@@ -324,6 +332,48 @@ export function gatewayRunTurn(request: TurnRequest) {
 
 export function getGatewayConfig() {
   return invoke<GatewayConfig>("get_gateway_config");
+}
+
+export function getGatewayAuditLog(limit = 50) {
+  return invoke<string[]>("get_gateway_audit_log", { limit });
+}
+
+export type GatewayTaskRunSummary = {
+  id: string;
+  sessionId: string;
+  command: string;
+  status: string;
+  currentStepIndex: number;
+  stepCount: number;
+  failureCount: number;
+  updatedAt: string;
+};
+
+export type MemoryEntityControl = {
+  entityId: number;
+  domain: string;
+  label: string;
+  pinned: boolean;
+  forgotten: boolean;
+  confidence: string;
+};
+
+export function listGatewayTaskRuns(limit = 20) {
+  return invoke<GatewayTaskRunSummary[]>("list_gateway_task_runs", { limit });
+}
+
+export function listMemoryEntityControls(domain: string) {
+  return invoke<MemoryEntityControl[]>("memory_list_entity_controls", { domain });
+}
+
+export function setMemoryEntityControl(args: {
+  domain: string;
+  entityId: number;
+  pinned?: boolean;
+  forgotten?: boolean;
+  confidence?: string;
+}) {
+  return invoke<MemoryEntityControl>("memory_set_entity_control", args);
 }
 
 export function saveGatewayConfig(config: GatewayConfig) {

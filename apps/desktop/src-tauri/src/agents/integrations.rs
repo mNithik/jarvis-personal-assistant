@@ -25,7 +25,8 @@ impl Agent for IntegrationsAgent {
     fn run_step(&self, ctx: &AgentContext) -> Result<StepResult, String> {
         match ctx.step_kind.as_str() {
             "list_unread_emails" | "search_gmail" | "read_current_email"
-            | "read_email_by_index" | "read_email_by_query" => return run_gmail(ctx),
+            | "read_email_by_index" | "read_email_by_query" | "triage_gmail_inbox"
+            | "draft_gmail_reply" => return run_gmail(ctx),
             "list_today_calendar_events" | "create_calendar_event"
             | "create_calendar_event_from_current_email" => return run_calendar(ctx),
             "spotify_play" | "spotify_pause" | "spotify_next" | "spotify_previous"
@@ -154,6 +155,11 @@ fn run_gmail(ctx: &AgentContext) -> Result<StepResult, String> {
             store_session_emails(&ctx.session_id, emails.clone());
             Ok(StepResult::ok(google_gmail::format_unread_reply(&emails)))
         }
+        GmailAction::TriageInbox => {
+            let emails = google_gmail::list_unread(&token, 5)?;
+            store_session_emails(&ctx.session_id, emails.clone());
+            Ok(StepResult::ok(google_gmail::format_triage_reply(&emails)))
+        }
         GmailAction::Search { query } => {
             let emails = google_gmail::search(&token, &query, 5)?;
             store_session_emails(&ctx.session_id, emails.clone());
@@ -180,6 +186,18 @@ fn run_gmail(ctx: &AgentContext) -> Result<StepResult, String> {
                 )
             })?;
             Ok(StepResult::ok(google_gmail::format_read_reply(&email)))
+        }
+        GmailAction::DraftReply { index } => {
+            if get_email_by_index(&ctx.session_id, index).is_none() {
+                let loaded = google_gmail::list_unread(&token, 5)?;
+                store_session_emails(&ctx.session_id, loaded);
+            }
+            let email = get_email_by_index(&ctx.session_id, index).ok_or_else(|| {
+                format!(
+                    "Email {index} is not loaded right now. Run inbox triage or list unread emails first."
+                )
+            })?;
+            Ok(StepResult::ok(google_gmail::format_draft_reply(&email)))
         }
     }
 }

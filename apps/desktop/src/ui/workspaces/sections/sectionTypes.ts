@@ -174,6 +174,24 @@ export type MemorySectionProps = {
   nextMeetingEvent?: { summary: string; start?: string | null } | null;
   meetingPrepStatus?: string;
   runCommand?: (command: string) => void | Promise<unknown>;
+  gmailAccessToken?: string | null;
+  memoryEntityControls?: MemoryEntityControlRecord[];
+  onPinMemory?: (entityId: number, domain: string) => void;
+  onForgetMemory?: (entityId: number, domain: string) => void;
+};
+
+export type EmailSectionProps = {
+  gmailAccessToken?: string | null;
+  runCommand?: (command: string) => void | Promise<unknown>;
+};
+
+export type MemoryEntityControlRecord = {
+  entityId: number;
+  domain: string;
+  label: string;
+  pinned: boolean;
+  forgotten: boolean;
+  confidence: string;
 };
 
 export type AutomationSectionProps = {

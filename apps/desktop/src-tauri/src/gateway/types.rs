@@ -49,6 +49,18 @@ pub enum GatewayDecisionPolicy {
     Teach,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GatewayPolicyClass {
+    Read,
+    Write,
+    Send,
+    Schedule,
+    Delete,
+    Execute,
+    Pay,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum GatewayEventKind {

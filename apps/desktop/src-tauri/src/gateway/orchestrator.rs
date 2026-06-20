@@ -9,9 +9,11 @@ use crate::providers::{self, escalation::EscalationTracker};
 
 use super::{
     approval::{ApprovalGate, ApprovalOutcome},
+    audit::{self, AuditOutcome, AuditRecord},
     bus::EventBus,
     capabilities::find_capability,
     config::{GatewayConfig, GatewayMode},
+    policy::{policy_class_label, route_policy_class},
     router::{route_turn, RouterContext},
     state::PendingApproval,
     task_loop::{plan_steps, start_or_resume_turn, TaskLoopContext},
@@ -78,6 +80,21 @@ impl GatewayOrchestrator {
             true,
             groq_api_key,
         );
+
+        if let (Some(env), Some(route)) = (
+            execution.as_ref(),
+            response.result.route.as_ref(),
+        ) {
+            Self::maybe_log_turn_audit(
+                env.app_data_dir,
+                route,
+                &response.result.session_id,
+                turn_id,
+                &request.command,
+                config,
+                response.awaiting_approval,
+            );
+        }
 
         if let (Some(env), false) = (execution, response.awaiting_approval) {
             if config.features.memory
@@ -337,9 +354,10 @@ impl GatewayOrchestrator {
                 turn_id: Some(turn_id),
                 kind: GatewayEventKind::RouteDecided,
                 message: format!(
-                    "Route level {route_level} -> {} ({}) via {}",
+                    "Route level {route_level} -> {} ({}) policy={} via {}",
                     route.capability_label,
                     route.capability_id,
+                    policy_class_label(route_policy_class(&route)),
                     route
                         .resolved_provider
                         .clone()
@@ -413,6 +431,45 @@ impl GatewayOrchestrator {
             awaiting_approval,
             talker_reply,
         }
+    }
+
+    fn maybe_log_turn_audit(
+        app_data_dir: &Path,
+        route: &crate::gateway::types::GatewayRoute,
+        session_id: &str,
+        turn_id: u64,
+        command: &str,
+        config: &GatewayConfig,
+        awaiting_approval: bool,
+    ) {
+        use crate::gateway::types::GatewayPolicyClass;
+
+        let policy_class = route_policy_class(route);
+        if policy_class == GatewayPolicyClass::Read && !awaiting_approval {
+            return;
+        }
+
+        let outcome = if awaiting_approval {
+            AuditOutcome::PendingApproval
+        } else if config.mode.is_simulation() {
+            AuditOutcome::BlockedSimulation
+        } else {
+            return;
+        };
+
+        let agent = format!("{:?}", route.agent).to_lowercase();
+        let _ = audit::append_entry(
+            app_data_dir,
+            AuditRecord {
+                policy_class,
+                agent: &agent,
+                capability_id: &route.capability_id,
+                session_id,
+                turn_id,
+                outcome,
+                detail: command,
+            },
+        );
     }
 }
 

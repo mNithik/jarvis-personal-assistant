@@ -5,6 +5,8 @@ use super::{
     StepResult,
 };
 use crate::commands::{clipboard, desktop, files};
+use crate::db::{list_active_tasks, list_recent_task_states};
+use crate::gateway::task_run::is_list_task_runs_command;
 use crate::gateway::types::GatewayAgentKind;
 
 pub struct CommandAgent;
@@ -29,6 +31,7 @@ impl Agent for CommandAgent {
             }
             "clipboard_action" => run_clipboard(ctx),
             "open_desktop" => run_open_desktop(ctx),
+            "mission_control" => run_mission_control(ctx),
             "fake_step" => Ok(StepResult::ok(format!(
                 "Completed fake step: {}",
                 ctx.step_description
@@ -140,6 +143,49 @@ fn run_list_recent_files() -> Result<StepResult, String> {
     Ok(StepResult::ok(files::format_file_listing(
         &files,
         &format!("Found {} recent file(s) in Documents", files.len()),
+    )))
+}
+
+fn run_mission_control(ctx: &AgentContext) -> Result<StepResult, String> {
+    if is_list_task_runs_command(&ctx.command) {
+        let runs = list_recent_task_states(&ctx.db_path, 10)?;
+        if runs.is_empty() {
+            return Ok(StepResult::ok(
+                "Mission control: no saved task runs yet.".to_string(),
+            ));
+        }
+        let summary = runs
+            .iter()
+            .enumerate()
+            .map(|(index, run)| {
+                format!(
+                    "{}. [{}] {} — step {} ({})",
+                    index + 1,
+                    run.status,
+                    run.goal,
+                    run.current_step + 1,
+                    run.updated_at
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        return Ok(StepResult::ok(format!(
+            "Mission control — recent task runs:\n{summary}"
+        )));
+    }
+
+    let active = list_active_tasks(&ctx.db_path, &ctx.session_id)?;
+    if active.is_empty() {
+        return Ok(StepResult::ok(
+            "Mission control: no active tasks for this session.".to_string(),
+        ));
+    }
+    let latest = &active[0];
+    Ok(StepResult::ok(format!(
+        "Mission control status: \"{}\" is {} at step {}.",
+        latest.goal,
+        latest.status,
+        latest.current_step + 1
     )))
 }
 

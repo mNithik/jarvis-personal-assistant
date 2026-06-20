@@ -123,6 +123,16 @@ mod tests {
     }
 
     #[test]
+    fn eval_golden_f_mission_control_routes() {
+        run_golden_file("f_mission_control_routes.json");
+    }
+
+    #[test]
+    fn eval_golden_f_email_copilot_routes() {
+        run_golden_file("f_email_copilot_routes.json");
+    }
+
+    #[test]
     fn eval_golden_f18_memory_hardening_routes() {
         run_golden_file("f18_memory_hardening.json");
     }
@@ -329,7 +339,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
         let entries: Vec<FabricIndexEntry> =
             serde_json::from_str(&raw).expect("fabric index json should parse");
-        assert_eq!(entries.len(), 42, "fabric index should cover F1–F42");
+        assert_eq!(entries.len(), 48, "fabric index should cover F1–F48");
 
         let mut route_files = std::collections::BTreeSet::new();
         let mut execution_files = std::collections::BTreeSet::new();
@@ -356,8 +366,18 @@ mod tests {
                 continue;
             }
             match file.as_str() {
-                "f10_gmail_execution.json" | "f12_calendar_execution.json" => {
+                "f10_gmail_execution.json" | "f12_calendar_execution.json"
+                | "f_email_copilot_execution.json" => {
                     run_execution_file(&file);
+                }
+                "f_policy_execution.json" => {
+                    run_policy_execution_file(&file);
+                }
+                "f_task_run_execution.json" => {
+                    run_mission_execution_file(&file);
+                }
+                "f_project_bundle_execution.json" => {
+                    run_project_bundle_execution_file(&file);
                 }
                 "f_clipboard_execution.json"
                 | "f_files_execution.json"
@@ -684,6 +704,210 @@ mod tests {
         }
     }
 
+    fn run_orchestrator_execution_turn(
+        db_path: &std::path::Path,
+        config: &crate::gateway::config::GatewayConfig,
+        command: &str,
+    ) -> crate::gateway::orchestrator::GatewayTurnResponse {
+        use crate::gateway::orchestrator::{GatewayOrchestrator, TurnExecutionEnv};
+        use crate::gateway::router::RouterContext;
+        use crate::gateway::types::{TurnRequest, TurnSource};
+        use crate::providers::escalation::EscalationTracker;
+
+        let mut bus = crate::gateway::bus::EventBus::default();
+        let mut escalation = EscalationTracker::default();
+        let app_data_dir = std::env::temp_dir();
+        let execution = TurnExecutionEnv {
+            db_path,
+            app_data_dir: &app_data_dir,
+            escalation: &mut escalation,
+        };
+        GatewayOrchestrator::run_turn(
+            TurnRequest {
+                session_id: Some("eval-session".to_string()),
+                command: command.to_string(),
+                source: Some(TurnSource::Text),
+                idempotency_key: None,
+            },
+            7,
+            "eval-session",
+            config,
+            &RouterContext {
+                db_path: Some(db_path.to_path_buf()),
+                config: config.clone(),
+            },
+            &mut bus,
+            None,
+            Some(execution),
+        )
+    }
+
+    fn install_mission_execution_fixture(db_path: &std::path::Path, fixture: &str) {
+        use crate::db::{init_database, save_task_state, TaskStateRecord};
+        use crate::gateway::task_loop::{TaskStep, TaskStepsPayload, StepStatus};
+
+        let _ = init_database(db_path);
+        match fixture {
+            "default" | "no_active_task" => {}
+            "active_task" => {
+                let payload = TaskStepsPayload {
+                    failure_count: 0,
+                    supervisor_recoveries: 0,
+                    steps: vec![TaskStep {
+                        id: "step-1".into(),
+                        description: "List unread Gmail messages".into(),
+                        kind: "list_unread_emails".into(),
+                        status: StepStatus::Pending,
+                        result: None,
+                    }],
+                };
+                save_task_state(
+                    db_path,
+                    &TaskStateRecord {
+                        id: "eval-active-task".into(),
+                        session_id: "eval-session".into(),
+                        goal: "check my email".into(),
+                        status: "running".into(),
+                        current_step: 0,
+                        steps_json: serde_json::to_string(&payload).expect("serialize"),
+                        updated_at: "2026-06-18T12:00:00Z".into(),
+                    },
+                )
+                .expect("save task");
+            }
+            other => panic!("unknown mission execution fixture: {other}"),
+        }
+    }
+
+    fn run_policy_execution_file(file_name: &str) {
+        use crate::gateway::config::GatewayConfig;
+
+        let path = eval_path(file_name);
+        let raw = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+        let cases: Vec<ExecutionEvalCase> =
+            serde_json::from_str(&raw).expect("execution eval json should parse");
+
+        for case in cases {
+            let db_path = std::env::temp_dir().join(format!(
+                "jarvis-eval-policy-{}-{}",
+                file_name,
+                case.command.len()
+            ));
+            let _ = std::fs::remove_file(&db_path);
+            crate::db::init_database(&db_path).expect("init db");
+
+            let mut config = GatewayConfig::default();
+            config.enabled = true;
+            config.features.gmail = true;
+            config.features.calendar = true;
+
+            let response = run_orchestrator_execution_turn(&db_path, &config, &case.command);
+            if case.expect_success {
+                assert!(
+                    !response.awaiting_approval,
+                    "command {:?} should execute without approval, got {:?}",
+                    case.command,
+                    response.result.reply
+                );
+            } else {
+                assert!(
+                    response.awaiting_approval,
+                    "command {:?} should await approval, got {:?}",
+                    case.command,
+                    response.result.reply
+                );
+            }
+            assert!(
+                response
+                    .result
+                    .reply
+                    .to_lowercase()
+                    .contains(&case.expect_reply_contains.to_lowercase()),
+                "command {:?} expected reply to contain {:?}, got {:?}",
+                case.command,
+                case.expect_reply_contains,
+                response.result.reply
+            );
+            let _ = std::fs::remove_file(db_path);
+        }
+    }
+
+    fn run_mission_execution_file(file_name: &str) {
+        use crate::gateway::config::GatewayConfig;
+
+        let path = eval_path(file_name);
+        let raw = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+        let cases: Vec<ExecutionEvalCase> =
+            serde_json::from_str(&raw).expect("execution eval json should parse");
+
+        for case in cases {
+            let db_path = std::env::temp_dir().join(format!(
+                "jarvis-eval-mission-{}-{}",
+                file_name,
+                case.command.len()
+            ));
+            let _ = std::fs::remove_file(&db_path);
+            install_mission_execution_fixture(&db_path, &case.fixture);
+
+            let mut config = GatewayConfig::default();
+            config.enabled = true;
+            config.features.gmail = true;
+
+            if case.fixture == "active_task" {
+                install_google_execution_fixture("gmail_list_unread");
+            }
+
+            let response = run_orchestrator_execution_turn(&db_path, &config, &case.command);
+            assert!(
+                response
+                    .result
+                    .reply
+                    .to_lowercase()
+                    .contains(&case.expect_reply_contains.to_lowercase()),
+                "command {:?} expected reply to contain {:?}, got {:?}",
+                case.command,
+                case.expect_reply_contains,
+                response.result.reply
+            );
+            let _ = std::fs::remove_file(db_path);
+        }
+    }
+
+    fn run_project_bundle_execution_file(file_name: &str) {
+        use crate::gateway::config::GatewayConfig;
+        use crate::gateway::labs::project_bundle_reply;
+
+        let path = eval_path(file_name);
+        let raw = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+        let cases: Vec<ExecutionEvalCase> =
+            serde_json::from_str(&raw).expect("execution eval json should parse");
+
+        for case in cases {
+            let mut config = GatewayConfig::default();
+            if case.fixture == "lab_enabled" {
+                config.labs.project_bundle_pilot = true;
+            }
+            let (success, reply) = project_bundle_reply(&config, &case.command);
+            assert_eq!(
+                success, case.expect_success,
+                "command {:?} fixture {}",
+                case.command, case.fixture
+            );
+            assert!(
+                reply
+                    .to_lowercase()
+                    .contains(&case.expect_reply_contains.to_lowercase()),
+                "command {:?} expected reply to contain {:?}, got {:?}",
+                case.command,
+                case.expect_reply_contains,
+                reply
+            );
+        }
+    }
+
     fn install_command_execution_fixture(fixture: &str) {
         match fixture {
             "default" => {}
@@ -905,6 +1129,26 @@ mod tests {
     #[test]
     fn eval_golden_f_meeting_copilot_execution() {
         run_memory_execution_file("f_meeting_copilot_execution.json");
+    }
+
+    #[test]
+    fn eval_golden_f_policy_execution() {
+        run_policy_execution_file("f_policy_execution.json");
+    }
+
+    #[test]
+    fn eval_golden_f_task_run_execution() {
+        run_mission_execution_file("f_task_run_execution.json");
+    }
+
+    #[test]
+    fn eval_golden_f_email_copilot_execution() {
+        run_execution_file("f_email_copilot_execution.json");
+    }
+
+    #[test]
+    fn eval_golden_f_project_bundle_execution() {
+        run_project_bundle_execution_file("f_project_bundle_execution.json");
     }
 
     #[test]

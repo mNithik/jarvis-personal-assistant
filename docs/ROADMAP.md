@@ -121,6 +121,49 @@ See [ARCHITECTURE_WAVE7.md](./ARCHITECTURE_WAVE7.md).
 
 See [ARCHITECTURE_WAVE12.md](./ARCHITECTURE_WAVE12.md).
 
+## Tier Upgrade — Hybrid roadmap (Wave 13+)
+
+Post–Wave 12 tier upgrade: **production (balanced)** + **labs (moonshot)** on shared gateway core.
+
+See [TIER_UPGRADE_VISION.md](./TIER_UPGRADE_VISION.md) for north star, lenses, and phasing.
+
+### Wave 13 — Mission control + trust + email copilot (0–90 days)
+
+- [x] **T13-B (baseline):** `GatewayPolicyClass`, policy resolver, approval gate integration, `audit.log` ledger, `GatewayLabsConfig`, `get_gateway_audit_log` command
+- [x] **T13-A Mission control v1:** `MissionControlPanel`, approval inbox, task runs, explainability trace, audit ledger
+- [x] **T13-C Email copilot:** triage, draft reply, workspace card (`EmailSections`), L0 routes + execution evals
+- [x] **T13-D Memory v2 controls:** pin, forget, correct via entity metadata + `MemoryControlsPanel`
+- [x] **T13-E Evals v2:** F43–F48 golden files + harness wired in fabric index (48 entries)
+- [x] **T13-F Reliability:** `task_state` bridge, `list_gateway_task_runs`, resume last task, `StepFailureKind`
+- [ ] **Lab L1:** meeting follow-up project bundle (flag)
+- [ ] **Lab L2:** council verifier on send (flag)
+
+See [ARCHITECTURE_WAVE13.md](./ARCHITECTURE_WAVE13.md), [TIER_UPGRADE_BALANCED_90D.md](./TIER_UPGRADE_BALANCED_90D.md), [TIER_UPGRADE_MOONSHOT_LABS.md](./TIER_UPGRADE_MOONSHOT_LABS.md).
+
+### Wave 14 — Daily loops + orchestration (3–6 months)
+
+- [ ] Day planner copilot (morning brief + dynamic replan)
+- [ ] Meeting copilot v2 (prep from related emails, notes, tasks)
+- [ ] Trigger recipe builder UI
+- [ ] Audit ledger search + rollback (calendar, notion)
+- [ ] Lab L3: multi-agent council on complex tasks
+- [ ] Lab L4: proactive anomaly detection
+
+### Wave 15 — Platform prep (6–12 months)
+
+- [ ] Mobile approve PWA (brief + approval inbox)
+- [ ] Memory topic graph
+- [ ] Travel copilot baseline
+- [ ] Lab L5: world model queries
+- [ ] Optional cloud sync beta (settings + goals)
+
+### Wave 16+ — Platform
+
+- [ ] Work/personal/lab profiles
+- [ ] Skill SDK v1
+- [ ] Headless API documentation
+- [ ] Lab L6: ambient multimodal copilot
+
 ## Verify gate (every sprint)
 
 ```powershell

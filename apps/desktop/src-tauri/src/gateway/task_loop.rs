@@ -22,6 +22,8 @@ use crate::providers::escalation::{EscalationContext, EscalationTracker};
 use super::{
     bus::EventBus,
     config::GatewayConfig,
+    audit::{self, AuditOutcome, AuditRecord},
+    policy::route_policy_class,
     types::{GatewayAgentKind, GatewayEvent, GatewayEventKind},
 };
 
@@ -296,6 +298,25 @@ pub fn start_or_resume_turn(mut ctx: TaskLoopContext<'_>) -> Result<TaskLoopOutc
         step_result.reply.clone(),
     ));
 
+    if step_result.success {
+        let policy_class = route_policy_class(ctx.route);
+        if policy_class != crate::gateway::types::GatewayPolicyClass::Read {
+            let agent = format!("{:?}", ctx.route.agent).to_lowercase();
+            let _ = audit::append_entry(
+                ctx.app_data_dir,
+                AuditRecord {
+                    policy_class,
+                    agent: &agent,
+                    capability_id: &ctx.route.capability_id,
+                    session_id: ctx.session_id,
+                    turn_id: ctx.turn_id,
+                    outcome: AuditOutcome::Executed,
+                    detail: &step_result.reply.chars().take(160).collect::<String>(),
+                },
+            );
+        }
+    }
+
     Ok(TaskLoopOutcome {
         reply: step_result.reply,
         events,
@@ -306,6 +327,16 @@ pub fn start_or_resume_turn(mut ctx: TaskLoopContext<'_>) -> Result<TaskLoopOutc
 }
 
 fn load_or_create_task(ctx: &TaskLoopContext<'_>) -> Result<TaskStateRecord, String> {
+    if super::task_run::is_resume_last_command(ctx.command) {
+        if let Some(existing) = list_active_tasks(ctx.db_path, ctx.session_id)?
+            .into_iter()
+            .max_by(|left, right| left.updated_at.cmp(&right.updated_at))
+        {
+            return Ok(existing);
+        }
+        return Err("No active task to resume.".to_string());
+    }
+
     if let Some(existing) = list_active_tasks(ctx.db_path, ctx.session_id)?
         .into_iter()
         .find(|task| task.goal == ctx.command)
@@ -412,6 +443,7 @@ pub fn plan_steps(command: &str, route: &GatewayRoute) -> Vec<TaskStep> {
             if let Some(action) = parse_gmail_command(command) {
                 let (description, kind) = match action {
                     GmailAction::ListUnread => ("List unread Gmail messages", "list_unread_emails"),
+                    GmailAction::TriageInbox => ("Triage Gmail inbox", "triage_gmail_inbox"),
                     GmailAction::Search { .. } => ("Search Gmail", "search_gmail"),
                     GmailAction::ReadCurrentEmail => ("Read current email", "read_current_email"),
                     GmailAction::ReadEmailByIndex { .. } => {
@@ -420,6 +452,7 @@ pub fn plan_steps(command: &str, route: &GatewayRoute) -> Vec<TaskStep> {
                     GmailAction::ReadEmailByQuery { .. } => {
                         ("Read email by query", "read_email_by_query")
                     }
+                    GmailAction::DraftReply { .. } => ("Draft Gmail reply", "draft_gmail_reply"),
                 };
                 return vec![task_step("step-1", description, kind)];
             }
@@ -494,6 +527,10 @@ pub fn plan_steps(command: &str, route: &GatewayRoute) -> Vec<TaskStep> {
             }
         }
         return vec![task_step("step-1", command, "integration")];
+    }
+
+    if route.capability_id == "core.mission" {
+        return vec![task_step("step-1", command, "mission_control")];
     }
 
     if route.capability_id == "memory.life" {
@@ -605,6 +642,7 @@ fn execute_step_with_recovery(
                 done: true,
                 success: true,
                 integration_handoff: None,
+                failure_kind: None,
             });
         }
     }
@@ -656,6 +694,9 @@ fn route_subcommand(
 }
 
 fn step_kind_for_command(command: &str, route: &GatewayRoute) -> String {
+    if route.capability_id == "core.mission" {
+        return "mission_control".to_string();
+    }
     if route.capability_id == "vision.ocr" {
         return "read_screen".to_string();
     }

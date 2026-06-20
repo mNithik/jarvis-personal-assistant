@@ -11,12 +11,15 @@ import {
   gatewayApprove,
   gatewayDeny,
   gatewayRunTurn,
+  getGatewayAuditLog,
   getGatewayConfig,
   getGatewayTrace,
+  listGatewayTaskRuns,
   listGatewayTools,
   listPendingGatewayApprovals,
   previewGatewayTurn,
   saveGatewayConfig,
+  type GatewayTaskRunSummary,
 } from "../services/jarvisApi";
 
 export type UseJarvisGatewayOptions = {
@@ -31,6 +34,8 @@ type JarvisGatewayState = {
   tools: GatewayToolDefinition[];
   trace: GatewayEvent[];
   pendingApprovals: ApprovalRequest[];
+  auditLog: string[];
+  taskRuns: GatewayTaskRunSummary[];
   lastTurn: GatewayTurnResponse | null;
   gatewayPreview: GatewayPreview | null;
   gatewayPreviewError: string | null;
@@ -45,6 +50,8 @@ const defaultState: JarvisGatewayState = {
   tools: [],
   trace: [],
   pendingApprovals: [],
+  auditLog: [],
+  taskRuns: [],
   lastTurn: null,
   gatewayPreview: null,
   gatewayPreviewError: null,
@@ -67,11 +74,13 @@ export function useJarvisGateway(options: UseJarvisGatewayOptions = {}) {
   const refresh = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: null }));
     try {
-      const [config, tools, trace, pendingApprovals] = await Promise.all([
+      const [config, tools, trace, pendingApprovals, auditLog, taskRuns] = await Promise.all([
         getGatewayConfig(),
         listGatewayTools(),
         getGatewayTrace(traceLimit),
         listPendingGatewayApprovals(),
+        getGatewayAuditLog(40),
+        listGatewayTaskRuns(12),
       ]);
       setState((current) => ({
         ...current,
@@ -79,6 +88,8 @@ export function useJarvisGateway(options: UseJarvisGatewayOptions = {}) {
         tools,
         trace,
         pendingApprovals,
+        auditLog,
+        taskRuns,
         loading: false,
         error: null,
       }));
@@ -251,6 +262,8 @@ export function useJarvisGateway(options: UseJarvisGatewayOptions = {}) {
     tools: state.tools,
     trace: state.trace,
     pendingApprovals: state.pendingApprovals,
+    auditLog: state.auditLog,
+    taskRuns: state.taskRuns,
     lastTurn: state.lastTurn,
     gatewayConfig: state.config,
     gatewayPreview: state.gatewayPreview,

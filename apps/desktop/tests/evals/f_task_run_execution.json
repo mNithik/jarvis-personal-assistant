@@ -1,0 +1,23 @@
+[
+  {
+    "command": "show task runs",
+    "capabilityId": "core.mission",
+    "fixture": "default",
+    "expectSuccess": true,
+    "expectReplyContains": "Mission control"
+  },
+  {
+    "command": "resume last task",
+    "capabilityId": "core.mission",
+    "fixture": "active_task",
+    "expectSuccess": true,
+    "expectReplyContains": "unread"
+  },
+  {
+    "command": "resume last task",
+    "capabilityId": "core.mission",
+    "fixture": "no_active_task",
+    "expectSuccess": false,
+    "expectReplyContains": "No active task"
+  }
+]

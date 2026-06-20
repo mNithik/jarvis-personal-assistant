@@ -1,0 +1,7 @@
+[
+  { "phrase": "resume last task", "capabilityId": "core.mission" },
+  { "phrase": "show task runs", "capabilityId": "core.mission" },
+  { "phrase": "mission control status", "capabilityId": "core.mission" },
+  { "phrase": "list task runs", "capabilityId": "core.mission" },
+  { "phrase": "continue last task", "capabilityId": "core.mission" }
+]

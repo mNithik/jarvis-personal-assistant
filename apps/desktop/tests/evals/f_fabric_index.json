@@ -40,5 +40,11 @@
   { "id": "F39", "capabilityId": "builder.code", "eval": "f22_builder.json", "status": "golden" },
   { "id": "F40", "capabilityId": "orchestrator.eval", "eval": "f_mcp_routes.json", "status": "golden", "note": "Fabric index drives golden harness; gateway-owned intents return false from legacy executeIntent when gateway is on (see legacyIntentGuards.ts)" },
   { "id": "F41", "capabilityId": "memory.life", "eval": "f_meeting_copilot_routes.json", "status": "golden", "note": "Meeting copilot prep routes + calendar_event_soon proactive trigger" },
-  { "id": "F42", "capabilityId": "memory.life", "eval": "f_meeting_copilot_routes.json", "status": "golden", "executionEval": "f_meeting_copilot_execution.json", "note": "Meeting copilot calendar-aware execution eval" }
+  { "id": "F42", "capabilityId": "memory.life", "eval": "f_meeting_copilot_routes.json", "status": "golden", "executionEval": "f_meeting_copilot_execution.json", "note": "Meeting copilot calendar-aware execution eval" },
+  { "id": "F43", "capabilityId": "core.mission", "eval": "f_mission_control_routes.json", "status": "golden", "note": "Mission control resume + task run routes" },
+  { "id": "F44", "capabilityId": "core.mission", "eval": "f_mission_control_routes.json", "status": "golden", "executionEval": "f_task_run_execution.json", "note": "Task run persistence + resume execution" },
+  { "id": "F45", "capabilityId": "core.policy", "eval": null, "status": "golden", "executionEval": "f_policy_execution.json", "note": "Policy class approval gate execution" },
+  { "id": "F46", "capabilityId": "integrations.google", "eval": "f_email_copilot_routes.json", "status": "golden", "note": "Email copilot triage + draft routes" },
+  { "id": "F47", "capabilityId": "integrations.google", "eval": "f_email_copilot_routes.json", "status": "golden", "executionEval": "f_email_copilot_execution.json", "note": "Email copilot execution eval" },
+  { "id": "F48", "capabilityId": "labs.bundle", "eval": null, "status": "golden", "executionEval": "f_project_bundle_execution.json", "note": "Project bundle lab execution (flag-gated)" }
 ]

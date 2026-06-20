@@ -224,6 +224,73 @@ fn get_gateway_config(
 }
 
 #[tauri::command]
+fn get_gateway_audit_log(
+    gateway_state: State<'_, crate::gateway::state::GatewayState>,
+    limit: Option<usize>,
+) -> Result<Vec<String>, String> {
+    crate::gateway::audit::read_recent_entries(
+        gateway_state.app_data_dir(),
+        limit.unwrap_or(50),
+    )
+}
+
+#[tauri::command]
+fn list_gateway_task_runs(
+    state: State<'_, AppState>,
+    limit: Option<usize>,
+) -> Result<Vec<crate::gateway::task_run::TaskRunSummary>, String> {
+    let records = crate::db::list_recent_task_states(&state.db_path, limit.unwrap_or(20))?;
+    Ok(records
+        .iter()
+        .map(crate::gateway::task_run::summary_from_task_state)
+        .collect())
+}
+
+#[tauri::command]
+fn memory_list_entity_controls(
+    state: State<'_, AppState>,
+    domain: String,
+) -> Result<Vec<crate::memory::controls::MemoryEntityControl>, String> {
+    crate::memory::controls::list_entity_controls(&state.db_path, &domain)
+}
+
+#[tauri::command]
+fn memory_set_entity_control(
+    state: State<'_, AppState>,
+    domain: String,
+    entity_id: i64,
+    pinned: Option<bool>,
+    forgotten: Option<bool>,
+    confidence: Option<String>,
+) -> Result<crate::memory::controls::MemoryEntityControl, String> {
+    crate::memory::controls::set_entity_control_flags(
+        &state.db_path,
+        &domain,
+        entity_id,
+        pinned,
+        forgotten,
+        confidence.as_deref(),
+    )
+}
+
+#[tauri::command]
+fn memory_correct_entity(
+    state: State<'_, AppState>,
+    domain: String,
+    entity_id: i64,
+    field: String,
+    new_value: String,
+) -> Result<crate::memory::controls::MemoryEntityControl, String> {
+    crate::memory::controls::correct_entity_field(
+        &state.db_path,
+        &domain,
+        entity_id,
+        &field,
+        &new_value,
+    )
+}
+
+#[tauri::command]
 fn save_gateway_config(
     app: tauri::AppHandle,
     gateway_state: State<'_, crate::gateway::state::GatewayState>,
@@ -3827,6 +3894,8 @@ pub fn run() {
             ping_jarvis,
             preview_gateway_turn,
             get_gateway_config,
+            get_gateway_audit_log,
+            list_gateway_task_runs,
             save_gateway_config,
             apply_gateway_easy_preset,
             list_trigger_events,
@@ -3945,6 +4014,9 @@ pub fn run() {
             memory_remember,
             memory_recall,
             memory_list_people,
+            memory_list_entity_controls,
+            memory_set_entity_control,
+            memory_correct_entity,
             import_people_memory,
             memory_list_travel,
             import_travel_memory,

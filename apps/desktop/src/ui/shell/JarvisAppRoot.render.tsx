@@ -248,6 +248,9 @@ export default function JarvisAppRootRender(props: JarvisAppRootRenderProps) {
               livePreview={gatewayPreview}
               livePreviewError={gatewayPreviewError}
               isPreviewing={isPreviewingGateway}
+              onRunCommand={(command) => {
+                void runCommand(command);
+              }}
             />
           ) : null}
           <div className="cockpit-module-dock">

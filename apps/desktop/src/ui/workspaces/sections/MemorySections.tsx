@@ -1,5 +1,7 @@
 import { ReactNode } from "react";
 import type { MemorySectionProps } from "./sectionTypes";
+import { buildEmailCopilotCard } from "./EmailSections";
+import MemoryControlsPanel from "./MemoryControlsPanel";
 
 function formatMeetingStart(start?: string | null) {
   if (!start) {
@@ -28,6 +30,7 @@ export function buildMemoryWorkspaceSections({
   rustSchoolPlanMemory,
   rustTravelMemory,
   googleCalendarAccessToken,
+  gmailAccessToken,
   nextMeetingEvent,
   meetingPrepStatus,
   runCommand,
@@ -37,6 +40,7 @@ export function buildMemoryWorkspaceSections({
 
   return [
     <section className="grid-layout single-column" key="memory-main">
+      {buildEmailCopilotCard({ gmailAccessToken, runCommand })}
       {showMeetingCopilot ? (
         <div className="result-card">
           <p className="section-kicker">Meeting Copilot</p>
@@ -149,6 +153,12 @@ export function buildMemoryWorkspaceSections({
           </h3>
           {rustSchoolPlanMemory ? <p className="result-meta">synced from jarvis.db</p> : null}
         </div>
+      ) : null}
+      {displayPeopleMemory.length > 0 ? (
+        <MemoryControlsPanel domain="people" title="People memory controls" />
+      ) : null}
+      {displayTravelMemory.length > 0 ? (
+        <MemoryControlsPanel domain="travel" title="Travel memory controls" />
       ) : null}
       {memoryTotal === 0 && !showMeetingCopilot ? (
         <p className="empty-state">

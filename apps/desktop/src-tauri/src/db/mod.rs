@@ -1349,3 +1349,34 @@ pub fn list_active_tasks(path: &Path, session_id: &str) -> Result<Vec<TaskStateR
     }
     Ok(records)
 }
+
+pub fn list_recent_task_states(path: &Path, limit: usize) -> Result<Vec<TaskStateRecord>, String> {
+    let connection = Connection::open(path).map_err(|error| error.to_string())?;
+    let mut statement = connection
+        .prepare(
+            "SELECT id, session_id, goal, status, current_step, steps_json, updated_at
+             FROM task_state
+             ORDER BY updated_at DESC
+             LIMIT ?1",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map(params![limit as i64], |row| {
+            Ok(TaskStateRecord {
+                id: row.get(0)?,
+                session_id: row.get(1)?,
+                goal: row.get(2)?,
+                status: row.get(3)?,
+                current_step: row.get(4)?,
+                steps_json: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
+        })
+        .map_err(|error| error.to_string())?;
+
+    let mut records = Vec::new();
+    for row in rows {
+        records.push(row.map_err(|error| error.to_string())?);
+    }
+    Ok(records)
+}

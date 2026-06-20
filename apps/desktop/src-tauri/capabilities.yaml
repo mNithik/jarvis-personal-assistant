@@ -1,4 +1,9 @@
 capabilities:
+  - id: core.mission
+    label: Mission control
+    agent: command
+    tier: local
+    always_enabled: true
   - id: infer.groq.talker
     label: Groq talker
     agent: command

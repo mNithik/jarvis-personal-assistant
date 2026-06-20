@@ -285,6 +285,56 @@ pub fn format_read_reply(email: &GmailMessageRecord) -> String {
     )
 }
 
+pub fn format_triage_reply(emails: &[GmailMessageRecord]) -> String {
+    if emails.is_empty() {
+        return "Your inbox looks clear — no unread emails to triage.".to_string();
+    }
+
+    let summary = emails
+        .iter()
+        .enumerate()
+        .map(|(index, email)| {
+            let urgency = triage_urgency(&email.subject, &email.snippet);
+            format!(
+                "{}. [{}] {} — from {}",
+                index + 1,
+                urgency,
+                email.subject,
+                email.from
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!(
+        "Inbox triage — {} unread email(s):\n{summary}\n\nSay \"draft a reply to email 1\" to draft a response.",
+        emails.len()
+    )
+}
+
+pub fn format_draft_reply(email: &GmailMessageRecord) -> String {
+    format!(
+        "Draft reply for \"{subject}\" (from {from}):\n\nHi,\n\nThank you for your email about {subject}. I will follow up shortly.\n\nBest,\n\n---\nThis draft was not sent. Confirm before sending.",
+        subject = email.subject,
+        from = email.from
+    )
+}
+
+fn triage_urgency(subject: &str, snippet: &str) -> &'static str {
+    let combined = format!("{subject} {snippet}").to_lowercase();
+    if contains_any(&combined, &["urgent", "asap", "action required", "overdue", "final notice"]) {
+        "urgent"
+    } else if contains_any(&combined, &["invoice", "payment", "billing", "receipt", "deadline"]) {
+        "action"
+    } else {
+        "normal"
+    }
+}
+
+fn contains_any(text: &str, needles: &[&str]) -> bool {
+    needles.iter().any(|needle| text.contains(needle))
+}
+
 fn email_list_index(emails: &[GmailMessageRecord], target: &GmailMessageRecord) -> usize {
     emails
         .iter()

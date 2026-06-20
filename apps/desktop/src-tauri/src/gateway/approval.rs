@@ -1,5 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use super::policy::{policy_class_label, requires_confirmation, route_policy_class};
 use super::types::{
     ApprovalRequest, ApprovalRisk, GatewayDecisionPolicy, GatewayRoute, GatewaySensitivity,
 };
@@ -21,6 +22,27 @@ impl ApprovalGate {
         turn_id: u64,
         command: &str,
     ) -> ApprovalOutcome {
+        let policy_class = route_policy_class(route);
+        if requires_confirmation(policy_class) {
+            return ApprovalOutcome::ApprovalRequired(build_request(
+                session_id,
+                turn_id,
+                format!(
+                    "Confirm {} action: {}",
+                    policy_class_label(policy_class),
+                    route.capability_label
+                ),
+                format!(
+                    "JARVIS classified \"{command}\" as {} policy for {} ({}).\n{}",
+                    policy_class_label(policy_class),
+                    route.capability_label,
+                    route.capability_id,
+                    route.decision_reason
+                ),
+                policy_risk(policy_class, route),
+            ));
+        }
+
         let requires_confirmation = matches!(
             route.decision_policy,
             GatewayDecisionPolicy::Confirm | GatewayDecisionPolicy::Teach
@@ -77,6 +99,22 @@ fn route_risk(route: &GatewayRoute) -> ApprovalRisk {
     }
 }
 
+fn policy_risk(
+    policy_class: crate::gateway::types::GatewayPolicyClass,
+    route: &GatewayRoute,
+) -> ApprovalRisk {
+    use crate::gateway::types::GatewayPolicyClass;
+
+    match policy_class {
+        GatewayPolicyClass::Delete | GatewayPolicyClass::Pay => ApprovalRisk::Destructive,
+        GatewayPolicyClass::Send | GatewayPolicyClass::Schedule | GatewayPolicyClass::Execute => {
+            ApprovalRisk::Write
+        }
+        GatewayPolicyClass::Write => ApprovalRisk::Write,
+        GatewayPolicyClass::Read => route_risk(route),
+    }
+}
+
 fn find_tool(tool_id: &str) -> Option<ToolDefinition> {
     list_tool_definitions()
         .into_iter()
@@ -129,6 +167,26 @@ mod tests {
             route_level: crate::gateway::types::RouteLevel::L0,
             resolved_provider: None,
         }
+    }
+
+    #[test]
+    fn gmail_routes_require_policy_approval() {
+        let route = GatewayRoute {
+            capability_id: "integrations.gmail".to_string(),
+            capability_label: "Gmail".to_string(),
+            agent: GatewayAgentKind::Integrations,
+            tier: GatewayModelTier::Worker,
+            sensitivity: GatewaySensitivity::Personal,
+            score: 3,
+            confidence: GatewayConfidenceBand::High,
+            decision_policy: GatewayDecisionPolicy::Execute,
+            decision_reason: "Matched Gmail.".to_string(),
+            reason: "Matched Gmail.".to_string(),
+            route_level: crate::gateway::types::RouteLevel::L0,
+            resolved_provider: None,
+        };
+        let outcome = ApprovalGate::evaluate_route(&route, "session-a", 5, "send email");
+        assert!(matches!(outcome, ApprovalOutcome::ApprovalRequired(_)));
     }
 
     #[test]

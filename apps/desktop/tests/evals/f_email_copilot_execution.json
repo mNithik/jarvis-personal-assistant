@@ -1,0 +1,23 @@
+[
+  {
+    "command": "triage my inbox",
+    "capabilityId": "integrations.google",
+    "fixture": "gmail_list_unread",
+    "expectSuccess": true,
+    "expectReplyContains": "Inbox triage"
+  },
+  {
+    "command": "draft a reply to email 1",
+    "capabilityId": "integrations.google",
+    "fixture": "gmail_session_read",
+    "expectSuccess": true,
+    "expectReplyContains": "Draft reply"
+  },
+  {
+    "command": "triage my inbox",
+    "capabilityId": "integrations.google",
+    "fixture": "missing_token",
+    "expectSuccess": false,
+    "expectReplyContains": "Gmail is not connected"
+  }
+]

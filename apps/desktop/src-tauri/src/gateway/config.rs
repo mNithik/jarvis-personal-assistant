@@ -246,6 +246,26 @@ impl Default for GatewayTrainingConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", default)]
+pub struct GatewayLabsConfig {
+    pub project_bundle_pilot: bool,
+    pub council_verifier: bool,
+    pub proactive_anomaly: bool,
+    pub world_model_queries: bool,
+}
+
+impl Default for GatewayLabsConfig {
+    fn default() -> Self {
+        Self {
+            project_bundle_pilot: false,
+            council_verifier: false,
+            proactive_anomaly: false,
+            world_model_queries: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", default)]
 pub struct GatewayConfig {
     pub enabled: bool,
     pub mode: GatewayMode,
@@ -260,6 +280,7 @@ pub struct GatewayConfig {
     pub channels: GatewayChannelsConfig,
     pub training: GatewayTrainingConfig,
     pub paid: GatewayPaidModeConfig,
+    pub labs: GatewayLabsConfig,
     pub mcp_hosts: Vec<McpHostEntry>,
 }
 
@@ -279,6 +300,7 @@ impl Default for GatewayConfig {
             channels: GatewayChannelsConfig::default(),
             training: GatewayTrainingConfig::default(),
             paid: GatewayPaidModeConfig::default(),
+            labs: GatewayLabsConfig::default(),
             mcp_hosts: Vec::new(),
         }
     }

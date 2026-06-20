@@ -4,6 +4,7 @@ pub mod embed;
 pub mod knowledge_router;
 pub mod vault;
 pub mod entity_store;
+pub mod controls;
 pub mod expense;
 pub mod meeting;
 pub mod package;

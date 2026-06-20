@@ -99,6 +99,22 @@ pub fn build_route(
 fn capability_registry() -> &'static [CapabilityRoute] {
     &[
         CapabilityRoute {
+            id: "core.mission",
+            label: "Mission Control",
+            agent: GatewayAgentKind::Command,
+            tier: GatewayModelTier::Local,
+            keywords: &[
+                "resume last task",
+                "resume task",
+                "continue last task",
+                "show task runs",
+                "list task runs",
+                "mission control",
+                "task status",
+            ],
+            reason: "Matched the mission control capability registry.",
+        },
+        CapabilityRoute {
             id: "command.study",
             label: "Study Setup",
             agent: GatewayAgentKind::Command,
@@ -211,6 +227,10 @@ fn capability_registry() -> &'static [CapabilityRoute] {
                 "email",
                 "inbox",
                 "unread",
+                "triage my inbox",
+                "triage inbox",
+                "draft a reply",
+                "draft reply",
                 "read this email",
                 "read email",
                 "show email",

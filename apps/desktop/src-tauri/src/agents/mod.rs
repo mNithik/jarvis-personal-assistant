@@ -39,6 +39,7 @@ pub struct StepResult {
     pub done: bool,
     pub success: bool,
     pub integration_handoff: Option<IntegrationHandoff>,
+    pub failure_kind: Option<crate::gateway::task_run::StepFailureKind>,
 }
 
 impl StepResult {
@@ -48,6 +49,7 @@ impl StepResult {
             done: true,
             success: true,
             integration_handoff: None,
+            failure_kind: None,
         }
     }
 
@@ -57,6 +59,7 @@ impl StepResult {
             done: true,
             success: false,
             integration_handoff: None,
+            failure_kind: Some(crate::gateway::task_run::StepFailureKind::ToolError),
         }
     }
 
@@ -75,6 +78,7 @@ impl StepResult {
                 action: action.to_string(),
                 payload,
             }),
+            failure_kind: None,
         }
     }
 }

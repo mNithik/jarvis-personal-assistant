@@ -112,10 +112,12 @@ pub fn parse_spotify_command(command: &str) -> Option<SpotifyAction> {
 #[serde(rename_all = "snake_case")]
 pub enum GmailAction {
     ListUnread,
+    TriageInbox,
     Search { query: String },
     ReadCurrentEmail,
     ReadEmailByIndex { index: u32 },
     ReadEmailByQuery { query: String },
+    DraftReply { index: u32 },
 }
 
 pub fn parse_gmail_command(command: &str) -> Option<GmailAction> {
@@ -146,6 +148,23 @@ pub fn parse_gmail_command(command: &str) -> Option<GmailAction> {
                     query: query.to_string(),
                 });
             }
+        }
+    }
+
+    if matches!(
+        normalized.as_str(),
+        "triage my inbox" | "triage inbox" | "email triage" | "inbox triage"
+    ) {
+        return Some(GmailAction::TriageInbox);
+    }
+
+    if let Some(index_str) = normalized
+        .strip_prefix("draft a reply to email ")
+        .or_else(|| normalized.strip_prefix("draft reply to email "))
+        .or_else(|| normalized.strip_prefix("draft a reply for email "))
+    {
+        if let Ok(index) = index_str.trim().parse::<u32>() {
+            return Some(GmailAction::DraftReply { index });
         }
     }
 

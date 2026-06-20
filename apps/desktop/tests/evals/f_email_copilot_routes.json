@@ -1,0 +1,7 @@
+[
+  { "phrase": "triage my inbox", "capabilityId": "integrations.google" },
+  { "phrase": "triage inbox", "capabilityId": "integrations.google" },
+  { "phrase": "draft a reply to email 1", "capabilityId": "integrations.google" },
+  { "phrase": "draft reply to email 2", "capabilityId": "integrations.google" },
+  { "phrase": "save this email to notion", "capabilityId": "integrations.email_notion" }
+]
