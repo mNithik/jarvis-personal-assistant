@@ -33,7 +33,33 @@ pub fn upsert_meeting_prep(path: &Path, record: &MeetingPrepMemoryRecord) -> Res
         &record.summary,
         &[],
     )?;
+    auto_link_meeting_graph(path, record);
     Ok(())
+}
+
+fn auto_link_meeting_graph(path: &Path, record: &MeetingPrepMemoryRecord) {
+    use super::topic_graph;
+    let _ = topic_graph::ensure_topic_graph_schema(path);
+    for person in &record.related_people {
+        let _ = topic_graph::link_entities_by_label(
+            path,
+            person,
+            "attends",
+            &record.event_title,
+            "meeting_prep",
+        );
+    }
+    for task in &record.action_items {
+        if task.len() > 8 {
+            let _ = topic_graph::link_entities_by_label(
+                path,
+                &record.event_title,
+                "committed_to",
+                task,
+                "meeting_prep",
+            );
+        }
+    }
 }
 
 pub fn import_meeting_prep_records(
@@ -135,6 +161,7 @@ pub fn compose_meeting_copilot_v2(
     let mut email_lines = Vec::new();
     let mut task_lines = Vec::new();
     let mut vault_lines = Vec::new();
+    let mut related_people = Vec::new();
 
     if config.is_some_and(|value| value.features.gmail) {
         if let Ok(token) = google::get_session_token("gmail") {
@@ -144,7 +171,20 @@ pub fn compose_meeting_copilot_v2(
                 email_lines = emails
                     .iter()
                     .take(3)
-                    .map(|email| format!("- {} ({})", email.subject, email.from))
+                    .map(|email| {
+                        let sender = email
+                            .from
+                            .split('<')
+                            .next()
+                            .unwrap_or(&email.from)
+                            .trim()
+                            .trim_matches('"')
+                            .to_string();
+                        if !sender.is_empty() && !related_people.contains(&sender) {
+                            related_people.push(sender.clone());
+                        }
+                        format!("- {} ({})", email.subject, email.from)
+                    })
                     .collect();
             }
         }
@@ -264,7 +304,7 @@ pub fn compose_meeting_copilot_v2(
         summary_title: format!("Prep: {event_title}"),
         focus_summary: focus_summary.clone(),
         action_items: action_items.clone(),
-        related_people: Vec::new(),
+        related_people,
         changes_since_last_prep: changes,
         summary: reply.clone(),
         created_at: chrono::Local::now()

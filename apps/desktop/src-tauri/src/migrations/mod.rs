@@ -138,7 +138,49 @@ pub fn apply_pending_migrations(
         );
     ";
 
-    let migrations: &[(&str, i64)] = &[(MIGRATION_V1, 1), (MIGRATION_V2, 2), (MIGRATION_V3, 3)];
+    const MIGRATION_V4: &str = "
+        CREATE TABLE IF NOT EXISTS memory_relations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_entity_id INTEGER NOT NULL,
+            predicate TEXT NOT NULL,
+            object_entity_id INTEGER NOT NULL,
+            confidence REAL NOT NULL DEFAULT 1.0,
+            source TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_memory_relations_subject
+            ON memory_relations(subject_entity_id, predicate);
+        CREATE INDEX IF NOT EXISTS idx_memory_relations_object
+            ON memory_relations(object_entity_id);
+
+        CREATE TABLE IF NOT EXISTS proactive_nudge_log (
+            id TEXT PRIMARY KEY,
+            kind TEXT NOT NULL,
+            message TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'shown',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+    ";
+
+    const MIGRATION_V5: &str = "
+        CREATE TABLE IF NOT EXISTS user_goals (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'active',
+            target_date TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+    ";
+
+    let migrations: &[(&str, i64)] = &[
+        (MIGRATION_V1, 1),
+        (MIGRATION_V2, 2),
+        (MIGRATION_V3, 3),
+        (MIGRATION_V4, 4),
+        (MIGRATION_V5, 5),
+    ];
 
     for (sql, target_version) in migrations {
         if version >= *target_version {

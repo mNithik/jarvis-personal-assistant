@@ -165,7 +165,7 @@ export type MemorySectionProps = {
   displayPackageMemory: PackageMemoryRecord[];
   displayPeopleMemory: PersonMemoryRecord[];
   displaySchoolPlanMemory: SchoolPlanMemoryRecord[];
-  displayTravelMemory: Array<{ title: string }>;
+  displayTravelMemory: Array<{ title: string; summary?: string }>;
   lastKnowledgeRecall: GatewayEvent | null;
   memoryTotal: number;
   rustExpenseMemory: ExpenseMemoryRecord[] | null;

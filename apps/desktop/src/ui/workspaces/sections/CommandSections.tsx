@@ -8,6 +8,7 @@ import {
 } from "../../../features/legacy/appHelpers";
 import type { CommandSectionProps } from "./sectionTypes";
 import { buildPlannerCopilotCard } from "./PlannerSections";
+import { ProactiveNudgePanel } from "./ProactiveNudgePanel";
 
 export function buildCommandWorkspaceSections({
   activeConversationContext,
@@ -69,6 +70,7 @@ export function buildCommandWorkspaceSections({
   workflowRenameDrafts,
 }: CommandSectionProps): ReactNode[] {
   return [
+    <ProactiveNudgePanel key="proactive-nudges" />,
     <section className="command-panel" key="command-center">
       <div>
         <p className="section-kicker">Command Center</p>

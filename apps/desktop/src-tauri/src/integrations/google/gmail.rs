@@ -320,6 +320,10 @@ pub fn format_draft_reply(email: &GmailMessageRecord) -> String {
     )
 }
 
+pub fn is_urgent_email(email: &GmailMessageRecord) -> bool {
+    triage_urgency(&email.subject, &email.snippet) == "urgent"
+}
+
 fn triage_urgency(subject: &str, snippet: &str) -> &'static str {
     let combined = format!("{subject} {snippet}").to_lowercase();
     if contains_any(&combined, &["urgent", "asap", "action required", "overdue", "final notice"]) {

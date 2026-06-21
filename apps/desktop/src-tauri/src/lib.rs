@@ -247,6 +247,17 @@ fn list_gateway_task_runs(
 }
 
 #[tauri::command]
+fn list_project_bundles(
+    gateway_state: State<'_, crate::gateway::state::GatewayState>,
+    limit: Option<usize>,
+) -> Result<Vec<crate::gateway::labs::ProjectBundleRecord>, String> {
+    crate::gateway::labs::list_project_bundles(
+        gateway_state.app_data_dir(),
+        limit.unwrap_or(5),
+    )
+}
+
+#[tauri::command]
 fn memory_list_entity_controls(
     state: State<'_, AppState>,
     domain: String,
@@ -646,13 +657,18 @@ fn gateway_approve(
     let pending = gateway_state
         .take_pending_approval(&approval_id)?
         .ok_or_else(|| format!("No pending approval found for {approval_id}"))?;
+    let config = gateway_state
+        .config
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone();
     let mut bus = gateway_state
         .bus
         .lock()
         .map_err(|error| error.to_string())?;
 
     Ok(crate::gateway::orchestrator::GatewayOrchestrator::resolve_approval(
-        &pending, true, &mut bus,
+        &pending, true, &config, &mut bus,
     ))
 }
 
@@ -664,13 +680,18 @@ fn gateway_deny(
     let pending = gateway_state
         .take_pending_approval(&approval_id)?
         .ok_or_else(|| format!("No pending approval found for {approval_id}"))?;
+    let config = gateway_state
+        .config
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone();
     let mut bus = gateway_state
         .bus
         .lock()
         .map_err(|error| error.to_string())?;
 
     Ok(crate::gateway::orchestrator::GatewayOrchestrator::resolve_approval(
-        &pending, false, &mut bus,
+        &pending, false, &config, &mut bus,
     ))
 }
 
@@ -3908,6 +3929,17 @@ pub fn run() {
             get_gateway_config,
             get_gateway_audit_log,
             list_gateway_task_runs,
+            list_project_bundles,
+            crate::commands::wave15::get_topic_graph_cmd,
+            crate::commands::wave15::query_topic_neighbors_cmd,
+            crate::commands::wave15::infer_topic_graph_cmd,
+            crate::commands::wave15::list_user_goals_cmd,
+            crate::commands::wave15::save_user_goal_cmd,
+            crate::commands::wave15::export_sync_bundle_cmd,
+            crate::commands::wave15::import_sync_bundle_cmd,
+            crate::commands::wave15::list_proactive_nudges_cmd,
+            crate::commands::wave15::dismiss_proactive_nudge_cmd,
+            crate::commands::wave15::accept_proactive_nudge_cmd,
             save_gateway_config,
             apply_gateway_easy_preset,
             list_trigger_events,

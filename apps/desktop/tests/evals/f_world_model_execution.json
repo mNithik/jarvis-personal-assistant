@@ -1,0 +1,9 @@
+[
+  {
+    "command": "who is involved in product review",
+    "capabilityId": "memory.life",
+    "fixture": "topic_graph",
+    "expectSuccess": true,
+    "expectReplyContains": "Connections"
+  }
+]

@@ -1322,6 +1322,116 @@ button {
   color: #d5e3f0;
 }
 
+.proactive-nudge-panel {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.proactive-nudge-card {
+  border: 1px solid rgba(125, 229, 255, 0.18);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  background: rgba(9, 31, 43, 0.48);
+}
+
+.proactive-nudge-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.mission-control-panel .mission-control-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.mission-control-panel .mission-control-column-wide {
+  grid-column: 1 / -1;
+}
+
+.mission-control-panel h3 {
+  margin: 0 0 0.65rem;
+  font-size: 0.95rem;
+}
+
+.bundle-dag-card {
+  border: 1px solid rgba(166, 210, 255, 0.12);
+  border-radius: 14px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+  background: rgba(8, 18, 28, 0.55);
+}
+
+.bundle-dag {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.bundle-dag-step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.65rem;
+  align-items: start;
+  position: relative;
+}
+
+.bundle-dag-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 0.95rem;
+  top: 2rem;
+  width: 2px;
+  height: calc(100% - 0.35rem);
+  background: rgba(166, 210, 255, 0.18);
+}
+
+.bundle-dag-node {
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  background: rgba(166, 210, 255, 0.12);
+  color: #d5e3f0;
+  z-index: 1;
+}
+
+.bundle-dag-step.complete .bundle-dag-node {
+  background: rgba(98, 214, 164, 0.22);
+  color: #d7ffe9;
+}
+
+.bundle-dag-step.pending .bundle-dag-node {
+  background: rgba(255, 197, 111, 0.18);
+  color: #ffe6bf;
+}
+
+.bundle-dag-copy {
+  display: grid;
+  gap: 0.15rem;
+  padding-top: 0.15rem;
+}
+
+.bundle-dag-copy strong {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.bundle-dag-copy span {
+  font-size: 0.76rem;
+  color: #9eb4c9;
+  text-transform: capitalize;
+}
+
 .gateway-history-list {
   margin-top: 0.85rem;
   display: grid;

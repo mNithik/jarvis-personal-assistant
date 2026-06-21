@@ -356,6 +356,14 @@ pub fn create_plan_page(
     create_note_with_title(db_path, &title, content)
 }
 
+pub fn create_followup_task(
+    db_path: &Path,
+    title: &str,
+    notes: &str,
+) -> Result<NoteRecord, String> {
+    create_note_with_title(db_path, title, notes)
+}
+
 fn create_note_with_title(
     db_path: &Path,
     title: &str,

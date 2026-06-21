@@ -1,0 +1,5 @@
+[
+  { "phrase": "prep me for my trip", "capabilityId": "memory.life" },
+  { "phrase": "travel copilot", "capabilityId": "memory.life" },
+  { "phrase": "refresh travel prep", "capabilityId": "memory.life" }
+]

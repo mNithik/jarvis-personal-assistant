@@ -1,7 +1,13 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import type { ApprovalRequest, AuditEntry, GatewayEvent, GatewayTaskRunSummary } from "../../services/jarvisApi";
-import { rollbackAuditEntry, searchAuditLog } from "../../services/jarvisApi";
+import type {
+  ApprovalRequest,
+  AuditEntry,
+  GatewayEvent,
+  GatewayTaskRunSummary,
+  ProjectBundleRecord,
+} from "../../services/jarvisApi";
+import { listProjectBundles, rollbackAuditEntry, searchAuditLog } from "../../services/jarvisApi";
 
 type MissionControlPanelProps = {
   trace: GatewayEvent[];
@@ -19,6 +25,32 @@ function formatRunStatus(status: string) {
   return status.split("_").join(" ");
 }
 
+function formatBundleStepStatus(status: string) {
+  return status.split("_").join(" ");
+}
+
+function BundleDagView({ bundle }: { bundle: ProjectBundleRecord }) {
+  return (
+    <article className="bundle-dag-card">
+      <p className="result-meta">
+        {bundle.runId} · {bundle.createdAt}
+      </p>
+      <p className="memory-meta">{bundle.command}</p>
+      <ol className="bundle-dag">
+        {bundle.steps.map((step, index) => (
+          <li className={`bundle-dag-step ${step.status}`} key={`${bundle.runId}-${index}`}>
+            <span className="bundle-dag-node">{index + 1}</span>
+            <div className="bundle-dag-copy">
+              <strong>{step.label}</strong>
+              <span>{formatBundleStepStatus(step.status)}</span>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </article>
+  );
+}
+
 export default function MissionControlPanel({
   trace,
   pendingApprovals,
@@ -34,6 +66,26 @@ export default function MissionControlPanel({
   const [auditClass, setAuditClass] = useState("");
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
   const [auditStatus, setAuditStatus] = useState<string | null>(null);
+  const [projectBundles, setProjectBundles] = useState<ProjectBundleRecord[]>([]);
+  const [bundleStatus, setBundleStatus] = useState<string | null>(null);
+
+  const refreshBundles = useCallback(async () => {
+    setBundleStatus(null);
+    try {
+      setProjectBundles(await listProjectBundles(5));
+    } catch (error) {
+      setBundleStatus(error instanceof Error ? error.message : String(error));
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshBundles();
+  }, [refreshBundles]);
+
+  const handleRefresh = useCallback(() => {
+    onRefresh?.();
+    void refreshBundles();
+  }, [onRefresh, refreshBundles]);
 
   const timeline = useMemo(
     () =>
@@ -78,7 +130,7 @@ export default function MissionControlPanel({
       <div className="gateway-trace-header">
         <p className="section-kicker">Mission control</p>
         {onRefresh ? (
-          <button className="secondary-button" type="button" onClick={() => void onRefresh()}>
+          <button className="secondary-button" type="button" onClick={() => void handleRefresh()}>
             Refresh
           </button>
         ) : null}
@@ -136,6 +188,20 @@ export default function MissionControlPanel({
             </ol>
           ) : (
             <p className="gateway-trace-empty">No saved task runs yet.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="mission-control-grid">
+        <div className="mission-control-column mission-control-column-wide">
+          <h3>Project bundle runs</h3>
+          {bundleStatus ? <p className="result-meta">{bundleStatus}</p> : null}
+          {projectBundles.length > 0 ? (
+            projectBundles.map((bundle) => <BundleDagView bundle={bundle} key={bundle.runId} />)
+          ) : (
+            <p className="gateway-trace-empty">
+              No project bundles yet. Enable the lab flag and run &quot;run project bundle&quot;.
+            </p>
           )}
         </div>
       </div>

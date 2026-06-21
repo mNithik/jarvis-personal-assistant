@@ -18,6 +18,7 @@ import {
 import ObsidianSetupWizard from "./ObsidianSetupWizard";
 import GatewayOnboardingBanner from "./GatewayOnboardingBanner";
 import TriggerRecipePanel from "./TriggerRecipePanel";
+import SyncPanel from "./SyncPanel";
 
 export default function GatewayConfigPanel() {
   const [config, setConfig] = useState<GatewayConfig | null>(null);
@@ -435,6 +436,7 @@ export default function GatewayConfigPanel() {
               labs: {
                 projectBundlePilot: event.target.checked,
                 councilVerifier: config.labs?.councilVerifier ?? false,
+                councilRuntime: config.labs?.councilRuntime ?? false,
                 proactiveAnomaly: config.labs?.proactiveAnomaly ?? false,
                 worldModelQueries: config.labs?.worldModelQueries ?? false,
               },
@@ -454,6 +456,7 @@ export default function GatewayConfigPanel() {
               labs: {
                 projectBundlePilot: config.labs?.projectBundlePilot ?? false,
                 councilVerifier: event.target.checked,
+                councilRuntime: config.labs?.councilRuntime ?? false,
                 proactiveAnomaly: config.labs?.proactiveAnomaly ?? false,
                 worldModelQueries: config.labs?.worldModelQueries ?? false,
               },
@@ -463,6 +466,67 @@ export default function GatewayConfigPanel() {
         />
         <span>Council verifier on send (lab)</span>
       </label>
+      <label className="toggle-row">
+        <input
+          type="checkbox"
+          checked={config.labs?.councilRuntime ?? false}
+          onChange={(event) =>
+            void persist({
+              ...config,
+              labs: {
+                projectBundlePilot: config.labs?.projectBundlePilot ?? false,
+                councilVerifier: config.labs?.councilVerifier ?? false,
+                councilRuntime: event.target.checked,
+                proactiveAnomaly: config.labs?.proactiveAnomaly ?? false,
+                worldModelQueries: config.labs?.worldModelQueries ?? false,
+              },
+            })
+          }
+          disabled={saving}
+        />
+        <span>Council runtime (multi-agent lab)</span>
+      </label>
+      <label className="toggle-row">
+        <input
+          type="checkbox"
+          checked={config.labs?.proactiveAnomaly ?? false}
+          onChange={(event) =>
+            void persist({
+              ...config,
+              labs: {
+                projectBundlePilot: config.labs?.projectBundlePilot ?? false,
+                councilVerifier: config.labs?.councilVerifier ?? false,
+                councilRuntime: config.labs?.councilRuntime ?? false,
+                proactiveAnomaly: event.target.checked,
+                worldModelQueries: config.labs?.worldModelQueries ?? false,
+              },
+            })
+          }
+          disabled={saving}
+        />
+        <span>Proactive anomaly detection (lab)</span>
+      </label>
+      <label className="toggle-row">
+        <input
+          type="checkbox"
+          checked={config.labs?.worldModelQueries ?? false}
+          onChange={(event) =>
+            void persist({
+              ...config,
+              labs: {
+                projectBundlePilot: config.labs?.projectBundlePilot ?? false,
+                councilVerifier: config.labs?.councilVerifier ?? false,
+                councilRuntime: config.labs?.councilRuntime ?? false,
+                proactiveAnomaly: config.labs?.proactiveAnomaly ?? false,
+                worldModelQueries: event.target.checked,
+              },
+            })
+          }
+          disabled={saving}
+        />
+        <span>World model queries (lab L5)</span>
+      </label>
+      <SyncPanel />
       <p className="section-kicker">Channels</p>
       <label className="toggle-row">
         <input
@@ -533,6 +597,35 @@ export default function GatewayConfigPanel() {
           disabled={saving}
         />
       </label>
+      <label className="toggle-row">
+        <input
+          type="checkbox"
+          checked={config.channels?.mobileApproveEnabled ?? false}
+          onChange={(event) =>
+            void persist({
+              ...config,
+              channels: {
+                localWsEnabled: config.channels?.localWsEnabled ?? false,
+                localWsPort: config.channels?.localWsPort ?? 18789,
+                localWsToken: config.channels?.localWsToken,
+                mobileApproveEnabled: event.target.checked,
+                telegramEnabled: config.channels?.telegramEnabled ?? false,
+                telegramBotToken: config.channels?.telegramBotToken,
+                discordEnabled: config.channels?.discordEnabled ?? false,
+                discordBotToken: config.channels?.discordBotToken,
+              },
+            })
+          }
+          disabled={saving}
+        />
+        <span>Mobile approve PWA (GET /mobile/brief + approvals)</span>
+      </label>
+      {config.channels?.mobileApproveEnabled ? (
+        <p className="result-meta">
+          Open approve UI: /approve/index.html · API http://127.0.0.1:
+          {config.channels?.localWsPort ?? 18789}
+        </p>
+      ) : null}
       <label className="toggle-row">
         <input
           type="checkbox"

@@ -143,20 +143,24 @@ See [ARCHITECTURE_WAVE13.md](./ARCHITECTURE_WAVE13.md), [TIER_UPGRADE_BALANCED_9
 ### Wave 14 — Daily loops + orchestration (3–6 months)
 
 - [x] **T14-T Embedded terminal:** multi-tab Builder PTY (Shell, Claude Code, Codex) + handoff launch
-- [x] Day planner copilot (morning brief + dynamic replan)
-- [x] Meeting copilot v2 (prep from related emails, notes, tasks)
-- [x] Trigger recipe builder UI
+- [x] Day planner copilot (morning brief + dynamic replan; Gmail urgency bump in replan)
+- [x] Meeting copilot v2 (prep from related emails, notes, tasks; topic graph auto-link on save)
+- [x] Trigger recipe builder UI (schedule/threshold/command editor + presets)
 - [x] Audit ledger search + rollback (calendar, notion)
-- [x] Lab L1: meeting follow-up project bundle (flag)
-- [x] Lab L2: council verifier on send (flag)
+- [x] Lab L1: meeting follow-up project bundle — sequential steps, draft + Notion, proactive trigger (flag)
+- [x] Lab L2: council verifier on send — block on approve, F56 evals (flag)
+- [x] Lab L3: council runtime vote log for bundles (flag)
+- [x] Lab L4: proactive anomaly nudges + Command workspace dismiss (flag)
+
+See [ARCHITECTURE_WAVE15.md](./ARCHITECTURE_WAVE15.md) for Wave 14 graduation matrix and Wave 15 architecture.
 
 ### Wave 15 — Platform prep (6–12 months)
 
-- [ ] Mobile approve PWA (brief + approval inbox)
-- [ ] Memory topic graph
-- [ ] Travel copilot baseline
-- [ ] Lab L5: world model queries
-- [ ] Optional cloud sync beta (settings + goals)
+- [x] Mobile approve PWA (brief + approval inbox via local API on port 18789)
+- [x] Memory topic graph (`memory_relations`, adjacency UI, L0 routes)
+- [x] Travel copilot baseline (checklist, timeline, refresh prep)
+- [x] Lab L5: world model queries (read-only, flag-gated)
+- [x] Optional cloud sync beta (encrypted local export/import of settings + goals + recipes)
 
 ### Wave 16+ — Platform
 
@@ -169,6 +173,7 @@ See [ARCHITECTURE_WAVE13.md](./ARCHITECTURE_WAVE13.md), [TIER_UPGRADE_BALANCED_9
 
 ```powershell
 cd apps/desktop/src-tauri; cargo test --lib -j 1 --no-default-features
+# On Windows, full default-feature tests may fail with STATUS_ENTRYPOINT_NOT_FOUND; use --no-default-features locally and rely on Linux CI for the full harness.
 cd ../..; npx tsc --noEmit
-npm run build
+npm --workspace @jarvis/desktop run build
 ```

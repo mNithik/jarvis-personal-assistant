@@ -83,6 +83,27 @@ impl Agent for MemoryAgent {
             return run_meeting_copilot(ctx, &knowledge_prefix);
         }
 
+        if memory::travel_copilot::is_travel_copilot_command(&ctx.command) {
+            return match memory::travel_copilot::compose_travel_copilot(
+                &ctx.db_path,
+                Some(&ctx.config),
+            ) {
+                Ok(reply) => Ok(StepResult::ok(format!("{knowledge_prefix}{reply}"))),
+                Err(error) => Ok(StepResult::failed(error)),
+            };
+        }
+
+        if memory::world_model::is_world_model_query(&ctx.command) {
+            return match memory::world_model::answer_world_model_query(
+                &ctx.db_path,
+                &ctx.config,
+                &ctx.command,
+            ) {
+                Ok(reply) => Ok(StepResult::ok(format!("{knowledge_prefix}{reply}"))),
+                Err(error) => Ok(StepResult::failed(error)),
+            };
+        }
+
         memory::run_memory_action(&ctx.db_path, &ctx.command).map(|reply| {
             StepResult::ok(format!("{knowledge_prefix}{reply}"))
         })

@@ -389,6 +389,12 @@ mod tests {
                 "f_project_bundle_execution.json" => {
                     run_project_bundle_execution_file(&file);
                 }
+                "f_council_verifier_execution.json" => {
+                    run_council_verifier_execution_file(&file);
+                }
+                "f_world_model_execution.json" => {
+                    run_world_model_execution_file(&file);
+                }
                 "f_clipboard_execution.json"
                 | "f_files_execution.json"
                 | "f_pdf_execution.json" => {
@@ -1129,7 +1135,118 @@ mod tests {
                     ),
                 ]));
             }
+            "topic_graph" => {
+                use crate::memory::{entity_store, topic_graph};
+
+                memory::ensure_schema(db_path).expect("migrate");
+                topic_graph::ensure_topic_graph_schema(db_path).expect("topic graph schema");
+                let project_id = entity_store::upsert_domain_entity(
+                    db_path,
+                    "meeting_prep",
+                    "Product review",
+                    r#"{"title":"Product review"}"#,
+                    "Product review prep",
+                    &[],
+                )
+                .expect("project entity");
+                let alex_id = entity_store::upsert_domain_entity(
+                    db_path,
+                    "people",
+                    "Alex",
+                    r#"{"name":"Alex"}"#,
+                    "Alex profile",
+                    &[],
+                )
+                .expect("person entity");
+                topic_graph::upsert_relation(db_path, project_id, "related_to", alex_id, "eval")
+                    .expect("relation");
+            }
             other => panic!("unknown memory execution fixture: {other}"),
+        }
+    }
+
+    fn run_council_verifier_execution_file(file_name: &str) {
+        use crate::gateway::config::GatewayConfig;
+        use crate::gateway::types::GatewayPolicyClass;
+        use crate::gateway::verifier::council_verify_send;
+
+        #[derive(serde::Deserialize)]
+        struct CouncilVerifierCase {
+            draft: String,
+            #[serde(rename = "expectBlocked")]
+            expect_blocked: bool,
+        }
+
+        let path = eval_path(file_name);
+        let raw = std::fs::read_to_string(&path).expect("read council verifier eval");
+        let cases: Vec<CouncilVerifierCase> = serde_json::from_str(&raw).expect("parse");
+        let mut config = GatewayConfig::default();
+        config.labs.council_verifier = true;
+        let mut blocked = 0usize;
+        for case in &cases {
+            let result = council_verify_send(
+                &config,
+                GatewayPolicyClass::Send,
+                "send email",
+                &case.draft,
+            );
+            let is_blocked = result.is_err();
+            if is_blocked == case.expect_blocked {
+                if is_blocked {
+                    blocked += 1;
+                }
+            } else {
+                panic!(
+                    "council verifier mismatch for draft {:?}: blocked={is_blocked} expected={}",
+                    case.draft, case.expect_blocked
+                );
+            }
+        }
+        let rate = (blocked as f64 / cases.iter().filter(|c| c.expect_blocked).count().max(1) as f64) * 100.0;
+        assert!(rate >= 80.0, "council verifier block rate {rate}% below 80%");
+    }
+
+    fn run_world_model_execution_file(file_name: &str) {
+        use crate::gateway::config::GatewayConfig;
+        use crate::memory::world_model::answer_world_model_query;
+
+        #[derive(serde::Deserialize)]
+        struct WorldModelCase {
+            command: String,
+            fixture: String,
+            #[serde(rename = "expectSuccess")]
+            expect_success: bool,
+            #[serde(rename = "expectReplyContains")]
+            expect_reply_contains: Option<String>,
+        }
+
+        let path = eval_path(file_name);
+        let raw = std::fs::read_to_string(&path).expect("read world model eval");
+        let cases: Vec<WorldModelCase> = serde_json::from_str(&raw).expect("parse");
+        for case in cases {
+            let dir = std::env::temp_dir().join(format!(
+                "jarvis-world-model-{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|duration| duration.as_nanos())
+                    .unwrap_or(0)
+            ));
+            std::fs::create_dir_all(&dir).expect("dir");
+            let db_path = dir.join("test.db");
+            install_memory_execution_fixture(&case.fixture, &db_path);
+            let mut config = GatewayConfig::default();
+            config.labs.world_model_queries = true;
+            config.features.memory = true;
+            let reply = answer_world_model_query(&db_path, &config, &case.command);
+            let success = reply.as_ref().map(|text| !text.contains("disabled")).unwrap_or(false);
+            assert_eq!(success, case.expect_success, "world model success for {}", case.command);
+            if let (Ok(text), Some(needle)) = (&reply, &case.expect_reply_contains) {
+                assert!(
+                    text.to_lowercase().contains(&needle.to_lowercase()),
+                    "reply missing {needle}: {text}"
+                );
+            }
+            let _ = std::fs::remove_dir_all(dir);
         }
     }
 
@@ -1451,6 +1568,26 @@ mod tests {
     #[test]
     fn eval_golden_f_project_bundle_execution() {
         run_project_bundle_execution_file("f_project_bundle_execution.json");
+    }
+
+    #[test]
+    fn eval_golden_f_council_verifier_execution() {
+        run_council_verifier_execution_file("f_council_verifier_execution.json");
+    }
+
+    #[test]
+    fn eval_golden_f_topic_graph_routes() {
+        run_golden_file("f_topic_graph_routes.json");
+    }
+
+    #[test]
+    fn eval_golden_f_travel_copilot_routes() {
+        run_golden_file("f_travel_copilot_routes.json");
+    }
+
+    #[test]
+    fn eval_golden_f_world_model_execution() {
+        run_world_model_execution_file("f_world_model_execution.json");
     }
 
     #[test]

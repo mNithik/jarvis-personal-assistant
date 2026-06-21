@@ -180,17 +180,38 @@ fn handle_http_request(app: &AppHandle, raw: &str, token: Option<&str>) -> Strin
         return http_response(200, r#"{"ok":true}"#);
     }
 
-    if method != "POST" || path != "/turn" {
-        return http_response(404, r#"{"error":"not found"}"#);
+    if requires_auth(token) && !is_authorized(&headers, token) {
+        return http_response(401, r#"{"error":"unauthorized"}"#);
     }
 
-    if let Some(expected) = token.filter(|value| !value.is_empty()) {
-        let authorized = headers
-            .iter()
-            .any(|(key, value)| key.eq_ignore_ascii_case("authorization") && value == &format!("Bearer {expected}"));
-        if !authorized {
-            return http_response(401, r#"{"error":"unauthorized"}"#);
+    if method == "GET" && path == "/mobile/brief" {
+        return match build_mobile_brief(app) {
+            Ok(json) => http_response(200, &json),
+            Err(error) => http_response(500, &format!(r#"{{"error":"{error}"}}"#)),
+        };
+    }
+
+    if method == "GET" && path == "/mobile/approvals" {
+        return match list_mobile_approvals(app) {
+            Ok(json) => http_response(200, &json),
+            Err(error) => http_response(500, &format!(r#"{{"error":"{error}"}}"#)),
+        };
+    }
+
+    if method == "POST" && path.starts_with("/mobile/approvals/") {
+        let parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
+        if parts.len() == 4 {
+            let approval_id = parts[2];
+            let action = parts[3];
+            return match resolve_mobile_approval(app, approval_id, action == "approve") {
+                Ok(json) => http_response(200, &json),
+                Err(error) => http_response(500, &format!(r#"{{"error":"{error}"}}"#)),
+            };
         }
+    }
+
+    if method != "POST" || path != "/turn" {
+        return http_response(404, r#"{"error":"not found"}"#);
     }
 
     let channel_request = match parse_local_channel_payload(body.trim()) {
@@ -205,6 +226,111 @@ fn handle_http_request(app: &AppHandle, raw: &str, token: Option<&str>) -> Strin
         }
         Err(error) => http_response(500, &format!(r#"{{"error":"{error}"}}"#)),
     }
+}
+
+fn requires_auth(token: Option<&str>) -> bool {
+    token.filter(|value| !value.is_empty()).is_some()
+}
+
+fn is_authorized(headers: &[(String, String)], token: Option<&str>) -> bool {
+    let Some(expected) = token.filter(|value| !value.is_empty()) else {
+        return true;
+    };
+    headers.iter().any(|(key, value)| {
+        key.eq_ignore_ascii_case("authorization") && value == &format!("Bearer {expected}")
+    })
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MobileBriefResponse {
+    top_three: Vec<String>,
+    pending_approval_count: usize,
+    next_event: Option<String>,
+}
+
+fn build_mobile_brief(app: &AppHandle) -> Result<String, String> {
+    let gateway_state = app
+        .try_state::<GatewayState>()
+        .ok_or_else(|| "Gateway state unavailable".to_string())?;
+    let app_state = app
+        .try_state::<crate::AppState>()
+        .ok_or_else(|| "App state unavailable".to_string())?;
+    let config = gateway_state
+        .config
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone();
+    if !config.channels.mobile_approve_enabled {
+        return Err("Mobile approve is disabled".to_string());
+    }
+
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let top_three = crate::memory::day_plan_store::get_day_plan(&app_state.db_path, &today)?
+        .map(|plan| plan.top_three)
+        .unwrap_or_default();
+    let pending_approval_count = gateway_state.list_pending_approvals()?.len();
+    let next_event = if config.features.calendar {
+        google_next_event_summary().ok()
+    } else {
+        None
+    };
+    serde_json::to_string(&MobileBriefResponse {
+        top_three,
+        pending_approval_count,
+        next_event,
+    })
+    .map_err(|error| error.to_string())
+}
+
+fn google_next_event_summary() -> Result<String, String> {
+    let token = crate::integrations::google::get_session_token("calendar")?;
+    let event = crate::integrations::google::calendar::find_event_starting_within(&token, 240)?;
+    Ok(event
+        .map(|entry| {
+            format!(
+                "{} ({})",
+                entry.summary,
+                entry.start.as_deref().unwrap_or("soon")
+            )
+        })
+        .unwrap_or_else(|| "No upcoming events".to_string()))
+}
+
+fn list_mobile_approvals(app: &AppHandle) -> Result<String, String> {
+    let gateway_state = app
+        .try_state::<GatewayState>()
+        .ok_or_else(|| "Gateway state unavailable".to_string())?;
+    let config = gateway_state
+        .config
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone();
+    if !config.channels.mobile_approve_enabled {
+        return Err("Mobile approve is disabled".to_string());
+    }
+    let approvals = gateway_state.list_pending_approvals()?;
+    serde_json::to_string(&approvals).map_err(|error| error.to_string())
+}
+
+fn resolve_mobile_approval(app: &AppHandle, approval_id: &str, approved: bool) -> Result<String, String> {
+    let gateway_state = app
+        .try_state::<GatewayState>()
+        .ok_or_else(|| "Gateway state unavailable".to_string())?;
+    let config = gateway_state
+        .config
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone();
+    if !config.channels.mobile_approve_enabled {
+        return Err("Mobile approve is disabled".to_string());
+    }
+    let pending = gateway_state
+        .take_pending_approval(approval_id)?
+        .ok_or_else(|| format!("No pending approval found for {approval_id}"))?;
+    let mut bus = gateway_state.bus.lock().map_err(|error| error.to_string())?;
+    let resolution = GatewayOrchestrator::resolve_approval(&pending, approved, &config, &mut bus);
+    serde_json::to_string(&resolution).map_err(|error| error.to_string())
 }
 
 pub fn run_channel_turn_internal(
@@ -317,5 +443,41 @@ mod tests {
         let response = http_response(200, r#"{"ok":true}"#);
         assert!(response.contains("200 OK"));
         assert!(response.contains(r#""ok":true"#));
+    }
+
+    #[test]
+    fn mobile_paths_parse_for_approve_and_deny() {
+        let approve = "POST /mobile/approvals/apr-1/approve HTTP/1.1\r\n\r\n";
+        let (method, path, _, _) = parse_http(approve);
+        assert_eq!(method, "POST");
+        let parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
+        assert_eq!(parts, vec!["mobile", "approvals", "apr-1", "approve"]);
+
+        let deny = "POST /mobile/approvals/apr-2/deny HTTP/1.1\r\n\r\n";
+        let (_, deny_path, _, _) = parse_http(deny);
+        let deny_parts: Vec<&str> = deny_path.trim_start_matches('/').split('/').collect();
+        assert_eq!(deny_parts[3], "deny");
+    }
+
+    #[test]
+    fn mobile_brief_requires_bearer_when_token_configured() {
+        let headers = vec![("Authorization".to_string(), "Bearer secret".to_string())];
+        assert!(is_authorized(&headers, Some("secret")));
+        assert!(!is_authorized(&[], Some("secret")));
+        assert!(requires_auth(Some("secret")));
+        assert!(!requires_auth(Some("")));
+        assert!(!requires_auth(None));
+    }
+
+    #[test]
+    fn mobile_brief_response_serializes() {
+        let json = serde_json::to_string(&MobileBriefResponse {
+            top_three: vec!["Ship planner".into()],
+            pending_approval_count: 2,
+            next_event: Some("Standup (soon)".into()),
+        })
+        .expect("serialize");
+        assert!(json.contains("topThree"));
+        assert!(json.contains("pendingApprovalCount"));
     }
 }

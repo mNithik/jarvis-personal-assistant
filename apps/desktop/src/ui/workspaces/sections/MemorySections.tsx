@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import type { MemorySectionProps } from "./sectionTypes";
 import { buildEmailCopilotCard } from "./EmailSections";
 import MemoryControlsPanel from "./MemoryControlsPanel";
+import { TopicGraphPanel } from "./TopicGraphPanel";
 
 function formatMeetingStart(start?: string | null) {
   if (!start) {
@@ -78,6 +79,30 @@ export function buildMemoryWorkspaceSections({
           </div>
         </div>
       ) : null}
+      {displayTravelMemory.length > 0 ? (
+        <div className="result-card">
+          <p className="section-kicker">Travel Copilot</p>
+          <h3>{displayTravelMemory[0]?.title ?? "Upcoming trip"}</h3>
+          <p className="result-meta">{displayTravelMemory[0]?.summary}</p>
+          <div className="inline-actions">
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => void runCommand?.("prep me for my trip")}
+            >
+              Prep trip
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => void runCommand?.("refresh travel prep")}
+            >
+              Refresh prep
+            </button>
+          </div>
+        </div>
+      ) : null}
+      <TopicGraphPanel key="topic-graph" />
       {lastKnowledgeRecall ? (
         <div className="result-card">
           <p className="section-kicker">Last Recalled Context</p>

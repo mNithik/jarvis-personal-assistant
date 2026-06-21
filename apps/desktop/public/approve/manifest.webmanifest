@@ -1,0 +1,9 @@
+{
+  "name": "JARVIS Approve",
+  "short_name": "JARVIS",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0b1520",
+  "theme_color": "#0b1520",
+  "description": "Morning brief and approval inbox for JARVIS desktop"
+}

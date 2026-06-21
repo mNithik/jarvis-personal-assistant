@@ -200,3 +200,55 @@ pub fn maybe_enqueue_scheduled_recipes(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_db() -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0);
+        std::env::temp_dir().join(format!("jarvis-trigger-recipe-{nanos}.db"))
+    }
+
+    #[test]
+    fn save_and_edit_recipe_roundtrip() {
+        let path = temp_db();
+        crate::migrations::apply_pending_migrations(
+            &Connection::open(&path).expect("open"),
+            &path,
+        )
+        .expect("migrate");
+        let recipe = TriggerRecipeRecord {
+            id: "test-morning".into(),
+            name: "Morning brief".into(),
+            enabled: true,
+            kind: "morning_brief".into(),
+            schedule_value: Some("07:30".into()),
+            payload_json: r#"{"command":"morning brief"}"#.into(),
+            created_at: "2026-01-01T00:00:00Z".into(),
+            updated_at: "2026-01-01T00:00:00Z".into(),
+        };
+        save_trigger_recipe(&path, &recipe).expect("save");
+        let mut edited = list_trigger_recipes(&path)
+            .expect("list")
+            .into_iter()
+            .find(|entry| entry.id == "test-morning")
+            .expect("recipe");
+        edited.schedule_value = Some("08:00".into());
+        edited.payload_json = r#"{"command":"show day plan"}"#.into();
+        save_trigger_recipe(&path, &edited).expect("edit");
+        let listed = list_trigger_recipes(&path).expect("list again");
+        let saved = listed
+            .iter()
+            .find(|entry| entry.id == "test-morning")
+            .expect("saved");
+        assert_eq!(saved.schedule_value.as_deref(), Some("08:00"));
+        assert!(saved.payload_json.contains("show day plan"));
+        let _ = std::fs::remove_file(path);
+    }
+}

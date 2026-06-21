@@ -15,6 +15,9 @@ pub mod recall;
 pub mod schema;
 pub mod school;
 pub mod travel;
+pub mod travel_copilot;
+pub mod topic_graph;
+pub mod world_model;
 pub mod triples;
 
 use std::path::Path;

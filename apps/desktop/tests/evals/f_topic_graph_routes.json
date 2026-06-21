@@ -1,0 +1,5 @@
+[
+  { "phrase": "topic graph for product review", "capabilityId": "memory.life" },
+  { "phrase": "who is involved in product review", "capabilityId": "memory.life" },
+  { "phrase": "show topic graph", "capabilityId": "memory.life" }
+]

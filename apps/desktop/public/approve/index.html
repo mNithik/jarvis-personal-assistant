@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1520" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <title>JARVIS Approve</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: system-ui, sans-serif;
+        background: #0b1520;
+        color: #d5e3f0;
+      }
+      body {
+        margin: 0 auto;
+        max-width: 480px;
+        padding: 1rem;
+      }
+      .card {
+        border: 1px solid rgba(166, 210, 255, 0.15);
+        border-radius: 14px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        background: rgba(8, 18, 28, 0.8);
+      }
+      button {
+        margin-right: 0.5rem;
+        margin-top: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 8px;
+        border: none;
+        background: #2f6fed;
+        color: white;
+      }
+      button.secondary {
+        background: #334155;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        margin: 0.35rem 0 0.75rem;
+        padding: 0.5rem;
+        border-radius: 8px;
+        border: 1px solid #334155;
+        background: #111827;
+        color: inherit;
+      }
+      h1 {
+        font-size: 1.25rem;
+      }
+      .meta {
+        opacity: 0.8;
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>JARVIS Mobile Approve</h1>
+    <p class="meta">Connect to your desktop JARVIS local API.</p>
+    <div class="card">
+      <label>API base URL</label>
+      <input id="baseUrl" value="http://127.0.0.1:18789" />
+      <label>Bearer token</label>
+      <input id="token" type="password" placeholder="gateway.channels.localWsToken" />
+      <button id="refreshBtn">Refresh</button>
+    </div>
+    <div class="card" id="briefCard">
+      <h2>Morning brief</h2>
+      <div id="briefContent" class="meta">Loading…</div>
+    </div>
+    <div class="card">
+      <h2>Approval inbox</h2>
+      <div id="approvals"></div>
+    </div>
+    <script>
+      const baseUrlInput = document.getElementById("baseUrl");
+      const tokenInput = document.getElementById("token");
+      const briefContent = document.getElementById("briefContent");
+      const approvalsEl = document.getElementById("approvals");
+      const refreshBtn = document.getElementById("refreshBtn");
+
+      function authHeaders() {
+        const token = tokenInput.value.trim();
+        const headers = { Accept: "application/json" };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        return headers;
+      }
+
+      async function apiGet(path) {
+        const response = await fetch(`${baseUrlInput.value.trim()}${path}`, {
+          headers: authHeaders(),
+        });
+        if (!response.ok) throw new Error(`${path} failed (${response.status})`);
+        return response.json();
+      }
+
+      async function apiPost(path) {
+        const response = await fetch(`${baseUrlInput.value.trim()}${path}`, {
+          method: "POST",
+          headers: authHeaders(),
+        });
+        if (!response.ok) throw new Error(`${path} failed (${response.status})`);
+        return response.json();
+      }
+
+      async function loadBrief() {
+        try {
+          const brief = await apiGet("/mobile/brief");
+          const top = (brief.topThree || []).map((item, index) => `${index + 1}. ${item}`).join("<br>");
+          briefContent.innerHTML = `
+            <p><strong>Top 3</strong><br>${top || "No plan yet"}</p>
+            <p><strong>Next event</strong><br>${brief.nextEvent || "—"}</p>
+            <p><strong>Pending approvals</strong>: ${brief.pendingApprovalCount ?? 0}</p>
+          `;
+        } catch (error) {
+          briefContent.textContent = String(error);
+        }
+      }
+
+      async function loadApprovals() {
+        approvalsEl.innerHTML = "";
+        try {
+          const approvals = await apiGet("/mobile/approvals");
+          if (!approvals.length) {
+            approvalsEl.innerHTML = "<p class='meta'>No pending approvals.</p>";
+            return;
+          }
+          for (const approval of approvals) {
+            const card = document.createElement("div");
+            card.className = "card";
+            card.innerHTML = `<strong>${approval.title}</strong><p class='meta'>${approval.detail}</p>`;
+            const approveBtn = document.createElement("button");
+            approveBtn.textContent = "Approve";
+            approveBtn.onclick = async () => {
+              await apiPost(`/mobile/approvals/${approval.id}/approve`);
+              await loadBrief();
+              await loadApprovals();
+            };
+            const denyBtn = document.createElement("button");
+            denyBtn.className = "secondary";
+            denyBtn.textContent = "Deny";
+            denyBtn.onclick = async () => {
+              await apiPost(`/mobile/approvals/${approval.id}/deny`);
+              await loadBrief();
+              await loadApprovals();
+            };
+            card.appendChild(approveBtn);
+            card.appendChild(denyBtn);
+            approvalsEl.appendChild(card);
+          }
+        } catch (error) {
+          approvalsEl.textContent = String(error);
+        }
+      }
+
+      async function refresh() {
+        await loadBrief();
+        await loadApprovals();
+      }
+
+      refreshBtn.addEventListener("click", () => void refresh());
+      void refresh();
+      setInterval(() => void refresh(), 30000);
+    </script>
+  </body>
+</html>

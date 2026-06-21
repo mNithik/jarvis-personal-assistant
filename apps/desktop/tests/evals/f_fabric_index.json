@@ -53,5 +53,10 @@
   { "id": "F52", "capabilityId": "memory.life", "eval": "f_meeting_copilot_v2_routes.json", "status": "golden", "note": "Meeting copilot v2 routes" },
   { "id": "F53", "capabilityId": "memory.life", "eval": null, "status": "golden", "executionEval": "f_meeting_copilot_v2_execution.json", "note": "Meeting copilot v2 enrichment execution" },
   { "id": "F54", "capabilityId": "automation.workflow", "eval": "f_trigger_recipe_routes.json", "status": "golden", "note": "Trigger recipe builder routes" },
-  { "id": "F55", "capabilityId": "mission.control", "eval": null, "status": "golden", "executionEval": "f_audit_rollback_execution.json", "note": "Audit search and rollback execution" }
+  { "id": "F55", "capabilityId": "mission.control", "eval": null, "status": "golden", "executionEval": "f_audit_rollback_execution.json", "note": "Audit search and rollback execution" },
+  { "id": "F56", "capabilityId": "labs.verifier", "eval": null, "status": "golden", "executionEval": "f_council_verifier_execution.json", "note": "Council verifier bad-send fixtures" },
+  { "id": "F57", "capabilityId": "channels.mobile", "eval": null, "status": "golden", "note": "Mobile approve API routes tested in local_turn_api.rs" },
+  { "id": "F58", "capabilityId": "memory.graph", "eval": "f_topic_graph_routes.json", "status": "golden", "note": "Topic graph L0 routes" },
+  { "id": "F59", "capabilityId": "memory.travel", "eval": "f_travel_copilot_routes.json", "status": "golden", "note": "Travel copilot routes" },
+  { "id": "F60", "capabilityId": "labs.worldmodel", "eval": null, "status": "golden", "executionEval": "f_world_model_execution.json", "note": "World model query execution" }
 ]

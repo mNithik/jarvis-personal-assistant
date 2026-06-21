@@ -3,7 +3,9 @@ use std::path::Path;
 use chrono::Local;
 
 use crate::gateway::config::GatewayConfig;
+use crate::gateway::models::GmailMessageRecord;
 use crate::integrations::google;
+use crate::integrations::google::gmail;
 use crate::integrations::notion::{self, NotionPlannerTask};
 use crate::memory::{brief, day_plan_store};
 use crate::models::DayPlanRecord;
@@ -68,21 +70,29 @@ fn parse_due_date(value: &str) -> Option<chrono::NaiveDate> {
     }
 }
 
-fn rank_tasks(tasks: &[NotionPlannerTask], today: chrono::NaiveDate) -> Vec<NotionPlannerTask> {
+fn rank_tasks(
+    tasks: &[NotionPlannerTask],
+    today: chrono::NaiveDate,
+    urgent_emails: Option<&[GmailMessageRecord]>,
+) -> Vec<NotionPlannerTask> {
     let mut ranked = tasks
         .iter()
         .filter(|task| !task.is_done && !is_done_status(task.status.as_deref()))
         .cloned()
         .collect::<Vec<_>>();
     ranked.sort_by(|left, right| {
-        let left_score = task_priority_score(left, today);
-        let right_score = task_priority_score(right, today);
+        let left_score = task_priority_score(left, today, urgent_emails);
+        let right_score = task_priority_score(right, today, urgent_emails);
         right_score.cmp(&left_score).then_with(|| left.title.cmp(&right.title))
     });
     ranked
 }
 
-fn task_priority_score(task: &NotionPlannerTask, today: chrono::NaiveDate) -> i32 {
+fn task_priority_score(
+    task: &NotionPlannerTask,
+    today: chrono::NaiveDate,
+    urgent_emails: Option<&[GmailMessageRecord]>,
+) -> i32 {
     let mut score = 0;
     if let Some(due) = task.due.as_deref().and_then(parse_due_date) {
         if due < today {
@@ -100,11 +110,54 @@ fn task_priority_score(task: &NotionPlannerTask, today: chrono::NaiveDate) -> i3
     {
         score += 20;
     }
+    if let Some(emails) = urgent_emails {
+        score += gmail_urgency_boost(task, emails);
+    }
     score
 }
 
-fn build_top_three(tasks: &[NotionPlannerTask], today: chrono::NaiveDate) -> Vec<String> {
-    rank_tasks(tasks, today)
+fn gmail_urgency_boost(task: &NotionPlannerTask, urgent_emails: &[GmailMessageRecord]) -> i32 {
+    let title_lower = task.title.to_lowercase();
+    for email in urgent_emails {
+        let combined = format!(
+            "{} {} {}",
+            email.subject, email.snippet, email.body
+        )
+        .to_lowercase();
+        if combined.contains(&title_lower) {
+            return 50;
+        }
+        for word in title_lower.split_whitespace().filter(|word| word.len() >= 4) {
+            if combined.contains(word) {
+                return 35;
+            }
+        }
+    }
+    0
+}
+
+fn load_urgent_unread_emails(config: Option<&GatewayConfig>) -> Vec<GmailMessageRecord> {
+    if !config.is_some_and(|value| value.features.gmail) {
+        return Vec::new();
+    }
+    let Ok(token) = google::get_session_token("gmail") else {
+        return Vec::new();
+    };
+    let Ok(emails) = gmail::list_unread(&token, 10) else {
+        return Vec::new();
+    };
+    emails
+        .into_iter()
+        .filter(|email| gmail::is_urgent_email(email))
+        .collect()
+}
+
+fn build_top_three(
+    tasks: &[NotionPlannerTask],
+    today: chrono::NaiveDate,
+    urgent_emails: Option<&[GmailMessageRecord]>,
+) -> Vec<String> {
+    rank_tasks(tasks, today, urgent_emails)
         .into_iter()
         .take(3)
         .map(|task| {
@@ -118,7 +171,7 @@ fn build_top_three(tasks: &[NotionPlannerTask], today: chrono::NaiveDate) -> Vec
 }
 
 fn format_task_section(tasks: &[NotionPlannerTask], today: chrono::NaiveDate) -> String {
-    let ranked = rank_tasks(tasks, today);
+    let ranked = rank_tasks(tasks, today, None);
     if ranked.is_empty() {
         return "Notion tasks: none open for today.".to_string();
     }
@@ -156,9 +209,13 @@ fn format_calendar_section(config: Option<&GatewayConfig>, token: Option<&str>) 
     }
 }
 
-fn build_suggested_actions(tasks: &[NotionPlannerTask], today: chrono::NaiveDate) -> Vec<String> {
+fn build_suggested_actions(
+    tasks: &[NotionPlannerTask],
+    today: chrono::NaiveDate,
+    urgent_emails: Option<&[GmailMessageRecord]>,
+) -> Vec<String> {
     let mut actions = Vec::new();
-    for task in rank_tasks(tasks, today).into_iter().take(3) {
+    for task in rank_tasks(tasks, today, urgent_emails).into_iter().take(3) {
         if task
             .due
             .as_deref()
@@ -194,8 +251,8 @@ pub fn compose_morning_plan(
     };
     let calendar_section = format_calendar_section(config, calendar_token.as_deref());
     let task_section = format_task_section(&tasks, today_date);
-    let top_three = build_top_three(&tasks, today_date);
-    let suggested_actions = build_suggested_actions(&tasks, today_date);
+    let top_three = build_top_three(&tasks, today_date, None);
+    let suggested_actions = build_suggested_actions(&tasks, today_date, None);
 
     let top_three_section = if top_three.is_empty() {
         "Top 3: add tasks in Notion to populate priorities.".to_string()
@@ -239,18 +296,39 @@ pub fn replan_day(
     let today_date = chrono::NaiveDate::parse_from_str(&baseline.plan_date, "%Y-%m-%d")
         .map_err(|error| error.to_string())?;
     let tasks = notion::list_planner_tasks(db_path)?;
-    let revised_top_three = build_top_three(&tasks, today_date);
-    let mut suggested_actions = build_suggested_actions(&tasks, today_date);
+    let urgent_emails = load_urgent_unread_emails(config);
+    let revised_top_three = build_top_three(&tasks, today_date, Some(&urgent_emails));
+    let mut suggested_actions = build_suggested_actions(&tasks, today_date, Some(&urgent_emails));
     suggested_actions.insert(
         0,
         "Calendar or tasks changed — review the revised Top 3.".to_string(),
     );
+    if !urgent_emails.is_empty() {
+        suggested_actions.insert(
+            1,
+            format!(
+                "Gmail urgency: {} unread urgent email(s) may affect task priority.",
+                urgent_emails.len()
+            ),
+        );
+    }
 
     let replan_note = if revised_top_three == baseline.top_three {
-        "\n\nReplan note: priorities are unchanged; keep executing the current Top 3.".to_string()
+        if urgent_emails.is_empty() {
+            "\n\nReplan note: priorities are unchanged; keep executing the current Top 3.".to_string()
+        } else {
+            "\n\nReplan note: priorities are unchanged, but urgent Gmail threads were considered."
+                .to_string()
+        }
     } else {
-        "\n\nReplan note: priorities were refreshed based on the latest calendar and Notion tasks."
-            .to_string()
+        let gmail_note = if urgent_emails.is_empty() {
+            String::new()
+        } else {
+            " Urgent unread Gmail was included in ranking.".to_string()
+        };
+        format!(
+            "\n\nReplan note: priorities were refreshed based on the latest calendar, Notion tasks,{gmail_note}"
+        )
     };
 
     let timestamp = now_timestamp();
@@ -312,7 +390,42 @@ mod tests {
                 is_done: false,
             },
         ];
-        let top = build_top_three(&tasks, today);
+        let top = build_top_three(&tasks, today, None);
         assert_eq!(top.first().map(String::as_str), Some("Overdue (due 2026-06-10)"));
+    }
+
+    #[test]
+    fn gmail_urgency_bumps_matching_tasks() {
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 18).expect("date");
+        let tasks = vec![
+            NotionPlannerTask {
+                id: "1".into(),
+                title: "Quarterly report".into(),
+                due: Some("2026-06-20".into()),
+                status: None,
+                is_done: false,
+            },
+            NotionPlannerTask {
+                id: "2".into(),
+                title: "Ship planner".into(),
+                due: Some("2026-06-20".into()),
+                status: None,
+                is_done: false,
+            },
+        ];
+        let urgent = vec![GmailMessageRecord {
+            id: "msg-1".into(),
+            thread_id: "thread-1".into(),
+            subject: "URGENT: Ship planner blocked".into(),
+            from: "alex@example.com".into(),
+            snippet: "Need this ASAP".into(),
+            date: "2026-06-18".into(),
+            body: String::new(),
+        }];
+        let top = build_top_three(&tasks, today, Some(&urgent));
+        assert_eq!(
+            top.first().map(String::as_str),
+            Some("Ship planner (due 2026-06-20)")
+        );
     }
 }

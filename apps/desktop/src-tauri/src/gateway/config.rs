@@ -193,6 +193,7 @@ pub struct GatewayChannelsConfig {
     pub local_ws_enabled: bool,
     pub local_ws_port: u16,
     pub local_ws_token: Option<String>,
+    pub mobile_approve_enabled: bool,
     pub telegram_enabled: bool,
     pub telegram_bot_token: Option<String>,
     pub discord_enabled: bool,
@@ -205,6 +206,7 @@ impl Default for GatewayChannelsConfig {
             local_ws_enabled: false,
             local_ws_port: 18789,
             local_ws_token: None,
+            mobile_approve_enabled: false,
             telegram_enabled: false,
             telegram_bot_token: None,
             discord_enabled: false,
@@ -253,6 +255,7 @@ impl Default for GatewayTrainingConfig {
 pub struct GatewayLabsConfig {
     pub project_bundle_pilot: bool,
     pub council_verifier: bool,
+    pub council_runtime: bool,
     pub proactive_anomaly: bool,
     pub world_model_queries: bool,
 }
@@ -262,6 +265,7 @@ impl Default for GatewayLabsConfig {
         Self {
             project_bundle_pilot: false,
             council_verifier: false,
+            council_runtime: false,
             proactive_anomaly: false,
             world_model_queries: false,
         }

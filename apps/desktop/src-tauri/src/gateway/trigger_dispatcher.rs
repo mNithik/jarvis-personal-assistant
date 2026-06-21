@@ -32,6 +32,7 @@ pub fn process_trigger_queue(
         "gmail_label_inbox" => dispatch_gmail_label_inbox(app, db_path, config, &event.payload),
         "calendar_event_soon" => dispatch_calendar_event_soon(app, db_path, config, &event.payload),
         "replan_day" => dispatch_replan_day(app, db_path, config),
+        "meeting_followup_bundle" => dispatch_meeting_followup_bundle(app, db_path, config, &event.payload),
         other => {
             let _ = complete_trigger(&conn, &event.id, false);
             return Err(format!("Unknown trigger kind: {other}"));
@@ -343,6 +344,37 @@ fn dispatch_replan_day(
     let _ = app.emit("gateway-turn-complete", &response);
     let _ = app.emit("planner-day-plan-changed", ());
     Ok(response.result.reply.chars().take(120).collect())
+}
+
+fn dispatch_meeting_followup_bundle(
+    app: &AppHandle,
+    _db_path: &Path,
+    config: &GatewayConfig,
+    payload: &str,
+) -> Result<String, String> {
+    let app_state = app
+        .try_state::<crate::AppState>()
+        .ok_or_else(|| "App state unavailable".to_string())?;
+    let command = serde_json::from_str::<serde_json::Value>(payload)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("command")
+                .and_then(|entry| entry.as_str())
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| "run project bundle".to_string());
+    let (success, reply) = crate::gateway::labs::project_bundle_reply(
+        config,
+        &app_state.db_path,
+        &app_state.app_data_dir,
+        &command,
+    );
+    if success {
+        Ok(reply.chars().take(200).collect())
+    } else {
+        Err(reply)
+    }
 }
 
 #[cfg(test)]

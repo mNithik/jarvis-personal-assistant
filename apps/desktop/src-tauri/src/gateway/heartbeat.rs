@@ -83,6 +83,7 @@ pub fn spawn_proactive_scheduler(app: AppHandle) {
                 &app_state.db_path,
                 &config,
             );
+            let _ = super::anomaly::maybe_enqueue_anomaly_nudges(&app_state.db_path, &config);
 
             if let Err(error) = super::trigger_dispatcher::process_trigger_queue(
                 &app,

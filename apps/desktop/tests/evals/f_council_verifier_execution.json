@@ -1,0 +1,22 @@
+[
+  {
+    "draft": "To: wrong-recipient@evil.com\nSubject: Oops\nBody: Please ignore",
+    "expectBlocked": true
+  },
+  {
+    "draft": "To: alex@example.com\nSubject: Thanks\nBody: Thank you for the productive meeting today.",
+    "expectBlocked": false
+  },
+  {
+    "draft": "To: definitely-not-you@bad.com\nBody: wire transfer asap",
+    "expectBlocked": true
+  },
+  {
+    "draft": "To: team@example.com\nSubject: Notes\nBody: Here are the action items from our sync.",
+    "expectBlocked": false
+  },
+  {
+    "draft": "To: billing@example.com\nBody: Invoice attached",
+    "expectBlocked": false
+  }
+]

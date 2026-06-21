@@ -6,3 +6,4 @@ pub mod planner;
 pub mod terminal;
 pub mod trigger_recipes;
 pub mod vision;
+pub mod wave15;

@@ -205,6 +205,7 @@ export type GatewayChannelsConfig = {
   localWsEnabled: boolean;
   localWsPort: number;
   localWsToken?: string;
+  mobileApproveEnabled?: boolean;
   telegramEnabled: boolean;
   telegramBotToken?: string;
   discordEnabled: boolean;
@@ -225,6 +226,7 @@ export type GatewayPaidModeConfig = {
 export type GatewayLabsConfig = {
   projectBundlePilot: boolean;
   councilVerifier: boolean;
+  councilRuntime?: boolean;
   proactiveAnomaly: boolean;
   worldModelQueries: boolean;
 };
@@ -1288,4 +1290,97 @@ export function searchAuditLog(args: {
 
 export function rollbackAuditEntry(lineIndex: number) {
   return invoke<string>("rollback_audit_entry_cmd", { lineIndex });
+}
+
+export type ProjectBundleStep = {
+  label: string;
+  status: string;
+};
+
+export type ProjectBundleRecord = {
+  runId: string;
+  command: string;
+  steps: ProjectBundleStep[];
+  createdAt: string;
+};
+
+export function listProjectBundles(limit = 5) {
+  return invoke<ProjectBundleRecord[]>("list_project_bundles", { limit });
+}
+
+export type TopicGraphNode = {
+  entityId: number;
+  domain: string;
+  label: string;
+};
+
+export type TopicGraphEdge = {
+  id: number;
+  subjectEntityId: number;
+  predicate: string;
+  objectEntityId: number;
+  confidence: number;
+};
+
+export type TopicGraphBundle = {
+  nodes: TopicGraphNode[];
+  edges: TopicGraphEdge[];
+};
+
+export type UserGoalRecord = {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  targetDate?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProactiveNudgeRecord = {
+  id: string;
+  kind: string;
+  message: string;
+  status: string;
+  createdAt: string;
+};
+
+export function getTopicGraph(limit = 40) {
+  return invoke<TopicGraphBundle>("get_topic_graph_cmd", { limit });
+}
+
+export function queryTopicNeighbors(query: string) {
+  return invoke<string>("query_topic_neighbors_cmd", { query });
+}
+
+export function inferTopicGraph() {
+  return invoke<number>("infer_topic_graph_cmd");
+}
+
+export function listUserGoals() {
+  return invoke<UserGoalRecord[]>("list_user_goals_cmd");
+}
+
+export function saveUserGoal(goal: UserGoalRecord) {
+  return invoke<void>("save_user_goal_cmd", { goal });
+}
+
+export function exportSyncBundle(passphrase: string) {
+  return invoke<string>("export_sync_bundle_cmd", { passphrase });
+}
+
+export function importSyncBundle(bundlePath: string, passphrase: string) {
+  return invoke<string>("import_sync_bundle_cmd", { bundlePath, passphrase });
+}
+
+export function listProactiveNudges(limit = 10) {
+  return invoke<ProactiveNudgeRecord[]>("list_proactive_nudges_cmd", { limit });
+}
+
+export function dismissProactiveNudge(id: string) {
+  return invoke<void>("dismiss_proactive_nudge_cmd", { id });
+}
+
+export function acceptProactiveNudge(id: string) {
+  return invoke<void>("accept_proactive_nudge_cmd", { id });
 }

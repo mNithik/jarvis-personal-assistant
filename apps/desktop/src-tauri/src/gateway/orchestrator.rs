@@ -228,8 +228,45 @@ impl GatewayOrchestrator {
     pub fn resolve_approval(
         pending: &PendingApproval,
         approved: bool,
+        config: &GatewayConfig,
         bus: &mut EventBus,
     ) -> GatewayApprovalResolution {
+        if approved && config.labs.council_verifier {
+            let policy_class = if pending.request.detail.to_lowercase().contains("calendar") {
+                crate::gateway::types::GatewayPolicyClass::Schedule
+            } else {
+                crate::gateway::types::GatewayPolicyClass::Send
+            };
+            if let Err(reason) = council_verify_send(
+                config,
+                policy_class,
+                &pending.command,
+                &pending.request.detail,
+            ) {
+                let message = format!(
+                    "Approval blocked by council verifier for {}: {reason}",
+                    pending.request.title
+                );
+                let event = GatewayEvent {
+                    id: format!("gateway-event-approval-{}-verifier-blocked", pending.request.id),
+                    session_id: pending.request.session_id.clone(),
+                    turn_id: None,
+                    kind: GatewayEventKind::Error,
+                    message: message.clone(),
+                    created_at: unix_timestamp_string(),
+                    approval: Some(pending.request.clone()),
+                };
+                bus.publish(event.clone());
+                return GatewayApprovalResolution {
+                    approved: false,
+                    approval_id: pending.request.id.clone(),
+                    correlation_id: pending.correlation_id.clone(),
+                    message,
+                    event,
+                };
+            }
+        }
+
         let message = if approved {
             format!("Approval granted for {}", pending.request.title)
         } else {
