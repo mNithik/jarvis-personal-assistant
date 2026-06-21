@@ -1,0 +1,6 @@
+[
+  { "phrase": "open builder panel", "capabilityId": "builder.code" },
+  { "phrase": "open builder terminal", "capabilityId": "builder.code" },
+  { "phrase": "run handoff in claude", "capabilityId": "builder.code" },
+  { "phrase": "run handoff in codex", "capabilityId": "builder.code" }
+]

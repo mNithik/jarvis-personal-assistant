@@ -29,6 +29,8 @@ export type JarvisBuilderAutopilotConfig = {
   missingSkillPlan: MissingSkillPlan | null;
   implementationRequest: SkillImplementationRequest | null;
   executorStatus: ExecutorStatus | null;
+  confirmExecutorLaunch: boolean;
+  embeddedTerminalEnabled: boolean;
   appendConversationTurn: (role: "user" | "jarvis", text: string) => void;
   speakIfEnabled: (text: string) => void;
   setIsGeneratingMissingSkillPlan: Dispatch<SetStateAction<boolean>>;
@@ -37,6 +39,9 @@ export type JarvisBuilderAutopilotConfig = {
   setImplementationRequest: Dispatch<SetStateAction<SkillImplementationRequest | null>>;
   setBuildRequest: Dispatch<SetStateAction<SkillBuildRequest | null>>;
   setHandoffArtifact: Dispatch<SetStateAction<BuildHandoffArtifact | null>>;
+  setPendingHandoffLaunch: Dispatch<
+    SetStateAction<import("../ui/terminal/useJarvisTerminal").PendingHandoffLaunch>
+  >;
   setCommandResult: Dispatch<SetStateAction<CommandResult | null>>;
 };
 
@@ -85,10 +90,13 @@ export function useJarvisBuilderAutopilot(config: JarvisBuilderAutopilotConfig) 
     async (request: SkillBuildRequest) => {
       const {
         appendConversationTurn,
+        confirmExecutorLaunch,
+        embeddedTerminalEnabled,
         executorStatus,
         setAutonomousBuildStatus,
         setCommandResult,
         setHandoffArtifact,
+        setPendingHandoffLaunch,
         speakIfEnabled,
       } = config;
 
@@ -108,7 +116,28 @@ export function useJarvisBuilderAutopilot(config: JarvisBuilderAutopilotConfig) 
           `I created a coding handoff package for ${request.skillName}. Manual execution is the next boundary.`,
         );
 
-        if (executorStatus?.configured && executorStatus.available) {
+        if (embeddedTerminalEnabled) {
+          if (confirmExecutorLaunch) {
+            setPendingHandoffLaunch("claude");
+            setCommandResult({
+              title: "Handoff ready in embedded terminal",
+              detail:
+                "JARVIS queued the handoff prompt for the Claude tab in the Builder workspace.",
+            });
+            appendConversationTurn(
+              "jarvis",
+              "I queued the handoff in the embedded terminal Claude tab.",
+            );
+            speakIfEnabled("I queued the handoff in the embedded terminal.");
+          } else {
+            setAutonomousBuildStatus("manual_required");
+            setCommandResult({
+              title: "Executor launch confirmation required",
+              detail:
+                "Enable executor launch confirmation or open the handoff manually from the Builder terminal panel.",
+            });
+          }
+        } else if (executorStatus?.configured && executorStatus.available) {
           try {
             const launchMessage = await launchExecutorHandoff(
               artifact.jsonPath,

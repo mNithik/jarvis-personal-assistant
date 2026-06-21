@@ -145,9 +145,15 @@ impl HeadlessGatewayContext {
     }
 
     fn dispatch_morning_brief(&self) -> Result<String, String> {
+        let config = self.config();
+        let command = if config.proactive.planner_copilot_enabled {
+            "plan my day".to_string()
+        } else {
+            "create daily brief".to_string()
+        };
         let response = self.run_turn(TurnRequest {
             session_id: Some("proactive-morning-brief".to_string()),
-            command: "create daily brief".to_string(),
+            command,
             source: Some(TurnSource::Automation),
             idempotency_key: None,
         })?;

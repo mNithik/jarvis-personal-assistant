@@ -46,5 +46,12 @@
   { "id": "F45", "capabilityId": "core.policy", "eval": null, "status": "golden", "executionEval": "f_policy_execution.json", "note": "Policy class approval gate execution" },
   { "id": "F46", "capabilityId": "integrations.google", "eval": "f_email_copilot_routes.json", "status": "golden", "note": "Email copilot triage + draft routes" },
   { "id": "F47", "capabilityId": "integrations.google", "eval": "f_email_copilot_routes.json", "status": "golden", "executionEval": "f_email_copilot_execution.json", "note": "Email copilot execution eval" },
-  { "id": "F48", "capabilityId": "labs.bundle", "eval": null, "status": "golden", "executionEval": "f_project_bundle_execution.json", "note": "Project bundle lab execution (flag-gated)" }
+  { "id": "F48", "capabilityId": "labs.bundle", "eval": null, "status": "golden", "executionEval": "f_project_bundle_execution.json", "note": "Project bundle lab execution (flag-gated)" },
+  { "id": "F49", "capabilityId": "builder.code", "eval": "f_builder_terminal_routes.json", "status": "golden", "note": "Embedded terminal Builder routes; PTY + handoff helpers tested in commands/terminal.rs" },
+  { "id": "F50", "capabilityId": "memory.planner", "eval": "f_planner_copilot_routes.json", "status": "golden", "note": "Day planner copilot L0 routes" },
+  { "id": "F51", "capabilityId": "memory.planner", "eval": null, "status": "golden", "executionEval": "f_planner_copilot_execution.json", "note": "Day planner compose + replan execution with Notion fixtures" },
+  { "id": "F52", "capabilityId": "memory.life", "eval": "f_meeting_copilot_v2_routes.json", "status": "golden", "note": "Meeting copilot v2 routes" },
+  { "id": "F53", "capabilityId": "memory.life", "eval": null, "status": "golden", "executionEval": "f_meeting_copilot_v2_execution.json", "note": "Meeting copilot v2 enrichment execution" },
+  { "id": "F54", "capabilityId": "automation.workflow", "eval": "f_trigger_recipe_routes.json", "status": "golden", "note": "Trigger recipe builder routes" },
+  { "id": "F55", "capabilityId": "mission.control", "eval": null, "status": "golden", "executionEval": "f_audit_rollback_execution.json", "note": "Audit search and rollback execution" }
 ]

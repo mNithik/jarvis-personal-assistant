@@ -1,4 +1,4 @@
-﻿import { FormEvent, ReactNode, useEffect, useMemo, useRef, useCallback } from "react";
+﻿import { FormEvent, ReactNode, useEffect, useMemo, useRef, useCallback, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   approveLearningProposal,
@@ -26,6 +26,7 @@ import {
   getModelProviderSecretStatus,
   listProviderKeyStatus,
   getExecutorStatus,
+  getAppFeatureFlags,
   getLocalSpeechOutputStatus,
   getLocalVoiceBackendStatus,
   getNotionStatus,
@@ -258,6 +259,7 @@ import type {
 
 export function useJarvisAppRootComposition(): ReactNode {
   const shellState = useJarvisShellState();
+  const [embeddedTerminalEnabled, setEmbeddedTerminalEnabled] = useState(true);
   const {
     input, setInput,
     statusMessage, setStatusMessage,
@@ -334,6 +336,7 @@ export function useJarvisAppRootComposition(): ReactNode {
     autonomousSkillBuildingEnabled, setAutonomousSkillBuildingEnabled,
     autonomousBuildStatus, setAutonomousBuildStatus,
     handoffArtifact, setHandoffArtifact,
+    pendingHandoffLaunch, setPendingHandoffLaunch,
     executorStatus, setExecutorStatus,
     executorCommandPath, setExecutorCommandPath,
     executorWorkingDirectory, setExecutorWorkingDirectory,
@@ -898,6 +901,8 @@ export function useJarvisAppRootComposition(): ReactNode {
     missingSkillPlan,
     implementationRequest,
     executorStatus,
+    confirmExecutorLaunch: desktopPermissionSettings.confirmExecutorLaunch,
+    embeddedTerminalEnabled,
     appendConversationTurn: (role, text) => appendConversationTurnRef.current(role, text),
     speakIfEnabled,
     setIsGeneratingMissingSkillPlan,
@@ -906,6 +911,7 @@ export function useJarvisAppRootComposition(): ReactNode {
     setImplementationRequest,
     setBuildRequest,
     setHandoffArtifact,
+    setPendingHandoffLaunch,
     setCommandResult,
   });
 
@@ -934,6 +940,12 @@ export function useJarvisAppRootComposition(): ReactNode {
   const { trainingModeSession, setTrainingModeSession, startTrainingMode, handleTrainingModeInput } =
     trainingMode;
 
+
+  useEffect(() => {
+    void getAppFeatureFlags()
+      .then((flags) => setEmbeddedTerminalEnabled(flags.embeddedTerminalEnabled))
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (!activeConversationContext) {
@@ -2285,6 +2297,9 @@ export function useJarvisAppRootComposition(): ReactNode {
     voiceState,
     voiceTranscript,
     workflowRenameDrafts,
+    googleCalendarAccessToken,
+    notionStatus,
+    runCommand,
     vision: {
       activeOcrWatches,
       isRoutingCommand,
@@ -2358,6 +2373,8 @@ export function useJarvisAppRootComposition(): ReactNode {
       implementationRequest,
       missingSkillPlan,
       missingSkillRequest,
+      pendingHandoffLaunch,
+      onPendingHandoffLaunchHandled: () => setPendingHandoffLaunch(null),
       runCommand,
     },
     models: {

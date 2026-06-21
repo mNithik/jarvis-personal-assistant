@@ -1,4 +1,5 @@
 import { useReducer, useRef, useState } from "react";
+import type { PendingHandoffLaunch } from "../ui/terminal/useJarvisTerminal";
 import type { GoogleCalendarEventRecord } from "../services/googleCalendar";
 import type { SpotifyPlaybackState } from "../services/spotify";
 import type {
@@ -169,6 +170,7 @@ export function useJarvisShellState() {
   const [autonomousBuildStatus, setAutonomousBuildStatus] =
     useState<AutonomousBuildStatus>("idle");
   const [handoffArtifact, setHandoffArtifact] = useState<BuildHandoffArtifact | null>(null);
+  const [pendingHandoffLaunch, setPendingHandoffLaunch] = useState<PendingHandoffLaunch>(null);
   const [executorStatus, setExecutorStatus] = useState<ExecutorStatus | null>(null);
   const [executorCommandPath, setExecutorCommandPath] = useState("");
   const [executorWorkingDirectory, setExecutorWorkingDirectory] = useState("");
@@ -258,6 +260,7 @@ export function useJarvisShellState() {
     autonomousSkillBuildingEnabled, setAutonomousSkillBuildingEnabled,
     autonomousBuildStatus, setAutonomousBuildStatus,
     handoffArtifact, setHandoffArtifact,
+    pendingHandoffLaunch, setPendingHandoffLaunch,
     executorStatus, setExecutorStatus,
     executorCommandPath, setExecutorCommandPath,
     executorWorkingDirectory, setExecutorWorkingDirectory,

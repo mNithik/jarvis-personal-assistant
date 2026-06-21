@@ -31,6 +31,7 @@ pub fn process_trigger_queue(
         "channel_turn" => dispatch_channel_turn(app, db_path, config, &event.payload),
         "gmail_label_inbox" => dispatch_gmail_label_inbox(app, db_path, config, &event.payload),
         "calendar_event_soon" => dispatch_calendar_event_soon(app, db_path, config, &event.payload),
+        "replan_day" => dispatch_replan_day(app, db_path, config),
         other => {
             let _ = complete_trigger(&conn, &event.id, false);
             return Err(format!("Unknown trigger kind: {other}"));
@@ -54,7 +55,11 @@ fn dispatch_morning_brief(app: &AppHandle, config: &GatewayConfig) -> Result<Str
     let turn_id = gateway_state.next_turn_id(&session_id)?;
     let request = TurnRequest {
         session_id: Some(session_id.clone()),
-        command: "create daily brief".to_string(),
+        command: if config.proactive.planner_copilot_enabled {
+            "plan my day".to_string()
+        } else {
+            "create daily brief".to_string()
+        },
         source: Some(TurnSource::Automation),
         idempotency_key: None,
     };
@@ -285,6 +290,58 @@ fn dispatch_calendar_event_soon(
     );
 
     let _ = app.emit("gateway-turn-complete", &response);
+    Ok(response.result.reply.chars().take(120).collect())
+}
+
+fn dispatch_replan_day(
+    app: &AppHandle,
+    db_path: &Path,
+    config: &GatewayConfig,
+) -> Result<String, String> {
+    let gateway_state = app
+        .try_state::<GatewayState>()
+        .ok_or_else(|| "Gateway state unavailable".to_string())?;
+    let app_state = app
+        .try_state::<crate::AppState>()
+        .ok_or_else(|| "App state unavailable".to_string())?;
+
+    let session_id = "proactive-replan-day".to_string();
+    let turn_id = gateway_state.next_turn_id(&session_id)?;
+    let request = TurnRequest {
+        session_id: Some(session_id.clone()),
+        command: "replan my day".to_string(),
+        source: Some(TurnSource::Automation),
+        idempotency_key: None,
+    };
+
+    let router_context = crate::gateway::router::RouterContext {
+        db_path: Some(db_path.to_path_buf()),
+        config: config.clone(),
+    };
+
+    let mut bus = gateway_state.bus.lock().map_err(|error| error.to_string())?;
+    let mut escalation = gateway_state
+        .escalation
+        .lock()
+        .map_err(|error| error.to_string())?;
+
+    let response = GatewayOrchestrator::run_turn(
+        request,
+        turn_id,
+        &session_id,
+        config,
+        &router_context,
+        &mut bus,
+        None,
+        Some(crate::gateway::orchestrator::TurnExecutionEnv {
+            db_path: &app_state.db_path,
+            app_data_dir: &app_state.app_data_dir,
+            escalation: &mut escalation,
+        }),
+    );
+
+    let _ = app.emit("gateway-turn-complete", &response);
+    let _ = app.emit("planner-day-plan-changed", ());
     Ok(response.result.reply.chars().take(120).collect())
 }
 

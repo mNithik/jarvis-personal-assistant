@@ -1,0 +1,25 @@
+import type { ITheme } from "@xterm/xterm";
+
+export const jarvisTerminalTheme: ITheme = {
+  background: "#0d1829",
+  foreground: "#e8f5ff",
+  cursor: "#9cf0c4",
+  cursorAccent: "#0d1829",
+  selectionBackground: "rgba(94, 208, 155, 0.25)",
+  black: "#0d1829",
+  red: "#ff8a8a",
+  green: "#9cf0c4",
+  yellow: "#ffd48e",
+  blue: "#7eb8ff",
+  magenta: "#c4a8ff",
+  cyan: "#8ee7ff",
+  white: "#e8f5ff",
+  brightBlack: "#5a7088",
+  brightRed: "#ffb4b4",
+  brightGreen: "#c8ffe0",
+  brightYellow: "#ffe8b8",
+  brightBlue: "#a8d0ff",
+  brightMagenta: "#dcc8ff",
+  brightCyan: "#b8f4ff",
+  brightWhite: "#ffffff",
+};

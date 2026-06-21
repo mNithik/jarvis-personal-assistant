@@ -22,6 +22,12 @@ capabilities:
     tier: embed
     feature_flag: memory
     command_guard: memory
+  - id: memory.planner
+    label: Day planner copilot
+    agent: memory
+    tier: embed
+    feature_flag: memory
+    command_guard: memory
   - id: builder.code
     label: Builder coding assist
     agent: builder

@@ -1,6 +1,6 @@
 use super::{Agent, AgentContext, StepResult};
 use crate::gateway::types::GatewayAgentKind;
-use crate::memory::{self, knowledge_router, vault, brief};
+use crate::memory::{self, knowledge_router, brief, planner};
 
 pub struct MemoryAgent;
 
@@ -33,18 +33,46 @@ impl Agent for MemoryAgent {
             format!("Recalled context: {}\n\n", knowledge.summary)
         };
 
+        if planner::is_save_plan_command(&ctx.command) {
+            return match planner::save_day_plan_to_notion(&ctx.db_path) {
+                Ok(plan) => Ok(StepResult::ok(format!(
+                    "{knowledge_prefix}{}\n\nSaved to Notion.",
+                    planner::format_day_plan_reply(&plan)
+                ))),
+                Err(error) => Ok(StepResult::failed(error)),
+            };
+        }
+
+        if planner::is_replan_command(&ctx.command) {
+            return match planner::replan_day(&ctx.db_path, &ctx.app_data_dir, Some(&ctx.config)) {
+                Ok(plan) => Ok(StepResult::ok(format!(
+                    "{knowledge_prefix}{}",
+                    planner::format_day_plan_reply(&plan)
+                ))),
+                Err(error) => Ok(StepResult::failed(error)),
+            };
+        }
+
+        if ctx.config.proactive.planner_copilot_enabled
+            && (planner::is_plan_command(&ctx.command)
+                || brief::is_daily_brief_command(&ctx.command))
+        {
+            return match planner::compose_morning_plan(
+                &ctx.db_path,
+                &ctx.app_data_dir,
+                Some(&ctx.config),
+            ) {
+                Ok(plan) => Ok(StepResult::ok(format!(
+                    "{knowledge_prefix}{}",
+                    planner::format_day_plan_reply(&plan)
+                ))),
+                Err(error) => Ok(StepResult::failed(error)),
+            };
+        }
+
         if brief::is_daily_brief_command(&ctx.command) {
-            let composed = brief::compose_daily_brief_v2(&ctx.db_path, Some(&ctx.app_data_dir), Some(&ctx.config))?;
-            if ctx.config.features.calendar || ctx.config.features.gmail {
-                return Ok(StepResult::handoff(
-                    "memory.life",
-                    "create_daily_brief",
-                    None,
-                    format!(
-                        "{knowledge_prefix}{composed}\n\nCalendar/Gmail enrichment available via desktop bridge."
-                    ),
-                ));
-            }
+            let composed =
+                brief::compose_daily_brief_v2(&ctx.db_path, Some(&ctx.app_data_dir), Some(&ctx.config))?;
             return Ok(StepResult::ok(format!("{knowledge_prefix}{composed}")));
         }
 
@@ -85,11 +113,14 @@ fn run_meeting_copilot(ctx: &AgentContext, knowledge_prefix: &str) -> Result<Ste
         (None, None)
     };
 
-    let reply = memory::meeting::compose_meeting_copilot_reply(
+    let reply = memory::meeting::compose_meeting_copilot_v2(
         &ctx.db_path,
+        &ctx.app_data_dir,
+        Some(&ctx.config),
         summary.as_deref(),
         start.as_deref(),
-    )?;
+    )
+    .map(|(reply, _)| reply)?;
     Ok(StepResult::ok(format!("{knowledge_prefix}{reply}")))
 }
 
@@ -138,7 +169,7 @@ fn run_vault_search(ctx: &AgentContext) -> Result<StepResult, String> {
             .as_deref()
             .filter(|value| !value.trim().is_empty())
         {
-            let vault_path = vault::resolve_vault_path(path);
+            let vault_path = crate::memory::vault::resolve_vault_path(path);
             if !vault_path.is_dir() {
                 return Ok(StepResult::failed(format!(
                     "Local vault path is not configured or missing: {}",
@@ -213,7 +244,7 @@ mod tests {
     }
 
     #[test]
-    fn memory_agent_handoff_for_daily_brief() {
+    fn memory_agent_daily_brief_without_planner_returns_text() {
         let ctx = AgentContext {
             db_path: std::env::temp_dir().join("jarvis-memory-agent-brief.db"),
             app_data_dir: std::env::temp_dir(),
@@ -221,6 +252,10 @@ mod tests {
                 enabled: true,
                 features: crate::gateway::config::GatewayFeatures {
                     memory: true,
+                    ..Default::default()
+                },
+                proactive: crate::gateway::config::GatewayProactiveConfig {
+                    planner_copilot_enabled: false,
                     ..Default::default()
                 },
                 ..Default::default()
@@ -248,5 +283,6 @@ mod tests {
         let result = MemoryAgent.run_step(&ctx).expect("step");
         assert!(result.success);
         assert!(result.reply.contains("Daily brief"));
+        assert!(result.integration_handoff.is_none());
     }
 }

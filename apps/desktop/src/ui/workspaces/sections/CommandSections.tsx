@@ -7,6 +7,7 @@ import {
   toTitleCase,
 } from "../../../features/legacy/appHelpers";
 import type { CommandSectionProps } from "./sectionTypes";
+import { buildPlannerCopilotCard } from "./PlannerSections";
 
 export function buildCommandWorkspaceSections({
   activeConversationContext,
@@ -19,6 +20,7 @@ export function buildCommandWorkspaceSections({
   embeddingBackend,
   embeddingModelName,
   embeddingStatusMessage,
+  googleCalendarAccessToken,
   gatewayFollowUp,
   gatewayHistory,
   gatewayPreviewError,
@@ -38,6 +40,7 @@ export function buildCommandWorkspaceSections({
   learnedIntentFamilies,
   learnedIntentMappings,
   learnedIntentRenameDrafts,
+  notionStatus,
   pendingClarification,
   plannerTasks,
   quickPrompts,
@@ -46,6 +49,7 @@ export function buildCommandWorkspaceSections({
   recentHistory,
   recentNotes,
   routeCommand,
+  runCommand,
   savedWorkflows,
   semanticConversationMemory,
   semanticIntentFeedback,
@@ -443,6 +447,13 @@ export function buildCommandWorkspaceSections({
             </div>
           )) : <p className="empty-state">No Notion notes loaded yet.</p>}
         </div>
+      </article>
+      <article className="glass-panel">
+        {buildPlannerCopilotCard({
+          googleCalendarAccessToken,
+          notionStatus,
+          runCommand,
+        })}
       </article>
       <article className="glass-panel">
         <p className="section-kicker">Planner</p>

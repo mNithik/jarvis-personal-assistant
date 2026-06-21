@@ -66,6 +66,21 @@ fn provider_env_keys(provider: &str) -> &'static [&'static str] {
     }
 }
 
+pub fn env_flag_enabled(key: &str, default: bool) -> bool {
+    init_local_env();
+    match std::env::var(key) {
+        Ok(value) => !matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "0" | "false" | "no" | "off"
+        ),
+        Err(_) => default,
+    }
+}
+
+pub fn embedded_terminal_enabled() -> bool {
+    env_flag_enabled("JARVIS_EMBEDDED_TERMINAL", true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

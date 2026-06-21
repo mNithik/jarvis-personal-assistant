@@ -1,4 +1,7 @@
 import { ReactNode } from "react";
+import { launchExecutorHandoff } from "../../../services/jarvisApi";
+import { TerminalPanel } from "../../terminal/TerminalPanel";
+import type { PendingHandoffLaunch } from "../../terminal/useJarvisTerminal";
 import type { BuilderSectionProps } from "./sectionTypes";
 
 export function buildBuilderWorkspaceSections({
@@ -9,6 +12,8 @@ export function buildBuilderWorkspaceSections({
   implementationRequest,
   missingSkillPlan,
   missingSkillRequest,
+  onPendingHandoffLaunchHandled,
+  pendingHandoffLaunch,
   runCommand,
 }: BuilderSectionProps): ReactNode[] {
   return [
@@ -25,6 +30,19 @@ export function buildBuilderWorkspaceSections({
           </button>
         </div>
       </div>
+      <TerminalPanel
+        executorStatus={executorStatus}
+        handoffArtifact={handoffArtifact}
+        pendingHandoffLaunch={pendingHandoffLaunch}
+        onPendingHandoffLaunchHandled={onPendingHandoffLaunchHandled}
+        onLaunchExternalExecutor={
+          handoffArtifact
+            ? async () => {
+                await launchExecutorHandoff(handoffArtifact.jsonPath, handoffArtifact.markdownPath);
+              }
+            : undefined
+        }
+      />
       {missingSkillRequest ? <div className="result-card"><p className="section-kicker">Skill Gap</p><h3>Missing skill detected</h3><p>Request: {missingSkillRequest}</p></div> : null}
       {missingSkillPlan ? <div className="result-card"><p className="section-kicker">Advanced Plan</p><h3>{missingSkillPlan.skillName}</h3><p>{missingSkillPlan.summary}</p></div> : null}
       {implementationRequest ? <div className="result-card"><p className="section-kicker">Implementation Brief</p><h3>{implementationRequest.skillName}</h3><p>{implementationRequest.summary}</p></div> : null}
@@ -33,4 +51,3 @@ export function buildBuilderWorkspaceSections({
     </section>,
   ];
 }
-

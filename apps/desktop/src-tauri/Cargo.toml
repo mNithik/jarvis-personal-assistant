@@ -24,6 +24,10 @@ path = "src/bin/jarvis_service.rs"
 [build-dependencies]
 tauri-build = { version = "2.6.2", features = [] }
 
+[features]
+default = ["embedded-terminal"]
+embedded-terminal = ["dep:tauri-plugin-pty"]
+
 [dependencies]
 anyhow = "1"
 base64 = "0.22"
@@ -35,6 +39,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
 tauri = { version = "2.6.2", features = [] }
+tauri-plugin-pty = { version = "0.3", optional = true }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "net", "io-util", "time"] }
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"

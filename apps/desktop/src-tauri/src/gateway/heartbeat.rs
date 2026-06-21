@@ -65,7 +65,7 @@ pub fn spawn_proactive_scheduler(app: AppHandle) {
                 && time_label == config.proactive.morning_brief_time
                 && last_brief_day != Some(day_key.clone())
             {
-                last_brief_day = Some(day_key);
+                last_brief_day = Some(day_key.clone());
                 let _ = run_morning_brief_turn(&app, &gateway_state, &app_state, &config);
             }
 
@@ -73,6 +73,16 @@ pub fn spawn_proactive_scheduler(app: AppHandle) {
                 last_ocr_minute = Some(minute_key);
                 let _ = app.emit("ocr-watch-tick", serde_json::json!({ "minute": minute_key }));
             }
+
+            let _ = super::trigger_recipes::maybe_enqueue_scheduled_recipes(
+                &app_state.db_path,
+                &time_label,
+                &day_key,
+            );
+            let _ = super::calendar_replan::maybe_enqueue_replan_on_calendar_change(
+                &app_state.db_path,
+                &config,
+            );
 
             if let Err(error) = super::trigger_dispatcher::process_trigger_queue(
                 &app,
@@ -136,7 +146,11 @@ fn run_morning_brief_turn(
     let turn_id = gateway_state.next_turn_id(&session_id)?;
     let request = TurnRequest {
         session_id: Some(session_id.clone()),
-        command: "create daily brief".to_string(),
+        command: if config.proactive.planner_copilot_enabled {
+            "plan my day".to_string()
+        } else {
+            "create daily brief".to_string()
+        },
         source: Some(TurnSource::Automation),
         idempotency_key: None,
     };

@@ -2929,7 +2929,14 @@ fn delete_learned_intent_entry(state: State<'_, AppState>, id: i64) -> Result<()
 
 #[tauri::command]
 fn get_notion_status(state: State<'_, AppState>) -> Result<NotionStatus, String> {
-    let (access_token, database_id) = get_notion_config(&state.db_path)?;
+    let (mut access_token, database_id) = get_notion_config(&state.db_path)?;
+    if access_token
+        .as_ref()
+        .map(|value| value.trim().is_empty())
+        .unwrap_or(true)
+    {
+        access_token = crate::env_local::provider_api_key("notion");
+    }
     let has_token = access_token
         .as_ref()
         .is_some_and(|value| !value.trim().is_empty());
@@ -3865,7 +3872,12 @@ fn import_school_plan_memory(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    #[cfg(feature = "embedded-terminal")]
+    {
+        builder = builder.plugin(tauri_plugin_pty::init());
+    }
+    builder
         .setup(|app| {
             env_local::init_local_env();
 
@@ -4027,7 +4039,20 @@ pub fn run() {
             memory_list_meeting_prep,
             import_meeting_prep_memory,
             memory_list_school_plans,
-            import_school_plan_memory
+            import_school_plan_memory,
+            crate::commands::terminal::detect_coding_clis,
+            crate::commands::terminal::read_handoff_markdown,
+            crate::commands::terminal::read_handoff_prompt,
+            crate::commands::planner::compose_day_plan,
+            crate::commands::planner::get_day_plan,
+            crate::commands::planner::replan_day,
+            crate::commands::planner::save_day_plan_to_notion,
+            crate::commands::planner::get_app_feature_flags,
+            crate::commands::trigger_recipes::list_trigger_recipes_cmd,
+            crate::commands::trigger_recipes::save_trigger_recipe_cmd,
+            crate::commands::trigger_recipes::delete_trigger_recipe_cmd,
+            crate::commands::trigger_recipes::search_audit_log_cmd,
+            crate::commands::trigger_recipes::rollback_audit_entry_cmd,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

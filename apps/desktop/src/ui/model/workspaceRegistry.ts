@@ -11,7 +11,7 @@ export const workspaceRegistry: Record<JarvisWorkspaceId, WorkspaceRegistryEntry
     icon: "Cmd",
     accent: "cyan",
     showOnHome: true,
-    quickActions: ["listen", "create_daily_brief", "open_cockpit"],
+    quickActions: ["listen", "plan_my_day", "replan_my_day", "open_cockpit"],
     ownedFeatureBlocks: [
       "command_center",
       "latest_result",
@@ -20,6 +20,7 @@ export const workspaceRegistry: Record<JarvisWorkspaceId, WorkspaceRegistryEntry
       "voice_memory",
       "browser_memory",
       "recent_notes",
+      "planner_copilot",
       "planner",
       "inbox",
       "local_files",
@@ -140,6 +141,7 @@ export const workspaceRegistry: Record<JarvisWorkspaceId, WorkspaceRegistryEntry
     quickActions: ["run_project_checks", "open_project_in_vscode", "open_builder_panel"],
     ownedFeatureBlocks: [
       "executor_bridge",
+      "embedded_terminal",
       "project_checks",
       "handoff_package",
       "build_direction",

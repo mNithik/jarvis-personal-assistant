@@ -1,0 +1,6 @@
+[
+  { "phrase": "plan my day", "capabilityId": "memory.planner" },
+  { "phrase": "replan my day", "capabilityId": "memory.planner" },
+  { "phrase": "morning brief", "capabilityId": "memory.life" },
+  { "phrase": "save plan to notion", "capabilityId": "memory.planner" }
+]

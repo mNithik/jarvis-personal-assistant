@@ -133,6 +133,11 @@ mod tests {
     }
 
     #[test]
+    fn eval_golden_f_planner_copilot_routes() {
+        run_golden_file("f_planner_copilot_routes.json");
+    }
+
+    #[test]
     fn eval_golden_f18_memory_hardening_routes() {
         run_golden_file("f18_memory_hardening.json");
     }
@@ -145,6 +150,11 @@ mod tests {
     #[test]
     fn eval_golden_f22_debug_repo_routes() {
         run_golden_file("f22_debug_repo.json");
+    }
+
+    #[test]
+    fn eval_golden_f_builder_terminal_routes() {
+        run_golden_file("f_builder_terminal_routes.json");
     }
 
     #[test]
@@ -886,11 +896,21 @@ mod tests {
             serde_json::from_str(&raw).expect("execution eval json should parse");
 
         for case in cases {
+            let db_path = std::env::temp_dir().join(format!(
+                "jarvis-eval-bundle-{}-{}",
+                file_name,
+                case.command.len()
+            ));
             let mut config = GatewayConfig::default();
             if case.fixture == "lab_enabled" {
                 config.labs.project_bundle_pilot = true;
             }
-            let (success, reply) = project_bundle_reply(&config, &case.command);
+            let (success, reply) = project_bundle_reply(
+                &config,
+                &db_path,
+                &std::env::temp_dir(),
+                &case.command,
+            );
             assert_eq!(
                 success, case.expect_success,
                 "command {:?} fixture {}",
@@ -996,6 +1016,7 @@ mod tests {
 
         client::clear_mock_responses();
         auth::clear_test_tokens();
+        crate::integrations::notion::clear_mock_responses();
 
         match fixture {
             "missing_token" => {
@@ -1033,7 +1054,262 @@ mod tests {
                     .expect("seed meeting prep");
                 }
             }
+            "planner_copilot_tasks" => {
+                use crate::db::save_notion_config;
+                use crate::integrations::notion;
+
+                memory::ensure_schema(db_path).expect("migrate");
+                save_notion_config(db_path, Some("token-eval"), Some("db-eval")).expect("notion");
+                let today = Local::now().format("%Y-%m-%d").to_string();
+                let query_body = serde_json::json!({
+                    "results": [{
+                        "id": "task-1",
+                        "properties": {
+                            "Name": { "title": [{ "plain_text": "Ship planner" }] },
+                            "Due": { "date": { "start": today } },
+                            "Status": { "select": { "name": "In progress" } }
+                        }
+                    }]
+                })
+                .to_string();
+                notion::set_mock_responses(HashMap::from([
+                    (
+                        "/v1/databases/db-eval".to_string(),
+                        r#"{"properties":{"Name":{"type":"title"},"Due":{"type":"date"},"Status":{"type":"select"}}}"#.to_string(),
+                    ),
+                    ("/v1/databases/db-eval/query".to_string(), query_body),
+                ]));
+            }
+            "missing_notion" => {
+                memory::ensure_schema(db_path).expect("migrate");
+            }
+            "meeting_v2_full" => {
+                use crate::db::save_notion_config;
+                use crate::integrations::notion;
+
+                memory::ensure_schema(db_path).expect("migrate");
+                auth::set_test_tokens(HashMap::from([
+                    ("calendar".to_string(), "token".to_string()),
+                    ("gmail".to_string(), "token".to_string()),
+                ]));
+                let start = (Local::now() + Duration::minutes(10)).to_rfc3339();
+                let end = (Local::now() + Duration::minutes(40)).to_rfc3339();
+                client::set_mock_responses(HashMap::from([
+                    (
+                        "/calendars/primary/events".to_string(),
+                        format!(
+                            r#"{{"items":[{{"id":"evt-review","summary":"Product review","start":{{"dateTime":"{start}"}},"end":{{"dateTime":"{end}"}}}}]}}"#
+                        ),
+                    ),
+                    (
+                        "/gmail/v1/users/me/messages".to_string(),
+                        r#"{"messages":[{"id":"msg-1"}]}"#.to_string(),
+                    ),
+                ]));
+                save_notion_config(db_path, Some("token-eval"), Some("db-eval")).expect("notion");
+                let today = Local::now().format("%Y-%m-%d").to_string();
+                notion::set_mock_responses(HashMap::from([
+                    (
+                        "/v1/databases/db-eval".to_string(),
+                        r#"{"properties":{"Name":{"type":"title"},"Due":{"type":"date"},"Status":{"type":"select"}}}"#.to_string(),
+                    ),
+                    (
+                        "/v1/databases/db-eval/query".to_string(),
+                        serde_json::json!({
+                            "results": [{
+                                "id": "task-1",
+                                "properties": {
+                                    "Name": { "title": [{ "plain_text": "Product review deck" }] },
+                                    "Due": { "date": { "start": today } },
+                                    "Status": { "select": { "name": "In progress" } }
+                                }
+                            }]
+                        })
+                        .to_string(),
+                    ),
+                ]));
+            }
             other => panic!("unknown memory execution fixture: {other}"),
+        }
+    }
+
+    fn run_planner_execution_file(file_name: &str) {
+        use crate::agents::{Agent, AgentContext, MemoryAgent};
+        use crate::gateway::config::GatewayConfig;
+        use crate::gateway::types::{
+            GatewayAgentKind, GatewayConfidenceBand, GatewayDecisionPolicy, GatewayModelTier,
+            GatewayRoute, GatewaySensitivity, RouteLevel,
+        };
+        use crate::integrations::google::{auth, client};
+        use crate::integrations::notion;
+
+        let path = eval_path(file_name);
+        let raw = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+        let cases: Vec<ExecutionEvalCase> =
+            serde_json::from_str(&raw).expect("execution eval json should parse");
+        assert!(
+            cases.len() >= 3,
+            "{file_name} should contain at least 3 execution cases"
+        );
+
+        for case in cases {
+            let db_path = std::env::temp_dir().join(format!(
+                "jarvis-eval-planner-exec-{}-{}",
+                file_name,
+                case.command.len()
+            ));
+            let _ = std::fs::remove_file(&db_path);
+            install_memory_execution_fixture(&case.fixture, &db_path);
+
+            let mut config = GatewayConfig::default();
+            config.enabled = true;
+            config.features.memory = true;
+            config.features.calendar = true;
+            config.proactive.planner_copilot_enabled = true;
+
+            let ctx = AgentContext {
+                db_path: db_path.clone(),
+                app_data_dir: std::env::temp_dir(),
+                config,
+                route: GatewayRoute {
+                    capability_id: case.capability_id.clone(),
+                    capability_label: "Execution".into(),
+                    agent: GatewayAgentKind::Memory,
+                    tier: GatewayModelTier::Embed,
+                    sensitivity: GatewaySensitivity::Personal,
+                    score: 3,
+                    confidence: GatewayConfidenceBand::High,
+                    decision_policy: GatewayDecisionPolicy::Execute,
+                    decision_reason: "test".into(),
+                    reason: "test".into(),
+                    route_level: RouteLevel::L0,
+                    resolved_provider: None,
+                },
+                session_id: "eval-session".into(),
+                turn_id: 1,
+                command: case.command.clone(),
+                step_description: case.command.clone(),
+                step_kind: "memory".into(),
+            };
+
+            let result = MemoryAgent.run_step(&ctx).expect("memory step");
+            assert_eq!(
+                result.success, case.expect_success,
+                "command {:?} fixture {}",
+                case.command, case.fixture
+            );
+            assert!(
+                result
+                    .reply
+                    .to_lowercase()
+                    .contains(&case.expect_reply_contains.to_lowercase()),
+                "command {:?} expected reply to contain {:?}, got {:?}",
+                case.command, case.expect_reply_contains, result.reply
+            );
+
+            client::clear_mock_responses();
+            auth::clear_test_tokens();
+            notion::clear_mock_responses();
+            let _ = std::fs::remove_file(db_path);
+        }
+    }
+
+    fn run_audit_rollback_execution_file(file_name: &str) {
+        use crate::gateway::audit::{append_entry, rollback_audit_entry, search_audit_log, AuditOutcome, AuditRecord};
+        use crate::gateway::types::GatewayPolicyClass;
+
+        let path = eval_path(file_name);
+        let raw = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+        let cases: Vec<ExecutionEvalCase> =
+            serde_json::from_str(&raw).expect("execution eval json should parse");
+
+        for case in cases {
+            let app_data_dir = std::env::temp_dir().join(format!(
+                "jarvis-eval-audit-{}-{}",
+                file_name,
+                case.command.len()
+            ));
+            let db_path = app_data_dir.join("jarvis.db");
+            let _ = std::fs::remove_dir_all(&app_data_dir);
+            let _ = std::fs::create_dir_all(&app_data_dir);
+
+            match case.fixture.as_str() {
+                "audit_notion_rollback" => {
+                    use crate::db::save_notion_config;
+                    use crate::integrations::notion;
+
+                    save_notion_config(&db_path, Some("token-eval"), Some("db-eval")).expect("notion");
+                    notion::set_mock_responses(std::collections::HashMap::from([(
+                        "/v1/pages/page-eval".to_string(),
+                        r#"{"id":"page-eval","archived":true}"#.to_string(),
+                    )]));
+                    append_entry(
+                        &app_data_dir,
+                        AuditRecord {
+                            policy_class: GatewayPolicyClass::Write,
+                            agent: "memory",
+                            capability_id: "memory.planner",
+                            session_id: "s1",
+                            turn_id: 1,
+                            outcome: AuditOutcome::Executed,
+                            detail: "saved plan",
+                            rollback_ref: Some(r#"{"type":"notion","pageId":"page-eval"}"#),
+                        },
+                    )
+                    .expect("append");
+                    let results = search_audit_log(&app_data_dir, Some("plan"), Some("write"), None, 10)
+                        .expect("search");
+                    assert!(!results.is_empty());
+                    let reply = rollback_audit_entry(&app_data_dir, &db_path, results[0].line_index);
+                    assert_eq!(case.expect_success, reply.is_ok());
+                    if case.expect_success {
+                        assert!(reply.unwrap().to_lowercase().contains("archived"));
+                    }
+                }
+                "audit_missing_ref" => {
+                    append_entry(
+                        &app_data_dir,
+                        AuditRecord {
+                            policy_class: GatewayPolicyClass::Read,
+                            agent: "memory",
+                            capability_id: "memory.life",
+                            session_id: "s1",
+                            turn_id: 1,
+                            outcome: AuditOutcome::Executed,
+                            detail: "read only",
+                            rollback_ref: None,
+                        },
+                    )
+                    .expect("append");
+                    let reply = rollback_audit_entry(&app_data_dir, &db_path, 0);
+                    assert!(!case.expect_success);
+                    assert!(reply.is_err());
+                }
+                "audit_search" => {
+                    append_entry(
+                        &app_data_dir,
+                        AuditRecord {
+                            policy_class: GatewayPolicyClass::Write,
+                            agent: "planner",
+                            capability_id: "memory.planner",
+                            session_id: "s1",
+                            turn_id: 2,
+                            outcome: AuditOutcome::Executed,
+                            detail: "planner saved",
+                            rollback_ref: None,
+                        },
+                    )
+                    .expect("append");
+                    let results =
+                        search_audit_log(&app_data_dir, Some("planner"), None, None, 10).expect("search");
+                    assert_eq!(case.expect_success, !results.is_empty());
+                }
+                other => panic!("unknown audit execution fixture: {other}"),
+            }
+
+            let _ = std::fs::remove_dir_all(app_data_dir);
         }
     }
 
@@ -1069,6 +1345,7 @@ mod tests {
             config.enabled = true;
             config.features.memory = true;
             config.features.calendar = true;
+            config.features.gmail = true;
 
             let ctx = AgentContext {
                 db_path: db_path.clone(),
@@ -1129,6 +1406,31 @@ mod tests {
     #[test]
     fn eval_golden_f_meeting_copilot_execution() {
         run_memory_execution_file("f_meeting_copilot_execution.json");
+    }
+
+    #[test]
+    fn eval_golden_f_planner_copilot_execution() {
+        run_planner_execution_file("f_planner_copilot_execution.json");
+    }
+
+    #[test]
+    fn eval_golden_f_meeting_copilot_v2_routes() {
+        run_golden_file("f_meeting_copilot_v2_routes.json");
+    }
+
+    #[test]
+    fn eval_golden_f_meeting_copilot_v2_execution() {
+        run_memory_execution_file("f_meeting_copilot_v2_execution.json");
+    }
+
+    #[test]
+    fn eval_golden_f_trigger_recipe_routes() {
+        run_golden_file("f_trigger_recipe_routes.json");
+    }
+
+    #[test]
+    fn eval_golden_f_audit_rollback_execution() {
+        run_audit_rollback_execution_file("f_audit_rollback_execution.json");
     }
 
     #[test]

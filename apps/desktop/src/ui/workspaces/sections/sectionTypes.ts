@@ -58,6 +58,7 @@ import type {
   UserPreferenceMemory,
   WorkflowSuggestionRecord,
 } from "../../../features/command/jarvisCommandTypes";
+import type { PendingHandoffLaunch } from "../../terminal/useJarvisTerminal";
 import type { JarvisUiAction } from "../../model/uiReducer";
 import type { CommandIntent } from "../../../features/legacy/appHelpers";
 
@@ -143,6 +144,9 @@ export type CommandSectionProps = {
   embeddingBackend: EmbeddingBackend;
   embeddingModelName: string;
   embeddingStatusMessage: string;
+  googleCalendarAccessToken?: string | null;
+  notionStatus?: { configured?: boolean; hasToken?: boolean } | null;
+  runCommand?: (command: string) => void | Promise<unknown>;
 };
 
 export type VisionSectionProps = {
@@ -182,6 +186,12 @@ export type MemorySectionProps = {
 
 export type EmailSectionProps = {
   gmailAccessToken?: string | null;
+  runCommand?: (command: string) => void | Promise<unknown>;
+};
+
+export type PlannerSectionProps = {
+  googleCalendarAccessToken?: string | null;
+  notionStatus?: { configured?: boolean; hasToken?: boolean } | null;
   runCommand?: (command: string) => void | Promise<unknown>;
 };
 
@@ -271,6 +281,8 @@ export type BuilderSectionProps = {
   implementationRequest: SkillImplementationRequest | null;
   missingSkillPlan: MissingSkillPlan | null;
   missingSkillRequest: string | null;
+  pendingHandoffLaunch: PendingHandoffLaunch;
+  onPendingHandoffLaunchHandled: () => void;
   runCommand: (command: string) => void | Promise<unknown>;
   dispatchUi: (action: JarvisUiAction) => void;
 };

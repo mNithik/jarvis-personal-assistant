@@ -140,6 +140,24 @@ pub struct NotionStatus {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AppFeatureFlags {
+    pub embedded_terminal_enabled: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DayPlanRecord {
+    pub plan_date: String,
+    pub top_three: Vec<String>,
+    pub full_plan_text: String,
+    pub notion_page_id: Option<String>,
+    pub suggested_actions: Vec<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NoteRecord {
     pub id: String,
     pub title: String,

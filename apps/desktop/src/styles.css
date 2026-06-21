@@ -1922,3 +1922,87 @@ button {
   display: grid;
   gap: var(--space-4);
 }
+
+.builder-terminal-section {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.terminal-panel-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.terminal-trust-note {
+  max-width: 52rem;
+}
+
+.terminal-banner {
+  margin: 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(13, 24, 41, 0.72);
+  border: 1px solid rgba(166, 210, 255, 0.12);
+  color: #c8e4ff;
+  font-size: 0.88rem;
+}
+
+.terminal-banner-warning {
+  border-color: rgba(255, 197, 111, 0.35);
+  color: #ffd48e;
+}
+
+.terminal-tab-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.terminal-tab {
+  border: 1px solid rgba(166, 210, 255, 0.16);
+  border-radius: 999px;
+  padding: 0.35rem 0.85rem;
+  background: rgba(13, 24, 41, 0.72);
+  color: #c8e4ff;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.terminal-tab-active {
+  border-color: rgba(94, 208, 155, 0.45);
+  box-shadow: 0 0 0 1px rgba(94, 208, 155, 0.18);
+  color: #e8f5ff;
+}
+
+.terminal-tab-disabled {
+  opacity: 0.65;
+}
+
+.terminal-panel-body {
+  position: relative;
+  min-height: 280px;
+  border: 1px solid rgba(166, 210, 255, 0.12);
+  border-radius: 16px;
+  overflow: hidden;
+  background: #0d1829;
+}
+
+.terminal-viewport {
+  position: absolute;
+  inset: 0;
+  display: none;
+  padding: 0.35rem;
+}
+
+.terminal-viewport-active {
+  display: block;
+}
+
+.terminal-handoff-actions {
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid rgba(166, 210, 255, 0.12);
+}

@@ -174,6 +174,22 @@ export type GatewayProactiveConfig = {
   morningBriefEnabled: boolean;
   morningBriefTime: string;
   ocrWatchTickEnabled: boolean;
+  plannerCopilotEnabled?: boolean;
+  dayReplanOnCalendarChange?: boolean;
+};
+
+export type AppFeatureFlags = {
+  embeddedTerminalEnabled: boolean;
+};
+
+export type DayPlanRecord = {
+  planDate: string;
+  topThree: string[];
+  fullPlanText: string;
+  notionPageId: string | null;
+  suggestedActions: string[];
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type GatewayMode = "execute" | "dry_run" | "plan_only";
@@ -961,6 +977,26 @@ export function launchExecutorHandoff(
   });
 }
 
+export type CodingCliStatus = {
+  pwsh: boolean;
+  powershell: boolean;
+  claude: boolean;
+  codex: boolean;
+  preferredShell: string;
+};
+
+export function detectCodingClis() {
+  return invoke<CodingCliStatus>("detect_coding_clis");
+}
+
+export function readHandoffMarkdown(path: string) {
+  return invoke<string>("read_handoff_markdown", { path });
+}
+
+export function readHandoffPrompt(path: string) {
+  return invoke<string>("read_handoff_prompt", { path });
+}
+
 export type PersonMemoryRecord = {
   id: string;
   name: string;
@@ -1182,4 +1218,74 @@ export function listSavedWorkflowsDb() {
 
 export function importAutomationFromLocalStorage(payload: LocalStorageImportPayload) {
   return invoke<LocalStorageImportResult>("import_automation_from_local_storage", { payload });
+}
+
+export function getAppFeatureFlags() {
+  return invoke<AppFeatureFlags>("get_app_feature_flags");
+}
+
+export function composeDayPlan() {
+  return invoke<DayPlanRecord>("compose_day_plan");
+}
+
+export function getDayPlan() {
+  return invoke<DayPlanRecord | null>("get_day_plan");
+}
+
+export function replanDay() {
+  return invoke<DayPlanRecord>("replan_day");
+}
+
+export function saveDayPlanToNotion() {
+  return invoke<DayPlanRecord>("save_day_plan_to_notion");
+}
+
+export type TriggerRecipeRecord = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  kind: string;
+  scheduleValue: string | null;
+  payloadJson: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AuditEntry = {
+  lineIndex: number;
+  timestamp: string;
+  policyClass: string;
+  agent: string;
+  capabilityId: string;
+  sessionId: string;
+  turnId: number;
+  outcome: string;
+  detail: string;
+  rollbackRef: string | null;
+  rawLine: string;
+};
+
+export function listTriggerRecipes() {
+  return invoke<TriggerRecipeRecord[]>("list_trigger_recipes_cmd");
+}
+
+export function saveTriggerRecipe(recipe: TriggerRecipeRecord) {
+  return invoke<void>("save_trigger_recipe_cmd", { recipe });
+}
+
+export function deleteTriggerRecipe(id: string) {
+  return invoke<void>("delete_trigger_recipe_cmd", { id });
+}
+
+export function searchAuditLog(args: {
+  query?: string;
+  policyClass?: string;
+  since?: string;
+  limit?: number;
+}) {
+  return invoke<AuditEntry[]>("search_audit_log_cmd", args);
+}
+
+export function rollbackAuditEntry(lineIndex: number) {
+  return invoke<string>("rollback_audit_entry_cmd", { lineIndex });
 }

@@ -149,6 +149,8 @@ pub struct GatewayProactiveConfig {
     pub morning_brief_enabled: bool,
     pub morning_brief_time: String,
     pub ocr_watch_tick_enabled: bool,
+    pub planner_copilot_enabled: bool,
+    pub day_replan_on_calendar_change: bool,
 }
 
 impl Default for GatewayProactiveConfig {
@@ -159,6 +161,8 @@ impl Default for GatewayProactiveConfig {
             morning_brief_enabled: false,
             morning_brief_time: "07:30".to_string(),
             ocr_watch_tick_enabled: false,
+            planner_copilot_enabled: false,
+            day_replan_on_calendar_change: false,
         }
     }
 }
@@ -329,6 +333,8 @@ pub fn gateway_default_install_preset() -> GatewayConfig {
             morning_brief_enabled: true,
             morning_brief_time: "07:30".to_string(),
             ocr_watch_tick_enabled: true,
+            planner_copilot_enabled: true,
+            day_replan_on_calendar_change: false,
         },
         paid: GatewayPaidModeConfig::default(),
         ..GatewayConfig::default()
@@ -352,6 +358,8 @@ pub fn gateway_easy_mode_preset() -> GatewayConfig {
             morning_brief_enabled: true,
             morning_brief_time: "07:30".to_string(),
             ocr_watch_tick_enabled: true,
+            planner_copilot_enabled: true,
+            day_replan_on_calendar_change: false,
         },
         channels: GatewayChannelsConfig {
             local_ws_enabled: true,

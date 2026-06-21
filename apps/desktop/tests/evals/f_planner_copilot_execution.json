@@ -1,0 +1,23 @@
+[
+  {
+    "command": "plan my day",
+    "capabilityId": "memory.planner",
+    "fixture": "planner_copilot_tasks",
+    "expectSuccess": true,
+    "expectReplyContains": "Top 3 priorities"
+  },
+  {
+    "command": "replan my day",
+    "capabilityId": "memory.planner",
+    "fixture": "planner_copilot_tasks",
+    "expectSuccess": true,
+    "expectReplyContains": "Replan note"
+  },
+  {
+    "command": "plan my day",
+    "capabilityId": "memory.planner",
+    "fixture": "missing_notion",
+    "expectSuccess": false,
+    "expectReplyContains": "Notion access token is missing"
+  }
+]

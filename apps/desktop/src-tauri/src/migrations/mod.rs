@@ -113,7 +113,32 @@ pub fn apply_pending_migrations(
         );
     ";
 
-    let migrations: &[(&str, i64)] = &[(MIGRATION_V1, 1)];
+    const MIGRATION_V2: &str = "
+        CREATE TABLE IF NOT EXISTS day_plans (
+            plan_date TEXT PRIMARY KEY,
+            top_three_json TEXT NOT NULL,
+            full_plan_text TEXT NOT NULL,
+            notion_page_id TEXT,
+            suggested_actions_json TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+    ";
+
+    const MIGRATION_V3: &str = "
+        CREATE TABLE IF NOT EXISTS trigger_recipes (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            kind TEXT NOT NULL,
+            schedule_value TEXT,
+            payload_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+    ";
+
+    let migrations: &[(&str, i64)] = &[(MIGRATION_V1, 1), (MIGRATION_V2, 2), (MIGRATION_V3, 3)];
 
     for (sql, target_version) in migrations {
         if version >= *target_version {

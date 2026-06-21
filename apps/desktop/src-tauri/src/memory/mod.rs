@@ -1,7 +1,9 @@
 pub mod brief;
 pub mod cag;
+pub mod day_plan_store;
 pub mod embed;
 pub mod knowledge_router;
+pub mod planner;
 pub mod vault;
 pub mod entity_store;
 pub mod controls;
@@ -126,6 +128,7 @@ pub fn parse_memory_command(command: &str) -> Option<MemoryAction> {
         "prep for my next meeting"
             | "prep me for my next meeting"
             | "prepare me for my next meeting"
+            | "refresh meeting prep"
     ) {
         return Some(MemoryAction::MeetingCopilot);
     }
