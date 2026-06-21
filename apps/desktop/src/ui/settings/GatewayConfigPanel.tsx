@@ -17,6 +17,7 @@ import {
 } from "../../services/jarvisApi";
 import ObsidianSetupWizard from "./ObsidianSetupWizard";
 import GatewayOnboardingBanner from "./GatewayOnboardingBanner";
+import TriggerRecipePanel from "./TriggerRecipePanel";
 
 export default function GatewayConfigPanel() {
   const [config, setConfig] = useState<GatewayConfig | null>(null);
@@ -42,6 +43,8 @@ export default function GatewayConfigPanel() {
           morningBriefEnabled: false,
           morningBriefTime: "07:30",
           ocrWatchTickEnabled: false,
+          plannerCopilotEnabled: false,
+          dayReplanOnCalendarChange: false,
         },
         budgets: next.budgets ?? {
           maxStepsPerTurn: 12,
@@ -378,6 +381,37 @@ export default function GatewayConfigPanel() {
       <label className="toggle-row">
         <input
           type="checkbox"
+          checked={config.proactive.plannerCopilotEnabled ?? false}
+          onChange={(event) =>
+            void persist({
+              ...config,
+              proactive: { ...config.proactive, plannerCopilotEnabled: event.target.checked },
+            })
+          }
+          disabled={saving}
+        />
+        <span>Planner copilot (morning plan + replan via Notion tasks)</span>
+      </label>
+      <label className="toggle-row">
+        <input
+          type="checkbox"
+          checked={config.proactive.dayReplanOnCalendarChange ?? false}
+          onChange={(event) =>
+            void persist({
+              ...config,
+              proactive: {
+                ...config.proactive,
+                dayReplanOnCalendarChange: event.target.checked,
+              },
+            })
+          }
+          disabled={saving}
+        />
+        <span>Replan when calendar changes (experimental)</span>
+      </label>
+      <label className="toggle-row">
+        <input
+          type="checkbox"
           checked={config.proactive.ocrWatchTickEnabled}
           onChange={(event) =>
             void persist({
@@ -388,6 +422,46 @@ export default function GatewayConfigPanel() {
           disabled={saving}
         />
         <span>OCR watch tick (Rust scheduler)</span>
+      </label>
+      <TriggerRecipePanel />
+      <p className="section-kicker">Labs</p>
+      <label className="toggle-row">
+        <input
+          type="checkbox"
+          checked={config.labs?.projectBundlePilot ?? false}
+          onChange={(event) =>
+            void persist({
+              ...config,
+              labs: {
+                projectBundlePilot: event.target.checked,
+                councilVerifier: config.labs?.councilVerifier ?? false,
+                proactiveAnomaly: config.labs?.proactiveAnomaly ?? false,
+                worldModelQueries: config.labs?.worldModelQueries ?? false,
+              },
+            })
+          }
+          disabled={saving}
+        />
+        <span>Project bundle pilot (meeting follow-up lab)</span>
+      </label>
+      <label className="toggle-row">
+        <input
+          type="checkbox"
+          checked={config.labs?.councilVerifier ?? false}
+          onChange={(event) =>
+            void persist({
+              ...config,
+              labs: {
+                projectBundlePilot: config.labs?.projectBundlePilot ?? false,
+                councilVerifier: event.target.checked,
+                proactiveAnomaly: config.labs?.proactiveAnomaly ?? false,
+                worldModelQueries: config.labs?.worldModelQueries ?? false,
+              },
+            })
+          }
+          disabled={saving}
+        />
+        <span>Council verifier on send (lab)</span>
       </label>
       <p className="section-kicker">Channels</p>
       <label className="toggle-row">

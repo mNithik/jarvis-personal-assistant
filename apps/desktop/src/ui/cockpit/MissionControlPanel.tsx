@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
-import type { ApprovalRequest, GatewayEvent, GatewayTaskRunSummary } from "../../services/jarvisApi";
+import type { ApprovalRequest, AuditEntry, GatewayEvent, GatewayTaskRunSummary } from "../../services/jarvisApi";
+import { rollbackAuditEntry, searchAuditLog } from "../../services/jarvisApi";
 
 type MissionControlPanelProps = {
   trace: GatewayEvent[];
@@ -29,6 +30,11 @@ export default function MissionControlPanel({
   onDeny,
   onResumeTask,
 }: MissionControlPanelProps) {
+  const [auditQuery, setAuditQuery] = useState("");
+  const [auditClass, setAuditClass] = useState("");
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
+  const [auditStatus, setAuditStatus] = useState<string | null>(null);
+
   const timeline = useMemo(
     () =>
       trace
@@ -40,6 +46,32 @@ export default function MissionControlPanel({
         .slice(0, 12),
     [trace],
   );
+
+  async function runAuditSearch() {
+    setAuditStatus(null);
+    try {
+      const entries = await searchAuditLog({
+        query: auditQuery.trim() || undefined,
+        policyClass: auditClass.trim() || undefined,
+        limit: 20,
+      });
+      setAuditEntries(entries);
+    } catch (error) {
+      setAuditStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function handleRollback(lineIndex: number) {
+    setAuditStatus(null);
+    try {
+      const summary = await rollbackAuditEntry(lineIndex);
+      setAuditStatus(summary);
+      await runAuditSearch();
+      onRefresh?.();
+    } catch (error) {
+      setAuditStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
 
   return (
     <section className="gateway-followup-card mission-control-panel">
@@ -126,7 +158,45 @@ export default function MissionControlPanel({
 
         <div className="mission-control-column">
           <h3>Audit ledger</h3>
-          {auditLog.length > 0 ? (
+          <div className="inline-actions">
+            <input
+              type="search"
+              placeholder="Search audit log"
+              value={auditQuery}
+              onChange={(event) => setAuditQuery(event.target.value)}
+            />
+            <select value={auditClass} onChange={(event) => setAuditClass(event.target.value)}>
+              <option value="">All classes</option>
+              <option value="send">Send</option>
+              <option value="write">Write</option>
+              <option value="schedule">Schedule</option>
+            </select>
+            <button className="ghost-button" type="button" onClick={() => void runAuditSearch()}>
+              Search
+            </button>
+          </div>
+          {auditStatus ? <p className="result-meta">{auditStatus}</p> : null}
+          {auditEntries.length > 0 ? (
+            <div className="memory-list">
+              {auditEntries.map((entry) => (
+                <div className="memory-card" key={`${entry.lineIndex}-${entry.timestamp}`}>
+                  <p className="result-meta">
+                    {entry.policyClass} · {entry.outcome} · turn {entry.turnId}
+                  </p>
+                  <p>{entry.detail || entry.rawLine}</p>
+                  {entry.rollbackRef ? (
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => void handleRollback(entry.lineIndex)}
+                    >
+                      Rollback
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : auditLog.length > 0 ? (
             <pre className="gateway-trace-empty">{auditLog.slice(0, 8).join("\n")}</pre>
           ) : (
             <p className="gateway-trace-empty">No external mutations logged yet.</p>

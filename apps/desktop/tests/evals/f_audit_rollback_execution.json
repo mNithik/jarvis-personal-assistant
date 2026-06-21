@@ -1,0 +1,23 @@
+[
+  {
+    "command": "rollback last notion write",
+    "capabilityId": "mission.control",
+    "fixture": "audit_notion_rollback",
+    "expectSuccess": true,
+    "expectReplyContains": "archived"
+  },
+  {
+    "command": "rollback last notion write",
+    "capabilityId": "mission.control",
+    "fixture": "audit_missing_ref",
+    "expectSuccess": false,
+    "expectReplyContains": "does not support rollback"
+  },
+  {
+    "command": "search audit log for planner",
+    "capabilityId": "mission.control",
+    "fixture": "audit_search",
+    "expectSuccess": true,
+    "expectReplyContains": "audit"
+  }
+]

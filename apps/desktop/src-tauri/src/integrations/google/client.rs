@@ -93,6 +93,26 @@ pub(crate) fn api_post(token: &str, url: &str, body: Value) -> Result<Value, Str
         .map_err(|error| format!("Failed to parse Google API response: {error}"))
 }
 
+pub(crate) fn api_delete(token: &str, url: &str) -> Result<(), String> {
+    #[cfg(test)]
+    if lookup_mock(&Method::DELETE, url).is_some() {
+        return Ok(());
+    }
+
+    let client = google_client()?;
+    let response = client
+        .delete(url)
+        .headers(auth_headers(token)?)
+        .send()
+        .map_err(|error| format!("Google API request failed: {error}"))?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().unwrap_or_default();
+        return Err(format!("Google API request failed with {status}: {body}"));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 pub fn set_mock_responses(responses: HashMap<String, String>) {
     MOCK_RESPONSES.with(|cell| {

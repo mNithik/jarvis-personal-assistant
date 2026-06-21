@@ -1,0 +1,23 @@
+[
+  {
+    "command": "prep me for my next meeting",
+    "capabilityId": "memory.life",
+    "fixture": "meeting_v2_full",
+    "expectSuccess": true,
+    "expectReplyContains": "Meeting prep for"
+  },
+  {
+    "command": "refresh meeting prep",
+    "capabilityId": "memory.life",
+    "fixture": "meeting_v2_full",
+    "expectSuccess": true,
+    "expectReplyContains": "Related email"
+  },
+  {
+    "command": "prep me for my next meeting",
+    "capabilityId": "memory.life",
+    "fixture": "missing_token",
+    "expectSuccess": false,
+    "expectReplyContains": "Google Calendar is not connected"
+  }
+]

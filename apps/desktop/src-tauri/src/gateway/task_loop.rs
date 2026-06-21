@@ -312,6 +312,7 @@ pub fn start_or_resume_turn(mut ctx: TaskLoopContext<'_>) -> Result<TaskLoopOutc
                     turn_id: ctx.turn_id,
                     outcome: AuditOutcome::Executed,
                     detail: &step_result.reply.chars().take(160).collect::<String>(),
+                    rollback_ref: None,
                 },
             );
         }

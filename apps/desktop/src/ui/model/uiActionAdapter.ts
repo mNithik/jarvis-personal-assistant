@@ -46,6 +46,10 @@ export async function executeUiQuickAction(
       return;
     case "create_daily_brief":
       return handlers.runCommand("Create daily brief");
+    case "plan_my_day":
+      return handlers.runCommand("Plan my day");
+    case "replan_my_day":
+      return handlers.runCommand("Replan my day");
     case "read_screen":
       return handlers.runCommand("Read my screen");
     case "select_ocr_area":

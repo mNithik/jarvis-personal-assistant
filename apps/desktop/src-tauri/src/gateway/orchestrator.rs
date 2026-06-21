@@ -14,6 +14,7 @@ use super::{
     capabilities::find_capability,
     config::{GatewayConfig, GatewayMode},
     policy::{policy_class_label, route_policy_class},
+    verifier::council_verify_send,
     router::{route_turn, RouterContext},
     state::PendingApproval,
     task_loop::{plan_steps, start_or_resume_turn, TaskLoopContext},
@@ -283,7 +284,7 @@ impl GatewayOrchestrator {
         let command = request.command.clone();
         let route_level = format!("{:?}", route.route_level).to_lowercase();
 
-        let approval = if enforce_approval {
+        let mut approval = if enforce_approval {
             match ApprovalGate::evaluate_route(&route, &session_id, turn_id, &command) {
                 ApprovalOutcome::Allowed => None,
                 ApprovalOutcome::ApprovalRequired(request) => Some(request),
@@ -291,6 +292,49 @@ impl GatewayOrchestrator {
         } else {
             None
         };
+
+        let policy_class = route_policy_class(&route);
+        if config.labs.council_verifier
+            && matches!(
+                policy_class,
+                crate::gateway::types::GatewayPolicyClass::Send
+                    | crate::gateway::types::GatewayPolicyClass::Schedule
+            )
+        {
+            let draft = approval
+                .as_ref()
+                .map(|request| request.detail.as_str())
+                .unwrap_or(&command);
+            match council_verify_send(config, policy_class, &command, draft) {
+                Ok(()) => {
+                    if let Some(request) = approval.as_mut() {
+                        request.detail =
+                            format!("{}\n\nCouncil verifier: approved.", request.detail);
+                    }
+                }
+                Err(reason) => {
+                    if let Some(request) = approval.as_mut() {
+                        request.detail = format!(
+                            "{}\n\nCouncil verifier BLOCKED: {reason}",
+                            request.detail
+                        );
+                        request.title = format!("Verifier blocked: {}", request.title);
+                    } else {
+                        approval = Some(ApprovalRequest {
+                            id: format!("council-verifier-{session_id}-{turn_id}"),
+                            session_id: session_id.clone(),
+                            title: "Council verifier blocked send".to_string(),
+                            detail: format!(
+                                "JARVIS classified \"{command}\" as {} policy.\nCouncil verifier BLOCKED: {reason}",
+                                policy_class_label(policy_class),
+                            ),
+                            risk: crate::gateway::types::ApprovalRisk::Write,
+                            created_at: unix_timestamp_string(),
+                        });
+                    }
+                }
+            }
+        }
 
         let awaiting_approval = approval.is_some();
         let legacy = !config.enabled || awaiting_approval;
@@ -468,6 +512,7 @@ impl GatewayOrchestrator {
                 turn_id,
                 outcome,
                 detail: command,
+                rollback_ref: None,
             },
         );
     }

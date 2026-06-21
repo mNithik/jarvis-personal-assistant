@@ -50,7 +50,7 @@ export function buildMemoryWorkspaceSections({
           </p>
           <p className="result-meta">
             {prepCount === 0
-              ? "No saved meeting prep yet for this window."
+              ? "Prep refreshes from calendar, Gmail, Notion tasks, and vault memory."
               : `${prepCount} saved prep item${prepCount === 1 ? "" : "s"} in memory.`}
           </p>
           <div className="inline-actions">
@@ -60,6 +60,13 @@ export function buildMemoryWorkspaceSections({
               onClick={() => void runCommand?.("Prep me for my next meeting")}
             >
               Prep me
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => void runCommand?.("Refresh meeting prep")}
+            >
+              Refresh prep
             </button>
             <button
               type="button"

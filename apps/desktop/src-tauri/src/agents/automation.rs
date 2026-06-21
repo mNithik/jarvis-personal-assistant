@@ -23,6 +23,19 @@ impl Agent for AutomationAgent {
         if normalized.starts_with("run workflow ") || normalized.starts_with("start workflow ") {
             return run_saved_workflow(ctx);
         }
+        if normalized.contains("project bundle") || normalized.contains("meeting follow-up bundle") {
+            let (success, reply) = crate::gateway::labs::project_bundle_reply(
+                &ctx.config,
+                &ctx.db_path,
+                &ctx.app_data_dir,
+                &ctx.command,
+            );
+            return Ok(if success {
+                StepResult::ok(reply)
+            } else {
+                StepResult::failed(reply)
+            });
+        }
 
         Ok(StepResult::failed(
             "Automation agent did not recognize a saved workflow command.",

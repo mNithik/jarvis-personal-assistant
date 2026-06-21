@@ -44,6 +44,8 @@ export type JarvisQuickActionId =
   | "open_cockpit"
   | "open_system_drawer"
   | "create_daily_brief"
+  | "plan_my_day"
+  | "replan_my_day"
   | "read_screen"
   | "select_ocr_area"
   | "open_ocr_panel"

@@ -135,19 +135,20 @@ See [TIER_UPGRADE_VISION.md](./TIER_UPGRADE_VISION.md) for north star, lenses, a
 - [x] **T13-D Memory v2 controls:** pin, forget, correct via entity metadata + `MemoryControlsPanel`
 - [x] **T13-E Evals v2:** F43–F48 golden files + harness wired in fabric index (48 entries)
 - [x] **T13-F Reliability:** `task_state` bridge, `list_gateway_task_runs`, resume last task, `StepFailureKind`
-- [ ] **Lab L1:** meeting follow-up project bundle (flag)
-- [ ] **Lab L2:** council verifier on send (flag)
+- [x] **Lab L1:** meeting follow-up project bundle (flag)
+- [x] **Lab L2:** council verifier on send (flag)
 
 See [ARCHITECTURE_WAVE13.md](./ARCHITECTURE_WAVE13.md), [TIER_UPGRADE_BALANCED_90D.md](./TIER_UPGRADE_BALANCED_90D.md), [TIER_UPGRADE_MOONSHOT_LABS.md](./TIER_UPGRADE_MOONSHOT_LABS.md).
 
 ### Wave 14 — Daily loops + orchestration (3–6 months)
 
-- [ ] Day planner copilot (morning brief + dynamic replan)
-- [ ] Meeting copilot v2 (prep from related emails, notes, tasks)
-- [ ] Trigger recipe builder UI
-- [ ] Audit ledger search + rollback (calendar, notion)
-- [ ] Lab L3: multi-agent council on complex tasks
-- [ ] Lab L4: proactive anomaly detection
+- [x] **T14-T Embedded terminal:** multi-tab Builder PTY (Shell, Claude Code, Codex) + handoff launch
+- [x] Day planner copilot (morning brief + dynamic replan)
+- [x] Meeting copilot v2 (prep from related emails, notes, tasks)
+- [x] Trigger recipe builder UI
+- [x] Audit ledger search + rollback (calendar, notion)
+- [x] Lab L1: meeting follow-up project bundle (flag)
+- [x] Lab L2: council verifier on send (flag)
 
 ### Wave 15 — Platform prep (6–12 months)
 
@@ -167,7 +168,7 @@ See [ARCHITECTURE_WAVE13.md](./ARCHITECTURE_WAVE13.md), [TIER_UPGRADE_BALANCED_9
 ## Verify gate (every sprint)
 
 ```powershell
-cd apps/desktop/src-tauri; cargo test --lib -j 1
+cd apps/desktop/src-tauri; cargo test --lib -j 1 --no-default-features
 cd ../..; npx tsc --noEmit
 npm run build
 ```

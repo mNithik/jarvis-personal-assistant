@@ -1,0 +1,5 @@
+[
+  { "phrase": "prep me for my next meeting", "capabilityId": "memory.life" },
+  { "phrase": "refresh meeting prep", "capabilityId": "memory.life" },
+  { "phrase": "show meeting prep", "capabilityId": "memory.life" }
+]

@@ -3,6 +3,7 @@ pub mod schedule_runner;
 pub mod approval;
 pub mod audit;
 pub mod bus;
+pub mod calendar_replan;
 pub mod capabilities;
 pub mod config;
 pub mod channels;
@@ -15,6 +16,8 @@ pub mod policy;
 pub mod telegram;
 pub mod trigger_dispatcher;
 pub mod trigger_queue;
+pub mod trigger_recipes;
+pub mod verifier;
 #[cfg(test)]
 mod evals;
 pub mod models;

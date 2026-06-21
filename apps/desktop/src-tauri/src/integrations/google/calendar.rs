@@ -358,6 +358,12 @@ pub fn find_event_starting_within(
     Ok(None)
 }
 
+pub fn delete_event(token: &str, event_id: &str) -> Result<String, String> {
+    let url = format!("{CALENDAR_API_BASE}/calendars/primary/events/{event_id}");
+    client::api_delete(token, &url)?;
+    Ok(format!("Calendar event {event_id} deleted."))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -10,6 +10,27 @@ use crate::models::NoteRecord;
 
 const NOTION_VERSION: &str = "2022-06-28";
 
+#[cfg(test)]
+thread_local! {
+    static MOCK_RESPONSES: std::cell::RefCell<Option<std::collections::HashMap<String, String>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+fn lookup_mock(method: &str, url: &str) -> Option<String> {
+    MOCK_RESPONSES.with(|cell| {
+        let responses = cell.borrow();
+        let map = responses.as_ref()?;
+        let key = format!("{method} {url}");
+        if let Some(body) = map.get(&key).or_else(|| map.get(url)) {
+            return Some(body.clone());
+        }
+        map.iter()
+            .find(|(pattern, _)| url.contains(pattern.as_str()))
+            .map(|(_, body)| body.clone())
+    })
+}
+
 fn notion_client() -> Result<Client, String> {
     Client::builder()
         .timeout(std::time::Duration::from_secs(20))
@@ -29,6 +50,61 @@ fn notion_headers(token: &str) -> Result<HeaderMap, String> {
     );
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
     Ok(headers)
+}
+
+fn notion_post_json(
+    client: &Client,
+    token: &str,
+    url: &str,
+    payload: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    notion_request_json(client, token, "POST", url, Some(payload))
+}
+
+fn notion_patch_json(
+    client: &Client,
+    token: &str,
+    url: &str,
+    payload: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    notion_request_json(client, token, "PATCH", url, Some(payload))
+}
+
+fn notion_request_json(
+    client: &Client,
+    token: &str,
+    method: &str,
+    url: &str,
+    payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    #[cfg(test)]
+    if let Some(body) = lookup_mock(method, url) {
+        return serde_json::from_str(&body)
+            .map_err(|error| format!("Failed to parse mock Notion response: {error}"));
+    }
+
+    let response = if method == "PATCH" {
+        client
+            .patch(url)
+            .headers(notion_headers(token)?)
+            .json(&payload.unwrap_or(json!({})))
+            .send()
+    } else {
+        client
+            .post(url)
+            .headers(notion_headers(token)?)
+            .json(&payload.unwrap_or(json!({})))
+            .send()
+    }
+    .map_err(|error| format!("Failed to reach Notion: {error}"))?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().unwrap_or_default();
+        return Err(format!("Notion request failed with {status}: {body}"));
+    }
+    response
+        .json()
+        .map_err(|error| format!("Failed to parse Notion response: {error}"))
 }
 
 fn extract_notion_title_property(database: &serde_json::Value) -> Result<String, String> {
@@ -195,6 +271,141 @@ fn map_notion_note_record(
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotionPlannerTask {
+    pub id: String,
+    pub title: String,
+    pub due: Option<String>,
+    pub status: Option<String>,
+    pub is_done: bool,
+}
+
+fn map_notion_planner_task(
+    page: &serde_json::Value,
+    title_property_name: &str,
+    database: &serde_json::Value,
+) -> NotionPlannerTask {
+    let title = extract_notion_title(page, title_property_name);
+    let id = page
+        .get("id")
+        .and_then(|value| value.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let status_property =
+        find_notion_property_name(database, &["Status"], &["status", "select", "rich_text"]);
+    let due_property = find_notion_property_name(
+        database,
+        &["Due", "Due Date", "Deadline"],
+        &["date", "rich_text"],
+    );
+    let status = status_property.and_then(|(property_name, property_type)| {
+        extract_notion_property_display_value(page, &property_name, &property_type)
+    });
+    let due = due_property.and_then(|(property_name, property_type)| {
+        extract_notion_property_display_value(page, &property_name, &property_type)
+    });
+    let is_done = status
+        .as_deref()
+        .map(|value| {
+            let lower = value.to_lowercase();
+            matches!(
+                lower.as_str(),
+                "done" | "complete" | "completed" | "closed" | "cancelled"
+            )
+        })
+        .unwrap_or(false);
+    NotionPlannerTask {
+        id,
+        title,
+        due,
+        status,
+        is_done,
+    }
+}
+
+pub fn list_planner_tasks(db_path: &Path) -> Result<Vec<NotionPlannerTask>, String> {
+    let (token, db_id) = resolve_credentials(db_path)?;
+    let client = notion_client()?;
+    let database_value = fetch_database(&client, &token, &db_id)?;
+    let title_property_name = extract_notion_title_property(&database_value)?;
+    let query_url = format!("https://api.notion.com/v1/databases/{db_id}/query");
+    let query_payload = json!({
+        "page_size": 100,
+        "sorts": [{ "timestamp": "last_edited_time", "direction": "descending" }]
+    });
+    let query_value = notion_post_json(&client, &token, &query_url, query_payload)?;
+    Ok(query_value
+        .get("results")
+        .and_then(|value| value.as_array())
+        .map(|results| {
+            results
+                .iter()
+                .map(|page| map_notion_planner_task(page, &title_property_name, &database_value))
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
+pub fn create_plan_page(
+    db_path: &Path,
+    plan_date: &str,
+    content: &str,
+) -> Result<NoteRecord, String> {
+    let title = format!("JARVIS Plan {plan_date}");
+    create_note_with_title(db_path, &title, content)
+}
+
+fn create_note_with_title(
+    db_path: &Path,
+    title: &str,
+    content: &str,
+) -> Result<NoteRecord, String> {
+    let (token, db_id) = resolve_credentials(db_path)?;
+    let client = notion_client()?;
+    let database_value = fetch_database(&client, &token, &db_id)?;
+    let title_property_name = extract_notion_title_property(&database_value)?;
+    let trimmed_content = content.trim();
+    let mut properties = serde_json::Map::new();
+    properties.insert(
+        title_property_name.clone(),
+        json!({ "title": [{ "text": { "content": title } }] }),
+    );
+    let create_response = client
+        .post("https://api.notion.com/v1/pages")
+        .headers(notion_headers(&token)?)
+        .json(&json!({
+            "parent": { "database_id": db_id },
+            "properties": properties,
+            "children": [{
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{ "type": "text", "text": { "content": trimmed_content.chars().take(1800).collect::<String>() } }]
+                }
+            }]
+        }))
+        .send()
+        .map_err(|error| format!("Failed to create Notion plan page: {error}"))?;
+    if !create_response.status().is_success() {
+        let status = create_response.status();
+        let body = create_response.text().unwrap_or_default();
+        return Err(format!("Notion plan page creation failed with {status}: {body}"));
+    }
+    let page_value: serde_json::Value = create_response
+        .json()
+        .map_err(|error| format!("Failed to parse Notion plan page response: {error}"))?;
+    let note = map_notion_note_record(&page_value, &title_property_name, &database_value);
+    log_action(
+        db_path,
+        &format!("Save day plan {title}"),
+        "save_day_plan_to_notion",
+        "success",
+        &note.url,
+    )?;
+    Ok(note)
+}
+
 pub fn resolve_credentials(db_path: &Path) -> Result<(String, String), String> {
     let (mut access_token, database_id) = get_notion_config(db_path)?;
     if access_token
@@ -217,8 +428,15 @@ pub fn resolve_credentials(db_path: &Path) -> Result<(String, String), String> {
 }
 
 fn fetch_database(client: &Client, token: &str, db_id: &str) -> Result<serde_json::Value, String> {
+    let url = format!("https://api.notion.com/v1/databases/{db_id}");
+    #[cfg(test)]
+    if let Some(body) = lookup_mock("GET", &url) {
+        return serde_json::from_str(&body)
+            .map_err(|error| format!("Failed to parse mock Notion database response: {error}"));
+    }
+
     let response = client
-        .get(format!("https://api.notion.com/v1/databases/{db_id}"))
+        .get(url)
         .headers(notion_headers(token)?)
         .send()
         .map_err(|error| format!("Failed to reach Notion: {error}"))?;
@@ -306,50 +524,8 @@ pub fn search_notes(db_path: &Path, query: &str) -> Result<Vec<NoteRecord>, Stri
 }
 
 pub fn create_note(db_path: &Path, content: &str) -> Result<NoteRecord, String> {
-    let (token, db_id) = resolve_credentials(db_path)?;
-    let client = notion_client()?;
-    let database_value = fetch_database(&client, &token, &db_id)?;
-    let title_property_name = extract_notion_title_property(&database_value)?;
-    let trimmed_content = content.trim();
-    let title_text: String = trimmed_content.chars().take(60).collect();
-    let mut properties = serde_json::Map::new();
-    properties.insert(
-        title_property_name.clone(),
-        json!({ "title": [{ "text": { "content": title_text } }] }),
-    );
-    let create_response = client
-        .post("https://api.notion.com/v1/pages")
-        .headers(notion_headers(&token)?)
-        .json(&json!({
-            "parent": { "database_id": db_id },
-            "properties": properties,
-            "children": [{
-                "object": "block",
-                "type": "paragraph",
-                "paragraph": {
-                    "rich_text": [{ "type": "text", "text": { "content": trimmed_content } }]
-                }
-            }]
-        }))
-        .send()
-        .map_err(|error| format!("Failed to create Notion note: {error}"))?;
-    if !create_response.status().is_success() {
-        let status = create_response.status();
-        let body = create_response.text().unwrap_or_default();
-        return Err(format!("Notion note creation failed with {status}: {body}"));
-    }
-    let page_value: serde_json::Value = create_response
-        .json()
-        .map_err(|error| format!("Failed to parse Notion note response: {error}"))?;
-    let note = map_notion_note_record(&page_value, &title_property_name, &database_value);
-    log_action(
-        db_path,
-        &format!("Make a note {trimmed_content}"),
-        "create_notion_note",
-        "success",
-        &note.url,
-    )?;
-    Ok(note)
+    let title_text: String = content.trim().chars().take(60).collect();
+    create_note_with_title(db_path, &title_text, content)
 }
 
 pub fn format_notes_reply(notes: &[NoteRecord]) -> String {
@@ -362,4 +538,30 @@ pub fn format_notes_reply(notes: &[NoteRecord]) -> String {
         .collect::<Vec<_>>()
         .join("\n");
     format!("Here are your Notion notes:\n{listing}")
+}
+
+pub fn archive_page(db_path: &Path, page_id: &str) -> Result<String, String> {
+    let (token, _) = resolve_credentials(db_path)?;
+    let client = notion_client()?;
+    let url = format!("https://api.notion.com/v1/pages/{page_id}");
+    let _ = notion_patch_json(&client, &token, &url, json!({ "archived": true }))?;
+    Ok(format!("Notion page {page_id} archived."))
+}
+
+pub fn archive_page_by_id(db_path: &Path, page_id: &str) -> Result<String, String> {
+    archive_page(db_path, page_id)
+}
+
+#[cfg(test)]
+pub fn set_mock_responses(responses: std::collections::HashMap<String, String>) {
+    MOCK_RESPONSES.with(|cell| {
+        *cell.borrow_mut() = Some(responses);
+    });
+}
+
+#[cfg(test)]
+pub fn clear_mock_responses() {
+    MOCK_RESPONSES.with(|cell| {
+        *cell.borrow_mut() = None;
+    });
 }

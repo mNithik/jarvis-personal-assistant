@@ -1,0 +1,5 @@
+[
+  { "phrase": "list trigger recipes", "capabilityId": "automation.workflow" },
+  { "phrase": "show proactive triggers", "capabilityId": "automation.workflow" },
+  { "phrase": "run workflow morning", "capabilityId": "automation.workflow" }
+]
