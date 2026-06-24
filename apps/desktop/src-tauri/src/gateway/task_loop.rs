@@ -4,25 +4,27 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::agents::{
-    dispatch_step, extract_file_search_query, extract_google_search_query, open_target_from_command,
-    parse_pdf_command_action, parse_then_steps, AgentContext,
+    dispatch_step, extract_file_search_query, extract_google_search_query,
+    open_target_from_command, parse_pdf_command_action, parse_then_steps, AgentContext,
     PdfCommandAction,
 };
-use crate::gateway::router::{route_turn, replan_supervisor_step, verify_with_builder, RouterContext};
-use crate::gateway::types::TurnRequest;
 use crate::db::{list_active_tasks, save_task_state, TaskStateRecord};
+use crate::gateway::router::{
+    replan_supervisor_step, route_turn, verify_with_builder, RouterContext,
+};
 use crate::gateway::types::GatewayRoute;
+use crate::gateway::types::TurnRequest;
 use crate::integrations::{
-    parse_calendar_command, parse_gmail_command, parse_notion_command, parse_spotify_command,
-    parse_ocr_notion_command, parse_ocr_watch_command, CalendarAction, GmailAction, NotionAction,
+    parse_calendar_command, parse_gmail_command, parse_notion_command, parse_ocr_notion_command,
+    parse_ocr_watch_command, parse_spotify_command, CalendarAction, GmailAction, NotionAction,
     OcrNotionAction, OcrWatchAction, SpotifyAction,
 };
 use crate::providers::escalation::{EscalationContext, EscalationTracker};
 
 use super::{
+    audit::{self, AuditOutcome, AuditRecord},
     bus::EventBus,
     config::GatewayConfig,
-    audit::{self, AuditOutcome, AuditRecord},
     policy::route_policy_class,
     types::{GatewayAgentKind, GatewayEvent, GatewayEventKind},
 };
@@ -428,7 +430,11 @@ pub fn plan_steps(command: &str, route: &GatewayRoute) -> Vec<TaskStep> {
             };
             return vec![task_step("step-1", description, kind)];
         }
-        return vec![task_step("step-1", "List recent files", "list_recent_files")];
+        return vec![task_step(
+            "step-1",
+            "List recent files",
+            "list_recent_files",
+        )];
     }
 
     if route.capability_id == "command.desktop" {
@@ -464,12 +470,14 @@ pub fn plan_steps(command: &str, route: &GatewayRoute) -> Vec<TaskStep> {
                     CalendarAction::ListToday => {
                         ("List today's calendar events", "list_today_calendar_events")
                     }
-                    CalendarAction::CreateFromNl => {
-                        ("Create calendar event from command", "create_calendar_event")
-                    }
-                    CalendarAction::CreateFromEmail => {
-                        ("Create calendar event from current email", "create_calendar_event_from_current_email")
-                    }
+                    CalendarAction::CreateFromNl => (
+                        "Create calendar event from command",
+                        "create_calendar_event",
+                    ),
+                    CalendarAction::CreateFromEmail => (
+                        "Create calendar event from current email",
+                        "create_calendar_event_from_current_email",
+                    ),
                 };
                 return vec![task_step("step-1", description, kind)];
             }
@@ -514,15 +522,17 @@ pub fn plan_steps(command: &str, route: &GatewayRoute) -> Vec<TaskStep> {
             }
             if let Some(action) = parse_ocr_notion_command(command) {
                 let (description, kind) = match action {
-                    OcrNotionAction::ReadScreenAndSave => {
-                        ("Read screen and save to Notion", "read_screen_save_to_notion")
-                    }
+                    OcrNotionAction::ReadScreenAndSave => (
+                        "Read screen and save to Notion",
+                        "read_screen_save_to_notion",
+                    ),
                     OcrNotionAction::SaveOcrHistory => {
                         ("Save OCR history to Notion", "save_ocr_history_to_notion")
                     }
-                    OcrNotionAction::SaveScreenText { .. } => {
-                        ("Save scoped screen text to Notion", "save_screen_text_to_notion")
-                    }
+                    OcrNotionAction::SaveScreenText { .. } => (
+                        "Save scoped screen text to Notion",
+                        "save_screen_text_to_notion",
+                    ),
                 };
                 return vec![task_step("step-1", description, kind)];
             }
@@ -539,7 +549,11 @@ pub fn plan_steps(command: &str, route: &GatewayRoute) -> Vec<TaskStep> {
     }
 
     if route.capability_id == "memory.vault" {
-        return vec![task_step("step-1", "Search knowledge vault", "vault_search")];
+        return vec![task_step(
+            "step-1",
+            "Search knowledge vault",
+            "vault_search",
+        )];
     }
 
     if route.capability_id == "integrations.mcp.host"
@@ -578,12 +592,11 @@ fn execute_step_with_recovery(
 
     let router_context = RouterContext {
         db_path: Some(ctx.db_path.to_path_buf()),
+        app_data_dir: Some(ctx.app_data_dir.to_path_buf()),
         config: ctx.config.clone(),
     };
 
-    if let Some(replan_route) =
-        replan_supervisor_step(&step.description, &router_context)
-    {
+    if let Some(replan_route) = replan_supervisor_step(&step.description, &router_context) {
         payload.supervisor_recoveries += 1;
         events.push(tool_event(
             ctx.session_id,
@@ -658,7 +671,7 @@ fn agent_context_for_step(ctx: &TaskLoopContext<'_>, step: &TaskStep) -> AgentCo
 
     if step.kind == "supervisor_step" {
         command = step.description.clone();
-        route = route_subcommand(&command, ctx.config, ctx.db_path);
+        route = route_subcommand(&command, ctx.config, ctx.db_path, ctx.app_data_dir);
         step_kind = step_kind_for_command(&command, &route);
     }
 
@@ -679,6 +692,7 @@ fn route_subcommand(
     command: &str,
     config: &GatewayConfig,
     db_path: &Path,
+    app_data_dir: &Path,
 ) -> GatewayRoute {
     route_turn(
         &TurnRequest {
@@ -689,6 +703,7 @@ fn route_subcommand(
         },
         &RouterContext {
             db_path: Some(db_path.to_path_buf()),
+            app_data_dir: Some(app_data_dir.to_path_buf()),
             config: config.clone(),
         },
     )
@@ -962,7 +977,10 @@ mod tests {
         assert!(!outcome.success);
         assert!(outcome.task_complete);
         assert!(outcome.reply.contains("step budget exceeded"));
-        assert!(!outcome.events.iter().any(|event| event.kind == GatewayEventKind::ToolStart));
+        assert!(!outcome
+            .events
+            .iter()
+            .any(|event| event.kind == GatewayEventKind::ToolStart));
 
         let _ = std::fs::remove_file(db_path);
     }
@@ -1207,7 +1225,10 @@ mod tests {
         assert!(!outcome.success);
         assert!(outcome.task_complete);
         assert!(outcome.reply.contains("wall-time budget exceeded"));
-        assert!(!outcome.events.iter().any(|event| event.kind == GatewayEventKind::ToolStart));
+        assert!(!outcome
+            .events
+            .iter()
+            .any(|event| event.kind == GatewayEventKind::ToolStart));
 
         let _ = std::fs::remove_file(db_path);
     }
@@ -1269,7 +1290,10 @@ mod tests {
         assert!(!outcome.success);
         assert!(outcome.task_complete);
         assert!(outcome.reply.contains("retry budget exceeded"));
-        assert!(!outcome.events.iter().any(|event| event.kind == GatewayEventKind::ToolStart));
+        assert!(!outcome
+            .events
+            .iter()
+            .any(|event| event.kind == GatewayEventKind::ToolStart));
 
         let _ = std::fs::remove_file(db_path);
     }

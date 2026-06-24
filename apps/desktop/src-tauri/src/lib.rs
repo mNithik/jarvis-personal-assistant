@@ -8,9 +8,9 @@ pub mod integrations;
 mod memory;
 mod migrations;
 mod models;
-mod training;
 pub mod providers;
 mod tools;
+mod training;
 
 pub use db::init_database;
 
@@ -201,15 +201,18 @@ fn preview_gateway_turn(
         .unwrap_or_else(|| format!("gateway-preview-{}", system_time_to_iso(SystemTime::now())));
     let router_context = crate::gateway::router::RouterContext {
         db_path: None,
+        app_data_dir: None,
         config: crate::gateway::config::GatewayConfig::default(),
     };
 
-    Ok(crate::gateway::orchestrator::GatewayOrchestrator::preview_turn(
-        request,
-        1,
-        &session_id,
-        &router_context,
-    ))
+    Ok(
+        crate::gateway::orchestrator::GatewayOrchestrator::preview_turn(
+            request,
+            1,
+            &session_id,
+            &router_context,
+        ),
+    )
 }
 
 #[tauri::command]
@@ -228,10 +231,7 @@ fn get_gateway_audit_log(
     gateway_state: State<'_, crate::gateway::state::GatewayState>,
     limit: Option<usize>,
 ) -> Result<Vec<String>, String> {
-    crate::gateway::audit::read_recent_entries(
-        gateway_state.app_data_dir(),
-        limit.unwrap_or(50),
-    )
+    crate::gateway::audit::read_recent_entries(gateway_state.app_data_dir(), limit.unwrap_or(50))
 }
 
 #[tauri::command]
@@ -251,10 +251,7 @@ fn list_project_bundles(
     gateway_state: State<'_, crate::gateway::state::GatewayState>,
     limit: Option<usize>,
 ) -> Result<Vec<crate::gateway::labs::ProjectBundleRecord>, String> {
-    crate::gateway::labs::list_project_bundles(
-        gateway_state.app_data_dir(),
-        limit.unwrap_or(5),
-    )
+    crate::gateway::labs::list_project_bundles(gateway_state.app_data_dir(), limit.unwrap_or(5))
 }
 
 #[tauri::command]
@@ -363,9 +360,7 @@ fn get_jarvis_service_status(
 }
 
 #[tauri::command]
-fn get_trigger_queue_status(
-    app_state: State<'_, AppState>,
-) -> Result<u32, String> {
+fn get_trigger_queue_status(app_state: State<'_, AppState>) -> Result<u32, String> {
     let conn = rusqlite::Connection::open(&app_state.db_path).map_err(|error| error.to_string())?;
     crate::gateway::trigger_queue::count_pending_triggers(&conn)
 }
@@ -397,9 +392,10 @@ fn gateway_run_turn(
         }
     }
 
-    let session_id = request.session_id.clone().unwrap_or_else(|| {
-        format!("gateway-session-{}", system_time_to_iso(SystemTime::now()))
-    });
+    let session_id = request
+        .session_id
+        .clone()
+        .unwrap_or_else(|| format!("gateway-session-{}", system_time_to_iso(SystemTime::now())));
     let turn_id = gateway_state.next_turn_id(&session_id)?;
     let config = gateway_state
         .config
@@ -416,6 +412,7 @@ fn gateway_run_turn(
         .map_err(|error| error.to_string())?;
     let router_context = crate::gateway::router::RouterContext {
         db_path: Some(app_state.db_path.clone()),
+        app_data_dir: Some(app_state.app_data_dir.clone()),
         config: config.clone(),
     };
     let groq_api_key = if config.voice.talker_enabled {
@@ -574,6 +571,7 @@ fn gateway_channel_turn(
         .map_err(|error| error.to_string())?;
     let router_context = crate::gateway::router::RouterContext {
         db_path: Some(app_state.db_path.clone()),
+        app_data_dir: Some(app_state.app_data_dir.clone()),
         config: config.clone(),
     };
     let execution = crate::gateway::orchestrator::TurnExecutionEnv {
@@ -622,15 +620,17 @@ fn run_training_eval_gate(
     app_state: State<'_, AppState>,
     gateway_state: State<'_, crate::gateway::state::GatewayState>,
 ) -> Result<crate::training::eval_gate::TrainingEvalGateResult, String> {
-    let config = gateway_state.config.lock().map_err(|error| error.to_string())?.clone();
+    let config = gateway_state
+        .config
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone();
     let export_path = app_state.app_data_dir.join("training-export.jsonl");
     crate::training::eval_gate::run_training_eval_gate(&config, &export_path)
 }
 
 #[tauri::command]
-fn anonymize_training_export(
-    app_state: State<'_, AppState>,
-) -> Result<String, String> {
+fn anonymize_training_export(app_state: State<'_, AppState>) -> Result<String, String> {
     let input_path = app_state.app_data_dir.join("training-export.jsonl");
     let output_path = app_state
         .app_data_dir
@@ -644,7 +644,8 @@ fn anonymize_training_export(
 
 #[tauri::command]
 fn prepare_database_migrations(app_state: State<'_, AppState>) -> Result<String, String> {
-    let connection = rusqlite::Connection::open(&app_state.db_path).map_err(|error| error.to_string())?;
+    let connection =
+        rusqlite::Connection::open(&app_state.db_path).map_err(|error| error.to_string())?;
     let version = crate::migrations::apply_pending_migrations(&connection, &app_state.db_path)?;
     Ok(format!("Migration framework ready at version {version}."))
 }
@@ -667,9 +668,11 @@ fn gateway_approve(
         .lock()
         .map_err(|error| error.to_string())?;
 
-    Ok(crate::gateway::orchestrator::GatewayOrchestrator::resolve_approval(
-        &pending, true, &config, &mut bus,
-    ))
+    Ok(
+        crate::gateway::orchestrator::GatewayOrchestrator::resolve_approval(
+            &pending, true, &config, &mut bus,
+        ),
+    )
 }
 
 #[tauri::command]
@@ -690,9 +693,11 @@ fn gateway_deny(
         .lock()
         .map_err(|error| error.to_string())?;
 
-    Ok(crate::gateway::orchestrator::GatewayOrchestrator::resolve_approval(
-        &pending, false, &config, &mut bus,
-    ))
+    Ok(
+        crate::gateway::orchestrator::GatewayOrchestrator::resolve_approval(
+            &pending, false, &config, &mut bus,
+        ),
+    )
 }
 
 fn collect_files_recursively(base_dir: &Path, files: &mut Vec<FileRecord>) -> Result<(), String> {
@@ -2537,12 +2542,13 @@ fn write_clipboard_text(state: State<'_, AppState>, text: String) -> Result<Stri
 
 #[tauri::command]
 fn run_jarvis_project_checks(state: State<'_, AppState>) -> Result<String, String> {
-    let project_dir = builder::resolve_jarvis_project_dir(&std::env::current_dir().map_err(|error| {
-        format!(
-            "Could not resolve the current JARVIS project directory: {}",
-            error
-        )
-    })?)?;
+    let project_dir =
+        builder::resolve_jarvis_project_dir(&std::env::current_dir().map_err(|error| {
+            format!(
+                "Could not resolve the current JARVIS project directory: {}",
+                error
+            )
+        })?)?;
 
     let outcome = builder::run_project_checks(&project_dir);
     let log_status = match &outcome {
@@ -3910,7 +3916,17 @@ pub fn run() {
 
             init_database(&db_path)?;
             migrate_legacy_provider_secrets(&db_path)?;
-            let _ = crate::memory::cag::ensure_default_cag_policy(&app_data_dir);
+            if let Err(error) = crate::memory::cag::ensure_default_cag_policy(&app_data_dir) {
+                eprintln!("Failed to ensure default CAG policy: {error}");
+            }
+            if let Err(error) =
+                crate::gateway::profiles::seed_default_profiles(&db_path, &app_data_dir)
+            {
+                eprintln!("Failed to seed default profiles: {error}");
+            }
+            if let Err(error) = crate::gateway::skills::install_fixture_skill(&app_data_dir) {
+                eprintln!("Failed to install fixture skill: {error}");
+            }
             app.manage(AppState {
                 db_path,
                 app_data_dir: app_data_dir.clone(),
@@ -3940,6 +3956,15 @@ pub fn run() {
             crate::commands::wave15::list_proactive_nudges_cmd,
             crate::commands::wave15::dismiss_proactive_nudge_cmd,
             crate::commands::wave15::accept_proactive_nudge_cmd,
+            crate::commands::wave16::list_user_profiles_cmd,
+            crate::commands::wave16::get_active_profile_cmd,
+            crate::commands::wave16::switch_user_profile_cmd,
+            crate::commands::wave16::list_installed_skills_cmd,
+            crate::commands::wave16::start_ambient_session_cmd,
+            crate::commands::wave16::end_ambient_session_cmd,
+            crate::commands::wave16::list_ambient_suggestions_cmd,
+            crate::commands::wave16::dismiss_ambient_suggestion_cmd,
+            crate::commands::wave16::record_ambient_signal_cmd,
             save_gateway_config,
             apply_gateway_easy_preset,
             list_trigger_events,

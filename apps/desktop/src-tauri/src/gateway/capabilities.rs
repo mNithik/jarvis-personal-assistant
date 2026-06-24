@@ -3,14 +3,16 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use super::config::GatewayConfig;
-use crate::agents::{extract_file_search_query, parse_then_steps, research::extract_research_query};
-use crate::memory::knowledge_router::parse_vault_search_query;
+use crate::agents::{
+    extract_file_search_query, parse_then_steps, research::extract_research_query,
+};
 use crate::builder::is_builder_command;
 use crate::integrations::{
     is_calendar_command, is_email_notion_command, is_gmail_command, is_notion_command,
     is_ocr_notion_command, is_spotify_command,
 };
 use crate::memory::is_memory_command;
+use crate::memory::knowledge_router::parse_vault_search_query;
 
 #[derive(Debug, Clone, Deserialize)]
 struct YamlCapabilityRecord {
@@ -117,7 +119,11 @@ fn feature_flags_enabled(config: &GatewayConfig, capability: &CapabilityRecord) 
             .map(|flag| vec![flag])
             .unwrap_or_default()
     } else {
-        capability.feature_flags.iter().map(String::as_str).collect()
+        capability
+            .feature_flags
+            .iter()
+            .map(String::as_str)
+            .collect()
     };
 
     if flags.is_empty() {
@@ -179,7 +185,9 @@ mod tests {
     fn embedded_catalog_includes_starter_capabilities() {
         let capabilities = list_capabilities();
         assert!(capabilities.iter().any(|cap| cap.id == "memory.recall"));
-        assert!(capabilities.iter().any(|cap| cap.id == "proactive.heartbeat"));
+        assert!(capabilities
+            .iter()
+            .any(|cap| cap.id == "proactive.heartbeat"));
         assert!(capabilities.iter().any(|cap| cap.id == "builder.code"));
     }
 
@@ -221,7 +229,11 @@ mod tests {
         let capability = find_capability("command.study").expect("study capability");
         let mut config = GatewayConfig::default();
         config.features.study_routine = false;
-        assert!(!capability_enabled_for_turn(&config, &capability, "start study routine"));
+        assert!(!capability_enabled_for_turn(
+            &config,
+            &capability,
+            "start study routine"
+        ));
         config.features.study_routine = true;
         assert!(capability_enabled_for_turn(
             &config,

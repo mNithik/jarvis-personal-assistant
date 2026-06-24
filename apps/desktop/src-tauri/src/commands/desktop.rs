@@ -162,7 +162,8 @@ mod tests {
     #[test]
     fn desktop_spawns_are_noop_under_cargo_test_by_default() {
         assert!(desktop_spawns_disabled());
-        let db = std::env::temp_dir().join(format!("jarvis-desktop-noop-{}.db", std::process::id()));
+        let db =
+            std::env::temp_dir().join(format!("jarvis-desktop-noop-{}.db", std::process::id()));
         let _ = std::fs::remove_file(&db);
         crate::db::init_database(&db).expect("init db");
         let reply = open_named_target(&db, "notepad").expect("noop open");
@@ -174,7 +175,8 @@ mod tests {
     #[ignore = "live Windows integration: set JARVIS_DESKTOP_LIVE_TEST=1"]
     fn live_open_and_close_notepad() {
         std::env::set_var("JARVIS_DESKTOP_LIVE_TEST", "1");
-        let db = std::env::temp_dir().join(format!("jarvis-desktop-live-{}.db", std::process::id()));
+        let db =
+            std::env::temp_dir().join(format!("jarvis-desktop-live-{}.db", std::process::id()));
         let _ = std::fs::remove_file(&db);
         crate::db::init_database(&db).expect("init db");
         open_named_target(&db, "notepad").expect("open notepad");

@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
+use crate::env_local;
 use crate::gateway::config::GatewayConfig;
 use crate::gateway::types::GatewayModelTier;
 use crate::models::{ModelProviderChatRequest, ModelProviderMessage};
-use crate::env_local;
 use crate::providers::{openai_compat, presets};
 
 #[derive(Debug, Default)]

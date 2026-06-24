@@ -62,9 +62,13 @@ pub fn maybe_enqueue_anomaly_nudges(
             let overdue = tasks
                 .iter()
                 .filter(|task| {
-                    task.due.as_deref().and_then(|due| {
-                        chrono::NaiveDate::parse_from_str(&due[..10.min(due.len())], "%Y-%m-%d").ok()
-                    }).is_some_and(|due| due < today && !task.is_done)
+                    task.due
+                        .as_deref()
+                        .and_then(|due| {
+                            chrono::NaiveDate::parse_from_str(&due[..10.min(due.len())], "%Y-%m-%d")
+                                .ok()
+                        })
+                        .is_some_and(|due| due < today && !task.is_done)
                 })
                 .count();
             if overdue >= 3 {
@@ -89,7 +93,10 @@ pub fn maybe_enqueue_anomaly_nudges(
     Ok(nudges)
 }
 
-pub fn list_recent_nudges(db_path: &Path, limit: usize) -> Result<Vec<ProactiveNudgeRecord>, String> {
+pub fn list_recent_nudges(
+    db_path: &Path,
+    limit: usize,
+) -> Result<Vec<ProactiveNudgeRecord>, String> {
     let conn = Connection::open(db_path).map_err(|error| error.to_string())?;
     let mut statement = conn
         .prepare(

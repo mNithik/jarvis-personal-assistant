@@ -36,7 +36,9 @@ pub fn run_ocr_watch_terminal(ctx: &AgentContext) -> Result<StepResult, String> 
             for watch in watches {
                 delete_ocr_watch(&ctx.db_path, &watch.id)?;
             }
-            Ok(StepResult::ok("Stopped and removed all OCR watches.".to_string()))
+            Ok(StepResult::ok(
+                "Stopped and removed all OCR watches.".to_string(),
+            ))
         }
         OcrWatchAction::PauseWatches => {
             let watches = list_ocr_watches(&ctx.db_path)?;

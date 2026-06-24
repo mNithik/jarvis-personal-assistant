@@ -1,4 +1,7 @@
-use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Timelike, Utc};
+use chrono::{
+    DateTime, Datelike, Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Timelike,
+    Utc,
+};
 use regex::Regex;
 use serde_json::{json, Value};
 
@@ -108,14 +111,13 @@ fn map_event_record(item: &Value) -> CalendarEventRecord {
 }
 
 fn event_time_value(value: Option<&Value>) -> Option<String> {
-    value
-        .and_then(|entry| {
-            entry
-                .get("dateTime")
-                .or_else(|| entry.get("date"))
-                .and_then(|raw| raw.as_str())
-                .map(|raw| raw.to_string())
-        })
+    value.and_then(|entry| {
+        entry
+            .get("dateTime")
+            .or_else(|| entry.get("date"))
+            .and_then(|raw| raw.as_str())
+            .map(|raw| raw.to_string())
+    })
 }
 
 pub fn parse_calendar_from_nl(command: &str) -> Option<ParsedCalendarEvent> {
@@ -173,11 +175,7 @@ pub fn parse_calendar_from_nl(command: &str) -> Option<ParsedCalendarEvent> {
         title = "New event".to_string();
     }
 
-    Some(ParsedCalendarEvent {
-        title,
-        start,
-        end,
-    })
+    Some(ParsedCalendarEvent { title, start, end })
 }
 
 pub fn build_calendar_from_email(email: &GmailMessageRecord) -> Option<ParsedCalendarEvent> {
@@ -196,11 +194,7 @@ pub fn build_calendar_from_email(email: &GmailMessageRecord) -> Option<ParsedCal
         cleaned_title
     };
 
-    Some(ParsedCalendarEvent {
-        title,
-        start,
-        end,
-    })
+    Some(ParsedCalendarEvent { title, start, end })
 }
 
 fn parse_date_from_email_text(text: &str) -> Option<DateTime<Local>> {
@@ -220,7 +214,12 @@ fn parse_clock_time(value: &str) -> Option<NaiveTime> {
     let re = Regex::new(r"(?i)^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$").ok()?;
     let captures = re.captures(value.trim())?;
     let mut hours: u32 = captures.get(1)?.as_str().parse().ok()?;
-    let minutes: u32 = captures.get(2).map(|m| m.as_str()).unwrap_or("0").parse().ok()?;
+    let minutes: u32 = captures
+        .get(2)
+        .map(|m| m.as_str())
+        .unwrap_or("0")
+        .parse()
+        .ok()?;
     let meridiem = captures.get(3).map(|m| m.as_str().to_lowercase());
 
     if minutes > 59 || hours > 24 {
@@ -254,7 +253,13 @@ fn resolve_day_reference(day_token: &str, now: NaiveDate) -> Option<NaiveDate> {
     }
 
     let names = [
-        "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
+        "sunday",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
     ];
     let target_index = names.iter().position(|name| *name == normalized)?;
     let current_index = now.weekday().num_days_from_sunday() as usize;
@@ -278,7 +283,12 @@ fn parse_duration_minutes(command: &str) -> u32 {
     let hour_re = Regex::new(r"(?i)\bfor\s+(\d+)\s+hour").ok();
     if let Some(re) = hour_re {
         if let Some(captures) = re.captures(command) {
-            if let Ok(hours) = captures.get(1).map(|m| m.as_str()).unwrap_or("0").parse::<u32>() {
+            if let Ok(hours) = captures
+                .get(1)
+                .map(|m| m.as_str())
+                .unwrap_or("0")
+                .parse::<u32>()
+            {
                 return hours * 60;
             }
         }
@@ -287,7 +297,12 @@ fn parse_duration_minutes(command: &str) -> u32 {
     let minute_re = Regex::new(r"(?i)\bfor\s+(\d+)\s+minute").ok();
     if let Some(re) = minute_re {
         if let Some(captures) = re.captures(command) {
-            if let Ok(minutes) = captures.get(1).map(|m| m.as_str()).unwrap_or("0").parse::<u32>() {
+            if let Ok(minutes) = captures
+                .get(1)
+                .map(|m| m.as_str())
+                .unwrap_or("0")
+                .parse::<u32>()
+            {
                 return minutes;
             }
         }

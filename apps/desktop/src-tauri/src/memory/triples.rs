@@ -24,6 +24,7 @@ pub fn upsert_fact(
 }
 
 pub fn lookup_birthday(path: &Path, query: &str) -> Result<Option<String>, String> {
+    let profile_id = crate::gateway::profiles::active_profile_id_or_default(path)?;
     let connection = Connection::open(path).map_err(|error| error.to_string())?;
     let normalized = query.trim().to_lowercase();
     let mut statement = connection
@@ -31,13 +32,13 @@ pub fn lookup_birthday(path: &Path, query: &str) -> Result<Option<String>, Strin
             "SELECT e.label, f.object_value
              FROM memory_entities e
              JOIN memory_facts f ON f.entity_id = e.id
-             WHERE e.domain = 'people' AND f.predicate = 'birthday'
+             WHERE e.profile_id = ?1 AND e.domain = 'people' AND f.predicate = 'birthday'
              ORDER BY e.updated_at DESC",
         )
         .map_err(|error| error.to_string())?;
 
     let rows = statement
-        .query_map([], |row| {
+        .query_map([profile_id], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })
         .map_err(|error| error.to_string())?
@@ -45,7 +46,8 @@ pub fn lookup_birthday(path: &Path, query: &str) -> Result<Option<String>, Strin
         .map_err(|error| error.to_string())?;
 
     for (label, birthday) in rows {
-        if normalized.contains(&label.to_lowercase()) || label.to_lowercase().contains(&normalized) {
+        if normalized.contains(&label.to_lowercase()) || label.to_lowercase().contains(&normalized)
+        {
             return Ok(Some(format!("{label}'s birthday is {birthday}.")));
         }
     }
@@ -58,6 +60,7 @@ pub fn lookup_entity_fact(
     entity_query: &str,
     predicate: &str,
 ) -> Result<Option<String>, String> {
+    let profile_id = crate::gateway::profiles::active_profile_id_or_default(path)?;
     let connection = Connection::open(path).map_err(|error| error.to_string())?;
     let normalized = entity_query.trim().to_lowercase();
     let mut statement = connection
@@ -65,13 +68,13 @@ pub fn lookup_entity_fact(
             "SELECT e.label, f.object_value
              FROM memory_entities e
              JOIN memory_facts f ON f.entity_id = e.id
-             WHERE f.predicate = ?1
+             WHERE e.profile_id = ?1 AND f.predicate = ?2
              ORDER BY e.updated_at DESC",
         )
         .map_err(|error| error.to_string())?;
 
     let rows = statement
-        .query_map(params![predicate], |row| {
+        .query_map(params![profile_id, predicate], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })
         .map_err(|error| error.to_string())?
@@ -79,7 +82,8 @@ pub fn lookup_entity_fact(
         .map_err(|error| error.to_string())?;
 
     for (label, value) in rows {
-        if normalized.contains(&label.to_lowercase()) || label.to_lowercase().contains(&normalized) {
+        if normalized.contains(&label.to_lowercase()) || label.to_lowercase().contains(&normalized)
+        {
             return Ok(Some(format!("{label} {predicate}: {value}.")));
         }
     }

@@ -8,18 +8,19 @@ use super::triples::upsert_fact;
 
 pub fn list_people(path: &Path) -> Result<Vec<PersonMemoryRecord>, String> {
     super::ensure_schema(path)?;
+    let profile_id = crate::gateway::profiles::active_profile_id_or_default(path)?;
     let connection = Connection::open(path).map_err(|error| error.to_string())?;
     let mut statement = connection
         .prepare(
             "SELECT id, label, metadata_json, created_at, updated_at
              FROM memory_entities
-             WHERE domain = 'people'
+             WHERE profile_id = ?1 AND domain = 'people'
              ORDER BY updated_at DESC",
         )
         .map_err(|error| error.to_string())?;
 
     let rows = statement
-        .query_map([], |row| {
+        .query_map([profile_id], |row| {
             Ok((
                 row.get::<_, i64>(0)?,
                 row.get::<_, String>(1)?,
@@ -33,16 +34,18 @@ pub fn list_people(path: &Path) -> Result<Vec<PersonMemoryRecord>, String> {
         .map_err(|error| error.to_string())?;
 
     rows.into_iter()
-        .map(|(entity_id, label, metadata_json, created_at, updated_at)| {
-            build_person_record(
-                &connection,
-                entity_id,
-                label,
-                metadata_json,
-                created_at,
-                updated_at,
-            )
-        })
+        .map(
+            |(entity_id, label, metadata_json, created_at, updated_at)| {
+                build_person_record(
+                    &connection,
+                    entity_id,
+                    label,
+                    metadata_json,
+                    created_at,
+                    updated_at,
+                )
+            },
+        )
         .collect()
 }
 
@@ -144,6 +147,7 @@ fn build_person_record(
 }
 
 pub fn upsert_person(path: &Path, person: &PersonMemoryRecord) -> Result<(), String> {
+    let profile_id = crate::gateway::profiles::active_profile_id_or_default(path)?;
     let connection = Connection::open(path).map_err(|error| error.to_string())?;
     let metadata = serde_json::json!({
         "birthdayLabel": person.birthday_label,
@@ -163,8 +167,9 @@ pub fn upsert_person(path: &Path, person: &PersonMemoryRecord) -> Result<(), Str
     let metadata_json = serde_json::to_string(&metadata).map_err(|error| error.to_string())?;
 
     let entity_id = if let Ok(existing_id) = connection.query_row(
-        "SELECT id FROM memory_entities WHERE domain = 'people' AND lower(label) = lower(?1)",
-        params![person.name],
+        "SELECT id FROM memory_entities
+         WHERE profile_id = ?1 AND domain = 'people' AND lower(label) = lower(?2)",
+        params![profile_id, person.name],
         |row| row.get::<_, i64>(0),
     ) {
         connection
@@ -177,8 +182,9 @@ pub fn upsert_person(path: &Path, person: &PersonMemoryRecord) -> Result<(), Str
     } else {
         connection
             .execute(
-                "INSERT INTO memory_entities (domain, label, metadata_json) VALUES ('people', ?1, ?2)",
-                params![person.name, metadata_json],
+                "INSERT INTO memory_entities (profile_id, domain, label, metadata_json)
+                 VALUES (?1, 'people', ?2, ?3)",
+                params![profile_id, person.name, metadata_json],
             )
             .map_err(|error| error.to_string())?;
         connection.last_insert_rowid()
@@ -210,7 +216,11 @@ pub fn format_people_summary(path: &Path) -> Result<String, String> {
     Ok(format!(
         "Saved {} {} in memory:\n{}",
         people.len(),
-        if people.len() == 1 { "person" } else { "people" },
+        if people.len() == 1 {
+            "person"
+        } else {
+            "people"
+        },
         lines.join("\n")
     ))
 }

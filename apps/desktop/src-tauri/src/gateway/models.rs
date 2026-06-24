@@ -56,7 +56,9 @@ pub fn get_email_by_index(session_id: &str, index: u32) -> Option<GmailMessageRe
     if index == 0 {
         return None;
     }
-    get_session_emails(session_id).get((index - 1) as usize).cloned()
+    get_session_emails(session_id)
+        .get((index - 1) as usize)
+        .cloned()
 }
 
 pub fn find_email_by_query(session_id: &str, query: &str) -> Option<GmailMessageRecord> {

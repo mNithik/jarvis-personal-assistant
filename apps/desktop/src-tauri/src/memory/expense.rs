@@ -52,7 +52,10 @@ pub fn upsert_expense(path: &Path, record: &ExpenseMemoryRecord) -> Result<(), S
     Ok(())
 }
 
-pub fn import_expense_records(path: &Path, records: &[ExpenseMemoryRecord]) -> Result<usize, String> {
+pub fn import_expense_records(
+    path: &Path,
+    records: &[ExpenseMemoryRecord],
+) -> Result<usize, String> {
     for record in records {
         upsert_expense(path, record)?;
     }
@@ -122,7 +125,10 @@ fn parse_expense_date(text: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(&trimmed[..trimmed.len().min(10)], "%Y-%m-%d").ok()
 }
 
-fn filter_expenses_since(path: &Path, start: NaiveDate) -> Result<Vec<ExpenseMemoryRecord>, String> {
+fn filter_expenses_since(
+    path: &Path,
+    start: NaiveDate,
+) -> Result<Vec<ExpenseMemoryRecord>, String> {
     Ok(list_expenses(path)?
         .into_iter()
         .filter(|item| {
@@ -134,14 +140,14 @@ fn filter_expenses_since(path: &Path, start: NaiveDate) -> Result<Vec<ExpenseMem
         .collect())
 }
 
-fn format_filtered_expense_summary(
-    items: &[ExpenseMemoryRecord],
-    window_label: &str,
-) -> String {
+fn format_filtered_expense_summary(items: &[ExpenseMemoryRecord], window_label: &str) -> String {
     if items.is_empty() {
         return format!("You do not have any saved expenses for {window_label}.");
     }
-    let total = items.iter().filter_map(|item| item.amount_value).sum::<f64>();
+    let total = items
+        .iter()
+        .filter_map(|item| item.amount_value)
+        .sum::<f64>();
     let lines = items
         .iter()
         .take(8)
@@ -199,11 +205,7 @@ pub fn format_monthly_expense_summary_by_category(
     let items = filter_expenses_since(path, start)?
         .into_iter()
         .filter(|item| {
-            item.category
-                .as_deref()
-                .unwrap_or_default()
-                .to_lowercase()
-                == normalized_category
+            item.category.as_deref().unwrap_or_default().to_lowercase() == normalized_category
         })
         .collect::<Vec<_>>();
     Ok(format_filtered_expense_summary(

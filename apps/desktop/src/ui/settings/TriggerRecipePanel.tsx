@@ -119,7 +119,7 @@ export default function TriggerRecipePanel() {
   }
 
   return (
-    <div className="result-card">
+    <div className="result-card" data-testid="trigger-recipe-panel">
       <p className="section-kicker">Trigger recipes</p>
       <h3>Proactive automations</h3>
       <p className="result-meta">
@@ -131,6 +131,7 @@ export default function TriggerRecipePanel() {
             key={preset.kind}
             type="button"
             className="ghost-button"
+            data-testid={`trigger-add-preset-${preset.kind}`}
             disabled={isBusy}
             onClick={() => void addPreset(preset.kind, preset.name, preset.schedule)}
           >

@@ -2,8 +2,8 @@ use std::path::Path;
 
 use serde_json::json;
 
-use super::entity_store::list_entity_metadata;
 use super::ensure_schema;
+use super::entity_store::list_entity_metadata;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -30,7 +30,10 @@ fn parse_control(domain: &str, entity_id: i64, metadata_json: &str) -> MemoryEnt
         entity_id,
         domain: domain.to_string(),
         label,
-        pinned: value.get("pinned").and_then(|v| v.as_bool()).unwrap_or(false),
+        pinned: value
+            .get("pinned")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
         forgotten: value
             .get("forgotten")
             .and_then(|v| v.as_bool())
@@ -67,11 +70,14 @@ pub fn set_entity_control_flags(
     confidence: Option<&str>,
 ) -> Result<MemoryEntityControl, String> {
     ensure_schema(path)?;
+    let profile_id = crate::gateway::profiles::active_profile_id_or_default(path)?;
     let connection = rusqlite::Connection::open(path).map_err(|error| error.to_string())?;
     let metadata_json: String = connection
         .query_row(
-            "SELECT metadata_json FROM memory_entities WHERE id = ?1 AND domain = ?2",
-            rusqlite::params![entity_id, domain],
+            "SELECT metadata_json
+             FROM memory_entities
+             WHERE id = ?1 AND domain = ?2 AND profile_id = ?3",
+            rusqlite::params![entity_id, domain, profile_id],
             |row| row.get(0),
         )
         .map_err(|error| error.to_string())?;
@@ -91,8 +97,10 @@ pub fn set_entity_control_flags(
     let updated = serde_json::to_string(&value).map_err(|error| error.to_string())?;
     connection
         .execute(
-            "UPDATE memory_entities SET metadata_json = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2 AND domain = ?3",
-            rusqlite::params![updated, entity_id, domain],
+            "UPDATE memory_entities
+             SET metadata_json = ?1, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?2 AND domain = ?3 AND profile_id = ?4",
+            rusqlite::params![updated, entity_id, domain, profile_id],
         )
         .map_err(|error| error.to_string())?;
 
@@ -107,11 +115,14 @@ pub fn correct_entity_field(
     new_value: &str,
 ) -> Result<MemoryEntityControl, String> {
     ensure_schema(path)?;
+    let profile_id = crate::gateway::profiles::active_profile_id_or_default(path)?;
     let connection = rusqlite::Connection::open(path).map_err(|error| error.to_string())?;
     let metadata_json: String = connection
         .query_row(
-            "SELECT metadata_json FROM memory_entities WHERE id = ?1 AND domain = ?2",
-            rusqlite::params![entity_id, domain],
+            "SELECT metadata_json
+             FROM memory_entities
+             WHERE id = ?1 AND domain = ?2 AND profile_id = ?3",
+            rusqlite::params![entity_id, domain, profile_id],
             |row| row.get(0),
         )
         .map_err(|error| error.to_string())?;
@@ -125,8 +136,10 @@ pub fn correct_entity_field(
     let updated = serde_json::to_string(&value).map_err(|error| error.to_string())?;
     connection
         .execute(
-            "UPDATE memory_entities SET metadata_json = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2 AND domain = ?3",
-            rusqlite::params![updated, entity_id, domain],
+            "UPDATE memory_entities
+             SET metadata_json = ?1, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?2 AND domain = ?3 AND profile_id = ?4",
+            rusqlite::params![updated, entity_id, domain, profile_id],
         )
         .map_err(|error| error.to_string())?;
 

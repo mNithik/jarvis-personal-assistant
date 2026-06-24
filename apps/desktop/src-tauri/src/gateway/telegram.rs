@@ -5,11 +5,8 @@ use serde::Deserialize;
 use tauri::{AppHandle, Manager};
 
 use super::{
-    channels::ChannelTurnRequest,
-    config::GatewayConfig,
-    local_turn_api::run_channel_turn_internal,
-    runtime::headless::HeadlessGatewayContext,
-    types::TurnRequest,
+    channels::ChannelTurnRequest, config::GatewayConfig, local_turn_api::run_channel_turn_internal,
+    runtime::headless::HeadlessGatewayContext, types::TurnRequest,
 };
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -113,11 +110,7 @@ enum TelegramPollTarget {
 
 fn spawn_poller(target: TelegramPollTarget, config: GatewayConfig) {
     {
-        let already_running = runtime()
-            .status
-            .lock()
-            .map(|s| s.running)
-            .unwrap_or(false);
+        let already_running = runtime().status.lock().map(|s| s.running).unwrap_or(false);
         if already_running {
             return;
         }
@@ -198,7 +191,13 @@ fn spawn_poller(target: TelegramPollTarget, config: GatewayConfig) {
                         }
                     };
                     let _ = send_telegram_message(&client, &token, &chat_id, &reply).await;
-                    log_telegram_activity(&target, &format!("reply to {chat_id}: {}", reply.chars().take(80).collect::<String>()));
+                    log_telegram_activity(
+                        &target,
+                        &format!(
+                            "reply to {chat_id}: {}",
+                            reply.chars().take(80).collect::<String>()
+                        ),
+                    );
                 }
             }
         }

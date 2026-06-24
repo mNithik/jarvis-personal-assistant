@@ -71,7 +71,10 @@ pub fn spawn_proactive_scheduler(app: AppHandle) {
 
             if config.proactive.ocr_watch_tick_enabled && last_ocr_minute != Some(minute_key) {
                 last_ocr_minute = Some(minute_key);
-                let _ = app.emit("ocr-watch-tick", serde_json::json!({ "minute": minute_key }));
+                let _ = app.emit(
+                    "ocr-watch-tick",
+                    serde_json::json!({ "minute": minute_key }),
+                );
             }
 
             let _ = super::trigger_recipes::maybe_enqueue_scheduled_recipes(
@@ -85,11 +88,9 @@ pub fn spawn_proactive_scheduler(app: AppHandle) {
             );
             let _ = super::anomaly::maybe_enqueue_anomaly_nudges(&app_state.db_path, &config);
 
-            if let Err(error) = super::trigger_dispatcher::process_trigger_queue(
-                &app,
-                &app_state.db_path,
-                &config,
-            ) {
+            if let Err(error) =
+                super::trigger_dispatcher::process_trigger_queue(&app, &app_state.db_path, &config)
+            {
                 let _ = app.emit(
                     "gateway-event",
                     super::types::GatewayEvent {
@@ -116,9 +117,13 @@ fn run_heartbeat_tick(
 ) -> Result<(), String> {
     ensure_heartbeat_file(app_data_dir)?;
     let heartbeat_path = app_data_dir.join("HEARTBEAT.md");
-    let body = std::fs::read_to_string(&heartbeat_path).unwrap_or_else(|_| DEFAULT_HEARTBEAT_TEMPLATE.to_string());
+    let body = std::fs::read_to_string(&heartbeat_path)
+        .unwrap_or_else(|_| DEFAULT_HEARTBEAT_TEMPLATE.to_string());
 
-    let mut bus = gateway_state.bus.lock().map_err(|error| error.to_string())?;
+    let mut bus = gateway_state
+        .bus
+        .lock()
+        .map_err(|error| error.to_string())?;
     let event = GatewayEvent {
         id: format!("heartbeat-{}", chrono::Utc::now().timestamp()),
         session_id: "proactive-heartbeat".to_string(),
@@ -159,9 +164,13 @@ fn run_morning_brief_turn(
     let router_context = crate::gateway::router::RouterContext {
         config: config.clone(),
         db_path: Some(app_state.db_path.clone()),
+        app_data_dir: Some(app_state.app_data_dir.clone()),
     };
 
-    let mut bus = gateway_state.bus.lock().map_err(|error| error.to_string())?;
+    let mut bus = gateway_state
+        .bus
+        .lock()
+        .map_err(|error| error.to_string())?;
     let mut escalation = gateway_state
         .escalation
         .lock()

@@ -5,9 +5,7 @@ use serde_json::json;
 
 use crate::db::get_ollama_config;
 
-use super::l0::{
-    build_route, classify_sensitivity, normalize_command, CapabilityRoute,
-};
+use super::l0::{build_route, classify_sensitivity, normalize_command, CapabilityRoute};
 use crate::gateway::config::GatewayConfig;
 use crate::gateway::types::{GatewayAgentKind, GatewayModelTier, GatewayRoute, RouteLevel};
 
@@ -26,11 +24,7 @@ pub fn route_l2(command: &str, db_path: &Path, config: &GatewayConfig) -> Option
     None
 }
 
-fn try_l2_route(
-    command: &str,
-    base_url: &str,
-    model_name: &str,
-) -> Option<GatewayRoute> {
+fn try_l2_route(command: &str, base_url: &str, model_name: &str) -> Option<GatewayRoute> {
     let normalized = normalize_command(command);
     let sensitivity = classify_sensitivity(&normalized);
     let prompt = format!(
@@ -84,7 +78,8 @@ fn ollama_generate_json(
         .send()
         .map_err(|error| error.to_string())?;
     let body = response.text().map_err(|error| error.to_string())?;
-    let value: serde_json::Value = serde_json::from_str(&body).map_err(|error| error.to_string())?;
+    let value: serde_json::Value =
+        serde_json::from_str(&body).map_err(|error| error.to_string())?;
     let content = value
         .get("response")
         .and_then(|response| response.as_str())

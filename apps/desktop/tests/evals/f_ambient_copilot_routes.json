@@ -1,0 +1,5 @@
+[
+  { "phrase": "ambient copilot", "capabilityId": "labs.ambient" },
+  { "phrase": "start ambient session", "capabilityId": "labs.ambient" },
+  { "phrase": "end ambient session", "capabilityId": "labs.ambient" }
+]

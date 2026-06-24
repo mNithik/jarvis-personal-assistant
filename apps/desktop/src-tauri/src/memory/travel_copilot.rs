@@ -47,7 +47,13 @@ pub fn compose_travel_copilot(
                             || summary.contains("travel")
                     })
                     .take(5)
-                    .map(|event| format!("- {} ({})", event.summary, event.start.as_deref().unwrap_or("")))
+                    .map(|event| {
+                        format!(
+                            "- {} ({})",
+                            event.summary,
+                            event.start.as_deref().unwrap_or("")
+                        )
+                    })
                     .collect();
                 if !travel_events.is_empty() {
                     sections.push(format!(
@@ -108,9 +114,6 @@ pub fn is_travel_copilot_command(command: &str) -> bool {
     let normalized = command.trim().to_lowercase();
     matches!(
         normalized.as_str(),
-        "prep me for my trip"
-            | "travel copilot"
-            | "refresh travel prep"
-            | "prepare for my trip"
+        "prep me for my trip" | "travel copilot" | "refresh travel prep" | "prepare for my trip"
     ) || normalized.starts_with("prep me for trip")
 }

@@ -16,7 +16,8 @@ fn main() {
         )
         .expect("write embedded-terminal capability");
     } else if embedded_capability_path.exists() {
-        std::fs::remove_file(embedded_capability_path).expect("remove embedded-terminal capability");
+        std::fs::remove_file(embedded_capability_path)
+            .expect("remove embedded-terminal capability");
     }
 
     println!("cargo:rerun-if-changed=build.rs");

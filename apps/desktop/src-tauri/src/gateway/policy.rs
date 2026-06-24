@@ -53,10 +53,7 @@ pub fn requires_preview(class: GatewayPolicyClass) -> bool {
 }
 
 pub fn requires_explicit_confirm(class: GatewayPolicyClass) -> bool {
-    matches!(
-        class,
-        GatewayPolicyClass::Delete | GatewayPolicyClass::Pay
-    )
+    matches!(class, GatewayPolicyClass::Delete | GatewayPolicyClass::Pay)
 }
 
 pub fn requires_confirmation(class: GatewayPolicyClass) -> bool {

@@ -58,5 +58,15 @@
   { "id": "F57", "capabilityId": "channels.mobile", "eval": null, "status": "golden", "note": "Mobile approve API routes tested in local_turn_api.rs" },
   { "id": "F58", "capabilityId": "memory.graph", "eval": "f_topic_graph_routes.json", "status": "golden", "note": "Topic graph L0 routes" },
   { "id": "F59", "capabilityId": "memory.travel", "eval": "f_travel_copilot_routes.json", "status": "golden", "note": "Travel copilot routes" },
-  { "id": "F60", "capabilityId": "labs.worldmodel", "eval": null, "status": "golden", "executionEval": "f_world_model_execution.json", "note": "World model query execution" }
+  { "id": "F60", "capabilityId": "labs.worldmodel", "eval": null, "status": "golden", "executionEval": "f_world_model_execution.json", "note": "World model query execution" },
+  { "id": "F61", "capabilityId": "platform.profiles", "eval": "f_profile_switch_routes.json", "status": "golden", "note": "Profile switch L0 routes + Rust isolation execution in gateway/evals.rs" },
+  { "id": "F62", "capabilityId": "channels.api", "eval": null, "status": "golden", "note": "Local turn API schema tests in local_turn_api.rs" },
+  { "id": "F63", "capabilityId": "platform.skill", "eval": "f_skill_sdk_routes.json", "status": "golden", "note": "Skill SDK route golden + Rust execution coverage for route/http/script handlers and profile-scoped overrides in gateway/evals.rs" },
+  { "id": "F64", "capabilityId": "labs.ambient", "eval": "f_ambient_copilot_routes.json", "status": "golden", "note": "Ambient copilot lab routes + Rust signal execution in gateway/evals.rs" },
+  { "id": "F65", "capabilityId": "labs.bundle", "eval": null, "status": "golden", "executionEval": "f_project_bundle_execution.json", "note": "L1 project bundle graduation gate" },
+  { "id": "F66", "capabilityId": "labs.verifier", "eval": null, "status": "golden", "executionEval": "f_council_verifier_execution.json", "note": "L2 council verifier graduation gate" },
+  { "id": "F67", "capabilityId": "labs.council", "eval": null, "status": "golden", "note": "L3 council runtime vote-log promotion gate" },
+  { "id": "F68", "capabilityId": "labs.anomaly", "eval": null, "status": "golden", "note": "L4 proactive anomaly dismiss/accept cohort gate" },
+  { "id": "F69", "capabilityId": "labs.worldmodel", "eval": null, "status": "golden", "executionEval": "f_world_model_execution.json", "note": "L5 world model query graduation gate" },
+  { "id": "F70", "capabilityId": "labs.ambient", "eval": "f_ambient_copilot_routes.json", "status": "golden", "note": "L6 ambient copilot graduation gate (zero auto-writes, dismiss rate)" }
 ]

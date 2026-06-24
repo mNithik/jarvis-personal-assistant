@@ -10,4 +10,13 @@ apps/desktop/src-tauri/target/
 .env.local
 apps/desktop/.env
 apps/desktop/src-tauri/.env
+.csegraph/
 
+# CseGraph local setup (regenerate with `csegraph install`)
+.cursor/
+AGENTS.md
+
+# CseGraph local setup (regenerate with `csegraph install`)
+.codex/
+CODEX.md
+.tmp-*/

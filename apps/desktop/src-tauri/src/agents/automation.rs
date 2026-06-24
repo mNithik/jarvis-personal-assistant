@@ -23,7 +23,8 @@ impl Agent for AutomationAgent {
         if normalized.starts_with("run workflow ") || normalized.starts_with("start workflow ") {
             return run_saved_workflow(ctx);
         }
-        if normalized.contains("project bundle") || normalized.contains("meeting follow-up bundle") {
+        if normalized.contains("project bundle") || normalized.contains("meeting follow-up bundle")
+        {
             let (success, reply) = crate::gateway::labs::project_bundle_reply(
                 &ctx.config,
                 &ctx.db_path,
@@ -44,8 +45,8 @@ impl Agent for AutomationAgent {
 }
 
 fn run_saved_workflow(ctx: &AgentContext) -> Result<StepResult, String> {
-    let name = workflow_name_from_command(&ctx.command)
-        .unwrap_or_else(|| ctx.step_description.clone());
+    let name =
+        workflow_name_from_command(&ctx.command).unwrap_or_else(|| ctx.step_description.clone());
 
     if let Some((routine, steps)) = find_routine_with_steps(&ctx.db_path, &name)? {
         let mut executed = Vec::new();
@@ -107,10 +108,16 @@ fn execute_workflow_step(db_path: &std::path::Path, step: &str) -> Result<String
     open_named_target(db_path, trimmed)
 }
 
-fn execute_routine_step(db_path: &std::path::Path, step: &RoutineStepRecord) -> Result<String, String> {
+fn execute_routine_step(
+    db_path: &std::path::Path,
+    step: &RoutineStepRecord,
+) -> Result<String, String> {
     match step.action_type.as_str() {
         "open_url" | "open_app" => open_named_target(db_path, &step.action_value),
-        _ => Err(format!("Unsupported routine action type {}", step.action_type)),
+        _ => Err(format!(
+            "Unsupported routine action type {}",
+            step.action_type
+        )),
     }
 }
 

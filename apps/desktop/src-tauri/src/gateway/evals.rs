@@ -36,6 +36,7 @@ mod tests {
 
         let context = RouterContext {
             db_path: None,
+            app_data_dir: None,
             config: crate::gateway::config::GatewayConfig::default(),
         };
 
@@ -349,7 +350,44 @@ mod tests {
             .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
         let entries: Vec<FabricIndexEntry> =
             serde_json::from_str(&raw).expect("fabric index json should parse");
-        assert_eq!(entries.len(), 48, "fabric index should cover F1–F48");
+        let fabric_ids = entries
+            .iter()
+            .map(|entry| {
+                entry
+                    .id
+                    .strip_prefix('F')
+                    .and_then(|value| value.parse::<usize>().ok())
+                    .unwrap_or_else(|| {
+                        panic!("fabric id {} should be formatted like F<number>", entry.id)
+                    })
+            })
+            .collect::<Vec<_>>();
+        let mut unique_ids = fabric_ids.clone();
+        unique_ids.sort_unstable();
+        unique_ids.dedup();
+        assert_eq!(
+            unique_ids.len(),
+            entries.len(),
+            "fabric index should not contain duplicate ids"
+        );
+        assert_eq!(
+            unique_ids.first().copied(),
+            Some(1),
+            "fabric index should start at F1"
+        );
+        assert_eq!(
+            unique_ids.last().copied(),
+            Some(entries.len()),
+            "fabric index should end at F{}",
+            entries.len()
+        );
+        let expected_ids = (1..=entries.len()).collect::<Vec<_>>();
+        assert_eq!(
+            unique_ids,
+            expected_ids,
+            "fabric index should cover every id from F1 to F{} with no gaps",
+            entries.len()
+        );
 
         let mut route_files = std::collections::BTreeSet::new();
         let mut execution_files = std::collections::BTreeSet::new();
@@ -376,7 +414,8 @@ mod tests {
                 continue;
             }
             match file.as_str() {
-                "f10_gmail_execution.json" | "f12_calendar_execution.json"
+                "f10_gmail_execution.json"
+                | "f12_calendar_execution.json"
                 | "f_email_copilot_execution.json" => {
                     run_execution_file(&file);
                 }
@@ -416,7 +455,8 @@ mod tests {
 
         let mut bus = crate::gateway::bus::EventBus::default();
         let mut escalation = EscalationTracker::default();
-        let db_path = std::env::temp_dir().join(format!("jarvis-eval-dry-run-{}", std::process::id()));
+        let db_path =
+            std::env::temp_dir().join(format!("jarvis-eval-dry-run-{}", std::process::id()));
         let _ = std::fs::remove_file(&db_path);
         crate::db::init_database(&db_path).expect("init db");
 
@@ -443,6 +483,7 @@ mod tests {
             &config,
             &RouterContext {
                 db_path: Some(db_path.clone()),
+                app_data_dir: Some(app_data_dir.clone()),
                 config: config.clone(),
             },
             &mut bus,
@@ -454,7 +495,10 @@ mod tests {
         let _ = std::fs::remove_file(db_path);
     }
 
-    fn run_dry_run_turn(command: &str, configure: impl FnOnce(&mut crate::gateway::config::GatewayConfig)) -> crate::gateway::orchestrator::GatewayTurnResponse {
+    fn run_dry_run_turn(
+        command: &str,
+        configure: impl FnOnce(&mut crate::gateway::config::GatewayConfig),
+    ) -> crate::gateway::orchestrator::GatewayTurnResponse {
         use crate::gateway::config::GatewayConfig;
         use crate::gateway::config::GatewayMode;
         use crate::gateway::orchestrator::{GatewayOrchestrator, TurnExecutionEnv};
@@ -494,6 +538,7 @@ mod tests {
             &config,
             &RouterContext {
                 db_path: Some(db_path.clone()),
+                app_data_dir: Some(app_data_dir.clone()),
                 config: config.clone(),
             },
             &mut bus,
@@ -524,12 +569,10 @@ mod tests {
     fn dry_run_confirm_route_requires_approval_before_planning() {
         let response = run_dry_run_turn("open chrome", |_| {});
         assert!(response.awaiting_approval);
-        assert!(
-            !response
-                .events
-                .iter()
-                .any(|event| event.kind == crate::gateway::types::GatewayEventKind::ToolStart)
-        );
+        assert!(!response
+            .events
+            .iter()
+            .any(|event| event.kind == crate::gateway::types::GatewayEventKind::ToolStart));
     }
 
     #[test]
@@ -537,18 +580,14 @@ mod tests {
         let response = run_dry_run_turn("launch study setup", |config| {
             config.features.study_routine = true;
         });
-        assert!(
-            response
-                .events
-                .iter()
-                .any(|event| event.message.contains("Turn budgets"))
-        );
-        assert!(
-            response
-                .events
-                .iter()
-                .any(|event| event.message.contains("Provider quota"))
-        );
+        assert!(response
+            .events
+            .iter()
+            .any(|event| event.message.contains("Turn budgets")));
+        assert!(response
+            .events
+            .iter()
+            .any(|event| event.message.contains("Provider quota")));
     }
 
     #[derive(Debug, Deserialize)]
@@ -566,7 +605,9 @@ mod tests {
     fn install_google_execution_fixture(fixture: &str) {
         use std::collections::HashMap;
 
-        use crate::gateway::models::{clear_all_session_emails, store_session_emails, GmailMessageRecord};
+        use crate::gateway::models::{
+            clear_all_session_emails, store_session_emails, GmailMessageRecord,
+        };
         use crate::integrations::google::{auth, client};
 
         clear_all_session_emails();
@@ -645,7 +686,7 @@ mod tests {
     }
 
     fn run_execution_file(file_name: &str) {
-        use crate::agents::{Agent, AgentContext, integrations::IntegrationsAgent};
+        use crate::agents::{integrations::IntegrationsAgent, Agent, AgentContext};
         use crate::gateway::config::GatewayConfig;
         use crate::gateway::models::clear_all_session_emails;
         use crate::gateway::types::{
@@ -710,7 +751,9 @@ mod tests {
             assert!(
                 result.reply.contains(&case.expect_reply_contains),
                 "command {:?} expected reply to contain {:?}, got {:?}",
-                case.command, case.expect_reply_contains, result.reply
+                case.command,
+                case.expect_reply_contains,
+                result.reply
             );
             assert!(result.integration_handoff.is_none());
 
@@ -750,6 +793,7 @@ mod tests {
             config,
             &RouterContext {
                 db_path: Some(db_path.to_path_buf()),
+                app_data_dir: Some(app_data_dir.clone()),
                 config: config.clone(),
             },
             &mut bus,
@@ -760,7 +804,7 @@ mod tests {
 
     fn install_mission_execution_fixture(db_path: &std::path::Path, fixture: &str) {
         use crate::db::{init_database, save_task_state, TaskStateRecord};
-        use crate::gateway::task_loop::{TaskStep, TaskStepsPayload, StepStatus};
+        use crate::gateway::task_loop::{StepStatus, TaskStep, TaskStepsPayload};
 
         let _ = init_database(db_path);
         match fixture {
@@ -823,15 +867,13 @@ mod tests {
                 assert!(
                     !response.awaiting_approval,
                     "command {:?} should execute without approval, got {:?}",
-                    case.command,
-                    response.result.reply
+                    case.command, response.result.reply
                 );
             } else {
                 assert!(
                     response.awaiting_approval,
                     "command {:?} should await approval, got {:?}",
-                    case.command,
-                    response.result.reply
+                    case.command, response.result.reply
                 );
             }
             assert!(
@@ -911,12 +953,8 @@ mod tests {
             if case.fixture == "lab_enabled" {
                 config.labs.project_bundle_pilot = true;
             }
-            let (success, reply) = project_bundle_reply(
-                &config,
-                &db_path,
-                &std::env::temp_dir(),
-                &case.command,
-            );
+            let (success, reply) =
+                project_bundle_reply(&config, &db_path, &std::env::temp_dir(), &case.command);
             assert_eq!(
                 success, case.expect_success,
                 "command {:?} fixture {}",
@@ -1004,9 +1042,14 @@ mod tests {
                 case.command, case.fixture
             );
             assert!(
-                result.reply.to_lowercase().contains(&case.expect_reply_contains.to_lowercase()),
+                result
+                    .reply
+                    .to_lowercase()
+                    .contains(&case.expect_reply_contains.to_lowercase()),
                 "command {:?} expected reply to contain {:?}, got {:?}",
-                case.command, case.expect_reply_contains, result.reply
+                case.command,
+                case.expect_reply_contains,
+                result.reply
             );
             assert!(result.integration_handoff.is_none());
         }
@@ -1015,10 +1058,10 @@ mod tests {
     fn install_memory_execution_fixture(fixture: &str, db_path: &std::path::Path) {
         use std::collections::HashMap;
 
-        use chrono::{Duration, Local};
         use crate::integrations::google::{auth, client};
         use crate::memory::{self, meeting};
         use crate::models::MeetingPrepMemoryRecord;
+        use chrono::{Duration, Local};
 
         client::clear_mock_responses();
         auth::clear_test_tokens();
@@ -1184,12 +1227,8 @@ mod tests {
         config.labs.council_verifier = true;
         let mut blocked = 0usize;
         for case in &cases {
-            let result = council_verify_send(
-                &config,
-                GatewayPolicyClass::Send,
-                "send email",
-                &case.draft,
-            );
+            let result =
+                council_verify_send(&config, GatewayPolicyClass::Send, "send email", &case.draft);
             let is_blocked = result.is_err();
             if is_blocked == case.expect_blocked {
                 if is_blocked {
@@ -1202,8 +1241,13 @@ mod tests {
                 );
             }
         }
-        let rate = (blocked as f64 / cases.iter().filter(|c| c.expect_blocked).count().max(1) as f64) * 100.0;
-        assert!(rate >= 80.0, "council verifier block rate {rate}% below 80%");
+        let rate = (blocked as f64
+            / cases.iter().filter(|c| c.expect_blocked).count().max(1) as f64)
+            * 100.0;
+        assert!(
+            rate >= 80.0,
+            "council verifier block rate {rate}% below 80%"
+        );
     }
 
     fn run_world_model_execution_file(file_name: &str) {
@@ -1238,8 +1282,15 @@ mod tests {
             config.labs.world_model_queries = true;
             config.features.memory = true;
             let reply = answer_world_model_query(&db_path, &config, &case.command);
-            let success = reply.as_ref().map(|text| !text.contains("disabled")).unwrap_or(false);
-            assert_eq!(success, case.expect_success, "world model success for {}", case.command);
+            let success = reply
+                .as_ref()
+                .map(|text| !text.contains("disabled"))
+                .unwrap_or(false);
+            assert_eq!(
+                success, case.expect_success,
+                "world model success for {}",
+                case.command
+            );
             if let (Ok(text), Some(needle)) = (&reply, &case.expect_reply_contains) {
                 assert!(
                     text.to_lowercase().contains(&needle.to_lowercase()),
@@ -1322,7 +1373,9 @@ mod tests {
                     .to_lowercase()
                     .contains(&case.expect_reply_contains.to_lowercase()),
                 "command {:?} expected reply to contain {:?}, got {:?}",
-                case.command, case.expect_reply_contains, result.reply
+                case.command,
+                case.expect_reply_contains,
+                result.reply
             );
 
             client::clear_mock_responses();
@@ -1333,7 +1386,9 @@ mod tests {
     }
 
     fn run_audit_rollback_execution_file(file_name: &str) {
-        use crate::gateway::audit::{append_entry, rollback_audit_entry, search_audit_log, AuditOutcome, AuditRecord};
+        use crate::gateway::audit::{
+            append_entry, rollback_audit_entry, search_audit_log, AuditOutcome, AuditRecord,
+        };
         use crate::gateway::types::GatewayPolicyClass;
 
         let path = eval_path(file_name);
@@ -1357,7 +1412,8 @@ mod tests {
                     use crate::db::save_notion_config;
                     use crate::integrations::notion;
 
-                    save_notion_config(&db_path, Some("token-eval"), Some("db-eval")).expect("notion");
+                    save_notion_config(&db_path, Some("token-eval"), Some("db-eval"))
+                        .expect("notion");
                     notion::set_mock_responses(std::collections::HashMap::from([(
                         "/v1/pages/page-eval".to_string(),
                         r#"{"id":"page-eval","archived":true}"#.to_string(),
@@ -1376,10 +1432,12 @@ mod tests {
                         },
                     )
                     .expect("append");
-                    let results = search_audit_log(&app_data_dir, Some("plan"), Some("write"), None, 10)
-                        .expect("search");
+                    let results =
+                        search_audit_log(&app_data_dir, Some("plan"), Some("write"), None, 10)
+                            .expect("search");
                     assert!(!results.is_empty());
-                    let reply = rollback_audit_entry(&app_data_dir, &db_path, results[0].line_index);
+                    let reply =
+                        rollback_audit_entry(&app_data_dir, &db_path, results[0].line_index);
                     assert_eq!(case.expect_success, reply.is_ok());
                     if case.expect_success {
                         assert!(reply.unwrap().to_lowercase().contains("archived"));
@@ -1419,8 +1477,8 @@ mod tests {
                         },
                     )
                     .expect("append");
-                    let results =
-                        search_audit_log(&app_data_dir, Some("planner"), None, None, 10).expect("search");
+                    let results = search_audit_log(&app_data_dir, Some("planner"), None, None, 10)
+                        .expect("search");
                     assert_eq!(case.expect_success, !results.is_empty());
                 }
                 other => panic!("unknown audit execution fixture: {other}"),
@@ -1501,7 +1559,9 @@ mod tests {
                     .to_lowercase()
                     .contains(&case.expect_reply_contains.to_lowercase()),
                 "command {:?} expected reply to contain {:?}, got {:?}",
-                case.command, case.expect_reply_contains, result.reply
+                case.command,
+                case.expect_reply_contains,
+                result.reply
             );
 
             client::clear_mock_responses();
@@ -1591,6 +1651,429 @@ mod tests {
     }
 
     #[test]
+    fn eval_fabric_f61_profile_memory_isolation() {
+        use crate::gateway::profiles::{get_active_profile_id, seed_default_profiles};
+        use crate::memory::{recall_text, remember};
+
+        let db_path = std::env::temp_dir().join(format!(
+            "jarvis-eval-profile-isolation-{}.db",
+            std::process::id()
+        ));
+        let app_data_dir = std::env::temp_dir().join(format!(
+            "jarvis-eval-profile-isolation-app-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_dir_all(&app_data_dir);
+        std::fs::create_dir_all(&app_data_dir).expect("app dir");
+        seed_default_profiles(&db_path, &app_data_dir).expect("seed profiles");
+
+        remember(&db_path, "Work launch checklist", "general").expect("remember work");
+        let personal_switch =
+            crate::gateway::profiles::switch_profile(&db_path, &app_data_dir, "personal");
+        assert!(
+            personal_switch.is_ok(),
+            "direct personal switch should succeed"
+        );
+        remember(&db_path, "Personal dinner reservation", "general").expect("remember personal");
+
+        let mut config = crate::gateway::config::GatewayConfig::default();
+        config.enabled = true;
+        config.features.memory = true;
+
+        let response = run_orchestrator_execution_turn(&db_path, &config, "switch to work profile");
+        assert!(
+            !response.result.legacy,
+            "profile switch should execute via gateway"
+        );
+        assert!(
+            response
+                .result
+                .reply
+                .to_lowercase()
+                .contains("work profile"),
+            "expected work switch reply, got {:?}",
+            response.result.reply
+        );
+        assert_eq!(
+            get_active_profile_id(&db_path)
+                .expect("active work")
+                .as_deref(),
+            Some("work")
+        );
+        let work_recall = recall_text(&db_path, "launch checklist").expect("work recall");
+        assert!(work_recall.contains("Work launch checklist"));
+        let hidden_personal =
+            recall_text(&db_path, "dinner reservation").expect("hidden personal recall");
+        assert!(
+            hidden_personal.contains("could not find anything"),
+            "expected work profile to hide personal memory, got {:?}",
+            hidden_personal
+        );
+
+        let response =
+            run_orchestrator_execution_turn(&db_path, &config, "switch to personal profile");
+        assert!(
+            !response.result.legacy,
+            "profile switch should execute via gateway"
+        );
+        assert!(
+            response
+                .result
+                .reply
+                .to_lowercase()
+                .contains("personal profile"),
+            "expected personal switch reply, got {:?}",
+            response.result.reply
+        );
+        assert_eq!(
+            get_active_profile_id(&db_path)
+                .expect("active personal")
+                .as_deref(),
+            Some("personal")
+        );
+        let personal_recall = recall_text(&db_path, "dinner reservation").expect("personal recall");
+        assert!(personal_recall.contains("Personal dinner reservation"));
+        let hidden_work = recall_text(&db_path, "launch checklist").expect("hidden work recall");
+        assert!(
+            hidden_work.contains("could not find anything"),
+            "expected personal profile to hide work memory, got {:?}",
+            hidden_work
+        );
+
+        let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_dir_all(&app_data_dir);
+    }
+
+    #[test]
+    fn eval_fabric_f63_skill_handler_execution() {
+        use crate::agents::{Agent, AgentContext};
+        use crate::gateway::config::GatewayConfig;
+        use crate::gateway::profiles::seed_default_profiles;
+        use crate::gateway::skills::{SkillHandler, SkillManifest};
+        use crate::gateway::types::{
+            GatewayAgentKind, GatewayConfidenceBand, GatewayDecisionPolicy, GatewayModelTier,
+            GatewayRoute, GatewaySensitivity, RouteLevel,
+        };
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0);
+        let db_path = std::env::temp_dir().join(format!("jarvis-eval-skill-handler-{nanos}.db"));
+        let app_data_dir =
+            std::env::temp_dir().join(format!("jarvis-eval-skill-handler-app-{nanos}"));
+        let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_dir_all(&app_data_dir);
+        std::fs::create_dir_all(app_data_dir.join("skills")).expect("skills root");
+        seed_default_profiles(&db_path, &app_data_dir).expect("seed profiles");
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut request = [0_u8; 1024];
+            let _ = stream.read(&mut request);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nskill-ok\n")
+                .expect("write");
+        });
+
+        let manifests = vec![
+            SkillManifest {
+                id: "route-skill".into(),
+                version: "1.0.0".into(),
+                label: "Route Skill".into(),
+                keywords: vec!["route skill".into()],
+                agent: "command".into(),
+                permissions: vec!["read".into()],
+                enabled: true,
+                handler: SkillHandler::Route {
+                    capability_id: "command.general".into(),
+                },
+            },
+            SkillManifest {
+                id: "http-skill".into(),
+                version: "1.0.0".into(),
+                label: "Http Skill".into(),
+                keywords: vec!["http skill".into()],
+                agent: "command".into(),
+                permissions: vec!["read".into()],
+                enabled: true,
+                handler: SkillHandler::Http {
+                    url: format!("http://127.0.0.1:{port}/health"),
+                    method: "GET".into(),
+                },
+            },
+            SkillManifest {
+                id: "script-skill".into(),
+                version: "1.0.0".into(),
+                label: "Script Skill".into(),
+                keywords: vec!["script skill".into()],
+                agent: "command".into(),
+                permissions: vec!["execute".into()],
+                enabled: true,
+                handler: SkillHandler::Script {
+                    command: "cmd /C echo skill-script".into(),
+                },
+            },
+            SkillManifest {
+                id: "wasm-skill".into(),
+                version: "1.0.0".into(),
+                label: "Wasm Skill".into(),
+                keywords: vec!["wasm skill".into()],
+                agent: "command".into(),
+                permissions: vec!["execute".into()],
+                enabled: true,
+                handler: SkillHandler::Wasm {
+                    module: "dist/skill.wasm".into(),
+                    entrypoint: Some("run".into()),
+                },
+            },
+        ];
+
+        for manifest in &manifests {
+            let skill_dir = app_data_dir.join("skills").join(&manifest.id);
+            std::fs::create_dir_all(&skill_dir).expect("skill dir");
+            if manifest.id == "wasm-skill" {
+                let dist = skill_dir.join("dist");
+                std::fs::create_dir_all(&dist).expect("wasm dist");
+                let wasm_bytes = crate::builder::test_minimal_wasm_with_export("run");
+                std::fs::write(dist.join("skill.wasm"), wasm_bytes).expect("write wasm");
+            }
+            std::fs::write(
+                skill_dir.join("skill.json"),
+                serde_json::to_string_pretty(manifest).expect("serialize"),
+            )
+            .expect("write manifest");
+        }
+
+        let base_route = GatewayRoute {
+            capability_id: "platform.skill".into(),
+            capability_label: "Installed Skill".into(),
+            agent: GatewayAgentKind::Command,
+            tier: GatewayModelTier::Local,
+            sensitivity: GatewaySensitivity::Public,
+            score: 3,
+            confidence: GatewayConfidenceBand::High,
+            decision_policy: GatewayDecisionPolicy::Execute,
+            decision_reason: "eval".into(),
+            reason: "eval".into(),
+            route_level: RouteLevel::L0,
+            resolved_provider: None,
+        };
+        let ctx_for = |command: &str| AgentContext {
+            db_path: db_path.clone(),
+            app_data_dir: app_data_dir.clone(),
+            config: GatewayConfig::default(),
+            route: base_route.clone(),
+            session_id: "eval-session".into(),
+            turn_id: 1,
+            command: command.to_string(),
+            step_description: command.to_string(),
+            step_kind: "installed_skill".into(),
+        };
+
+        let route_result = crate::agents::command::CommandAgent
+            .run_step(&ctx_for("run route skill"))
+            .expect("route step");
+        assert!(route_result.success);
+        assert!(route_result.integration_handoff.is_some());
+
+        let http_result = crate::agents::command::CommandAgent
+            .run_step(&ctx_for("run http skill"))
+            .expect("http step");
+        assert!(http_result.success);
+        assert!(http_result.reply.contains("skill-ok"));
+
+        let script_result = crate::agents::command::CommandAgent
+            .run_step(&ctx_for("run script skill"))
+            .expect("script step");
+        assert!(script_result.success);
+        assert!(script_result.reply.to_lowercase().contains("skill-script"));
+
+        let wasm_result = crate::agents::command::CommandAgent
+            .run_step(&ctx_for("run wasm skill"))
+            .expect("wasm step");
+        assert!(wasm_result.success);
+        assert!(wasm_result.reply.contains("run wasm skill"));
+
+        server.join().expect("server join");
+        let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_dir_all(&app_data_dir);
+    }
+
+    #[test]
+    fn eval_fabric_f63_profile_scoped_skill_override_execution() {
+        use crate::agents::{Agent, AgentContext};
+        use crate::gateway::config::GatewayConfig;
+        use crate::gateway::profiles::{seed_default_profiles, switch_profile};
+        use crate::gateway::skills::{SkillHandler, SkillManifest};
+        use crate::gateway::types::{
+            GatewayAgentKind, GatewayConfidenceBand, GatewayDecisionPolicy, GatewayModelTier,
+            GatewayRoute, GatewaySensitivity, RouteLevel,
+        };
+
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0);
+        let db_path = std::env::temp_dir().join(format!("jarvis-eval-skill-override-{nanos}.db"));
+        let app_data_dir =
+            std::env::temp_dir().join(format!("jarvis-eval-skill-override-app-{nanos}"));
+        let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_dir_all(&app_data_dir);
+        std::fs::create_dir_all(app_data_dir.join("skills")).expect("skills root");
+        seed_default_profiles(&db_path, &app_data_dir).expect("seed profiles");
+
+        let global_manifest = SkillManifest {
+            id: "shared-skill".into(),
+            version: "1.0.0".into(),
+            label: "Global Shared Skill".into(),
+            keywords: vec!["shared command".into()],
+            agent: "command".into(),
+            permissions: vec!["read".into()],
+            enabled: true,
+            handler: SkillHandler::Route {
+                capability_id: "command.general".into(),
+            },
+        };
+        let personal_manifest = SkillManifest {
+            id: "shared-skill".into(),
+            version: "1.0.0".into(),
+            label: "Personal Shared Skill".into(),
+            keywords: vec!["personal command".into()],
+            agent: "command".into(),
+            permissions: vec!["read".into()],
+            enabled: true,
+            handler: SkillHandler::Route {
+                capability_id: "command.general".into(),
+            },
+        };
+
+        let global_skill_dir = app_data_dir.join("skills").join(&global_manifest.id);
+        std::fs::create_dir_all(&global_skill_dir).expect("global skill dir");
+        std::fs::write(
+            global_skill_dir.join("skill.json"),
+            serde_json::to_string_pretty(&global_manifest).expect("serialize global"),
+        )
+        .expect("write global manifest");
+
+        let personal_skill_dir = app_data_dir
+            .join("skills")
+            .join("personal")
+            .join(&personal_manifest.id);
+        std::fs::create_dir_all(&personal_skill_dir).expect("personal skill dir");
+        std::fs::write(
+            personal_skill_dir.join("skill.json"),
+            serde_json::to_string_pretty(&personal_manifest).expect("serialize personal"),
+        )
+        .expect("write personal manifest");
+
+        let base_route = GatewayRoute {
+            capability_id: "platform.skill".into(),
+            capability_label: "Installed Skill".into(),
+            agent: GatewayAgentKind::Command,
+            tier: GatewayModelTier::Local,
+            sensitivity: GatewaySensitivity::Public,
+            score: 3,
+            confidence: GatewayConfidenceBand::High,
+            decision_policy: GatewayDecisionPolicy::Execute,
+            decision_reason: "eval".into(),
+            reason: "eval".into(),
+            route_level: RouteLevel::L0,
+            resolved_provider: None,
+        };
+        let ctx_for = |command: &str| AgentContext {
+            db_path: db_path.clone(),
+            app_data_dir: app_data_dir.clone(),
+            config: GatewayConfig::default(),
+            route: base_route.clone(),
+            session_id: "eval-session".into(),
+            turn_id: 1,
+            command: command.to_string(),
+            step_description: command.to_string(),
+            step_kind: "installed_skill".into(),
+        };
+
+        let work_result = crate::agents::command::CommandAgent
+            .run_step(&ctx_for("run shared command"))
+            .expect("global skill step");
+        assert!(work_result.success);
+        assert!(work_result.integration_handoff.is_some());
+        assert!(crate::agents::command::CommandAgent
+            .run_step(&ctx_for("run personal command"))
+            .is_err());
+
+        switch_profile(&db_path, &app_data_dir, "personal").expect("switch personal");
+
+        let personal_result = crate::agents::command::CommandAgent
+            .run_step(&ctx_for("run personal command"))
+            .expect("personal skill step");
+        assert!(personal_result.success);
+        assert!(personal_result.integration_handoff.is_some());
+        assert!(crate::agents::command::CommandAgent
+            .run_step(&ctx_for("run shared command"))
+            .is_err());
+
+        let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_dir_all(&app_data_dir);
+    }
+
+    #[test]
+    fn eval_golden_f_profile_switch_routes() {
+        run_golden_file("f_profile_switch_routes.json");
+    }
+
+    #[test]
+    fn eval_golden_f_skill_sdk_routes() {
+        run_golden_file("f_skill_sdk_routes.json");
+    }
+
+    #[test]
+    fn eval_golden_f_ambient_copilot_routes() {
+        run_golden_file("f_ambient_copilot_routes.json");
+    }
+
+    #[test]
+    fn eval_fabric_f64_ambient_signal_execution() {
+        use crate::gateway::ambient::{maybe_suggest_from_signal, start_ambient_session};
+        use crate::gateway::config::GatewayConfig;
+        use crate::gateway::profiles::seed_default_profiles;
+
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0);
+        let db_path = std::env::temp_dir().join(format!("jarvis-eval-ambient-signal-{nanos}.db"));
+        let app_data_dir =
+            std::env::temp_dir().join(format!("jarvis-eval-ambient-signal-app-{nanos}"));
+        let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_dir_all(&app_data_dir);
+        std::fs::create_dir_all(&app_data_dir).expect("app dir");
+        seed_default_profiles(&db_path, &app_data_dir).expect("seed profiles");
+
+        let mut config = GatewayConfig::default();
+        config.labs.ambient_copilot = true;
+        start_ambient_session(&db_path, Some("focus"), None, true).expect("session");
+
+        let suggestion = maybe_suggest_from_signal(
+            &db_path,
+            &config,
+            "voice transcript mentions invoice due tomorrow",
+        )
+        .expect("signal")
+        .expect("suggestion");
+        assert!(suggestion.message.contains("Ambient copilot noticed"));
+        assert!(!suggestion.message.is_empty());
+
+        let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_dir_all(&app_data_dir);
+    }
+
+    #[test]
     fn eval_golden_f_clipboard_execution() {
         run_command_execution_file("f_clipboard_execution.json");
     }
@@ -1670,7 +2153,9 @@ mod tests {
     }
 
     fn run_automation_execution_file(file_name: &str) {
-        use crate::agents::{automation::AutomationAgent, integrations::IntegrationsAgent, Agent, AgentContext};
+        use crate::agents::{
+            automation::AutomationAgent, integrations::IntegrationsAgent, Agent, AgentContext,
+        };
         use crate::gateway::config::GatewayConfig;
         use crate::gateway::types::{
             GatewayAgentKind, GatewayConfidenceBand, GatewayDecisionPolicy, GatewayModelTier,
@@ -1747,7 +2232,9 @@ mod tests {
                     .to_lowercase()
                     .contains(&case.expect_reply_contains.to_lowercase()),
                 "command {:?} expected reply to contain {:?}, got {:?}",
-                case.command, case.expect_reply_contains, result.reply
+                case.command,
+                case.expect_reply_contains,
+                result.reply
             );
             assert!(result.integration_handoff.is_none());
             let _ = std::fs::remove_file(db_path);

@@ -10,15 +10,19 @@ import {
   listGatewayCapabilities,
   listMcpHostRegistry,
   McpHostEntry,
+  openLocalFile,
   runTrainingEvalGate,
   saveGatewayConfig,
   testMcpHostConnection,
+  writeClipboardText,
   type TrainingEvalGateResult,
 } from "../../services/jarvisApi";
 import ObsidianSetupWizard from "./ObsidianSetupWizard";
 import GatewayOnboardingBanner from "./GatewayOnboardingBanner";
 import TriggerRecipePanel from "./TriggerRecipePanel";
 import SyncPanel from "./SyncPanel";
+import ProfileSwitcherPanel from "./ProfileSwitcherPanel";
+import InstalledSkillsPanel from "../workspaces/sections/InstalledSkillsPanel";
 
 export default function GatewayConfigPanel() {
   const [config, setConfig] = useState<GatewayConfig | null>(null);
@@ -107,6 +111,15 @@ export default function GatewayConfigPanel() {
       {error ? <span className="gateway-preview-reason warning">{error}</span> : null}
       <GatewayOnboardingBanner onApplied={(next) => setConfig(next)} />
       <div className="workflow-actions">
+        <button
+          className="primary-button"
+          type="button"
+          data-testid="gateway-save-button"
+          disabled={saving}
+          onClick={() => void persist(config)}
+        >
+          Save gateway settings
+        </button>
         <button
           className="secondary-button"
           type="button"
@@ -439,6 +452,7 @@ export default function GatewayConfigPanel() {
                 councilRuntime: config.labs?.councilRuntime ?? false,
                 proactiveAnomaly: config.labs?.proactiveAnomaly ?? false,
                 worldModelQueries: config.labs?.worldModelQueries ?? false,
+                ambientCopilot: config.labs?.ambientCopilot ?? false,
               },
             })
           }
@@ -459,6 +473,7 @@ export default function GatewayConfigPanel() {
                 councilRuntime: config.labs?.councilRuntime ?? false,
                 proactiveAnomaly: config.labs?.proactiveAnomaly ?? false,
                 worldModelQueries: config.labs?.worldModelQueries ?? false,
+                ambientCopilot: config.labs?.ambientCopilot ?? false,
               },
             })
           }
@@ -469,6 +484,7 @@ export default function GatewayConfigPanel() {
       <label className="toggle-row">
         <input
           type="checkbox"
+          data-testid="lab-council-runtime-toggle"
           checked={config.labs?.councilRuntime ?? false}
           onChange={(event) =>
             void persist({
@@ -479,6 +495,7 @@ export default function GatewayConfigPanel() {
                 councilRuntime: event.target.checked,
                 proactiveAnomaly: config.labs?.proactiveAnomaly ?? false,
                 worldModelQueries: config.labs?.worldModelQueries ?? false,
+                ambientCopilot: config.labs?.ambientCopilot ?? false,
               },
             })
           }
@@ -499,6 +516,7 @@ export default function GatewayConfigPanel() {
                 councilRuntime: config.labs?.councilRuntime ?? false,
                 proactiveAnomaly: event.target.checked,
                 worldModelQueries: config.labs?.worldModelQueries ?? false,
+                ambientCopilot: config.labs?.ambientCopilot ?? false,
               },
             })
           }
@@ -509,6 +527,7 @@ export default function GatewayConfigPanel() {
       <label className="toggle-row">
         <input
           type="checkbox"
+          data-testid="lab-world-model-toggle"
           checked={config.labs?.worldModelQueries ?? false}
           onChange={(event) =>
             void persist({
@@ -519,6 +538,7 @@ export default function GatewayConfigPanel() {
                 councilRuntime: config.labs?.councilRuntime ?? false,
                 proactiveAnomaly: config.labs?.proactiveAnomaly ?? false,
                 worldModelQueries: event.target.checked,
+                ambientCopilot: config.labs?.ambientCopilot ?? false,
               },
             })
           }
@@ -526,7 +546,71 @@ export default function GatewayConfigPanel() {
         />
         <span>World model queries (lab L5)</span>
       </label>
+      <label className="toggle-row">
+        <input
+          type="checkbox"
+          data-testid="lab-ambient-copilot-toggle"
+          checked={config.labs?.ambientCopilot ?? false}
+          onChange={(event) =>
+            void persist({
+              ...config,
+              labs: {
+                projectBundlePilot: config.labs?.projectBundlePilot ?? false,
+                councilVerifier: config.labs?.councilVerifier ?? false,
+                councilRuntime: config.labs?.councilRuntime ?? false,
+                proactiveAnomaly: config.labs?.proactiveAnomaly ?? false,
+                worldModelQueries: config.labs?.worldModelQueries ?? false,
+                ambientCopilot: event.target.checked,
+              },
+            })
+          }
+          disabled={saving}
+        />
+        <span>Ambient multimodal copilot (lab L6)</span>
+      </label>
       <SyncPanel />
+      <ProfileSwitcherPanel />
+      <InstalledSkillsPanel />
+      <p className="result-meta">
+        Headless API reference: <code>docs/HEADLESS_API.md</code>
+      </p>
+      <div className="inline-actions">
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={() =>
+            void openLocalFile("docs/HEADLESS_API.md").catch((openError) =>
+              setError(openError instanceof Error ? openError.message : String(openError)),
+            )
+          }
+        >
+          Open API docs
+        </button>
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={() =>
+            void openLocalFile("docs/openapi/local-turn-api.yaml").catch((openError) =>
+              setError(openError instanceof Error ? openError.message : String(openError)),
+            )
+          }
+        >
+          Open OpenAPI YAML
+        </button>
+        <button
+          className="ghost-button"
+          type="button"
+          onClick={() =>
+            void writeClipboardText("docs/HEADLESS_API.md\ndocs/openapi/local-turn-api.yaml")
+              .then(() => setTrainingMessage("Copied local API doc paths to the clipboard."))
+              .catch((copyError) =>
+                setError(copyError instanceof Error ? copyError.message : String(copyError)),
+              )
+          }
+        >
+          Copy doc paths
+        </button>
+      </div>
       <p className="section-kicker">Channels</p>
       <label className="toggle-row">
         <input
@@ -539,6 +623,7 @@ export default function GatewayConfigPanel() {
                 localWsEnabled: event.target.checked,
                 localWsPort: config.channels?.localWsPort ?? 18789,
                 localWsToken: config.channels?.localWsToken,
+                mobileApproveEnabled: config.channels?.mobileApproveEnabled ?? false,
                 telegramEnabled: config.channels?.telegramEnabled ?? false,
                 telegramBotToken: config.channels?.telegramBotToken,
                 discordEnabled: config.channels?.discordEnabled ?? false,
@@ -564,6 +649,7 @@ export default function GatewayConfigPanel() {
                 localWsEnabled: config.channels?.localWsEnabled ?? false,
                 localWsPort: Number(event.target.value) || 18789,
                 localWsToken: config.channels?.localWsToken,
+                mobileApproveEnabled: config.channels?.mobileApproveEnabled ?? false,
                 telegramEnabled: config.channels?.telegramEnabled ?? false,
                 telegramBotToken: config.channels?.telegramBotToken,
                 discordEnabled: config.channels?.discordEnabled ?? false,
@@ -586,6 +672,7 @@ export default function GatewayConfigPanel() {
                 localWsEnabled: config.channels?.localWsEnabled ?? false,
                 localWsPort: config.channels?.localWsPort ?? 18789,
                 localWsToken: event.target.value || undefined,
+                mobileApproveEnabled: config.channels?.mobileApproveEnabled ?? false,
                 telegramEnabled: config.channels?.telegramEnabled ?? false,
                 telegramBotToken: config.channels?.telegramBotToken,
                 discordEnabled: config.channels?.discordEnabled ?? false,
@@ -600,6 +687,7 @@ export default function GatewayConfigPanel() {
       <label className="toggle-row">
         <input
           type="checkbox"
+          data-testid="lab-mobile-approve-toggle"
           checked={config.channels?.mobileApproveEnabled ?? false}
           onChange={(event) =>
             void persist({
@@ -637,6 +725,7 @@ export default function GatewayConfigPanel() {
                 localWsEnabled: config.channels?.localWsEnabled ?? false,
                 localWsPort: config.channels?.localWsPort ?? 18789,
                 localWsToken: config.channels?.localWsToken,
+                mobileApproveEnabled: config.channels?.mobileApproveEnabled ?? false,
                 telegramEnabled: event.target.checked,
                 telegramBotToken: config.channels?.telegramBotToken,
                 discordEnabled: config.channels?.discordEnabled ?? false,
@@ -660,6 +749,7 @@ export default function GatewayConfigPanel() {
                 localWsEnabled: config.channels?.localWsEnabled ?? false,
                 localWsPort: config.channels?.localWsPort ?? 18789,
                 localWsToken: config.channels?.localWsToken,
+                mobileApproveEnabled: config.channels?.mobileApproveEnabled ?? false,
                 telegramEnabled: config.channels?.telegramEnabled ?? false,
                 telegramBotToken: event.target.value || undefined,
                 discordEnabled: config.channels?.discordEnabled ?? false,
@@ -682,6 +772,7 @@ export default function GatewayConfigPanel() {
                 localWsEnabled: config.channels?.localWsEnabled ?? false,
                 localWsPort: config.channels?.localWsPort ?? 18789,
                 localWsToken: config.channels?.localWsToken,
+                mobileApproveEnabled: config.channels?.mobileApproveEnabled ?? false,
                 telegramEnabled: config.channels?.telegramEnabled ?? false,
                 telegramBotToken: config.channels?.telegramBotToken,
                 discordEnabled: event.target.checked,
@@ -705,6 +796,7 @@ export default function GatewayConfigPanel() {
                 localWsEnabled: config.channels?.localWsEnabled ?? false,
                 localWsPort: config.channels?.localWsPort ?? 18789,
                 localWsToken: config.channels?.localWsToken,
+                mobileApproveEnabled: config.channels?.mobileApproveEnabled ?? false,
                 telegramEnabled: config.channels?.telegramEnabled ?? false,
                 telegramBotToken: config.channels?.telegramBotToken,
                 discordEnabled: config.channels?.discordEnabled ?? false,

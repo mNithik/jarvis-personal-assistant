@@ -36,9 +36,7 @@ impl Agent for VisionAgent {
                         "Read the foreground window \"{window_title}\" via UI Automation.\n{truncated}"
                     )));
                 }
-                Err(error) => {
-                    Some(error)
-                }
+                Err(error) => Some(error),
             }
         };
 
@@ -58,12 +56,7 @@ fn vision_degraded_message(uia_error: Option<&str>, ocr_error: &str) -> String {
     )
 }
 
-pub fn publish_screen_analyzed(
-    bus: &mut EventBus,
-    session_id: &str,
-    turn_id: u64,
-    payload: &str,
-) {
+pub fn publish_screen_analyzed(bus: &mut EventBus, session_id: &str, turn_id: u64, payload: &str) {
     let truncated = if payload.len() > 500 {
         format!("{}...", &payload[..500])
     } else {

@@ -398,7 +398,9 @@ fn create_note_with_title(
     if !create_response.status().is_success() {
         let status = create_response.status();
         let body = create_response.text().unwrap_or_default();
-        return Err(format!("Notion plan page creation failed with {status}: {body}"));
+        return Err(format!(
+            "Notion plan page creation failed with {status}: {body}"
+        ));
     }
     let page_value: serde_json::Value = create_response
         .json()

@@ -162,8 +162,12 @@ fn chat_gemini(
         return Err(format!("Gemini returned {status}: {}", body.trim()));
     }
 
-    let value: serde_json::Value = serde_json::from_str(&body)
-        .map_err(|error| format!("Failed to parse Gemini response JSON: {error}. Body: {}", body.trim()))?;
+    let value: serde_json::Value = serde_json::from_str(&body).map_err(|error| {
+        format!(
+            "Failed to parse Gemini response JSON: {error}. Body: {}",
+            body.trim()
+        )
+    })?;
     let text = value
         .get("candidates")
         .and_then(|candidates| candidates.get(0))
@@ -213,10 +217,7 @@ fn parse_openai_response(
         .map_err(|error| format!("Failed to read {provider_id} response: {error}"))?;
 
     if !status.is_success() {
-        return Err(format!(
-            "{provider_id} returned {status}: {}",
-            body.trim()
-        ));
+        return Err(format!("{provider_id} returned {status}: {}", body.trim()));
     }
 
     let value: serde_json::Value = serde_json::from_str(&body).map_err(|error| {

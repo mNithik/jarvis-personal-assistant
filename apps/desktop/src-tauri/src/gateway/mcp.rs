@@ -65,11 +65,7 @@ impl McpHostRegistry {
     }
 
     pub fn merge_config_hosts(&mut self, hosts: &[McpHostEntry]) {
-        self.external = hosts
-            .iter()
-            .filter(|host| host.external)
-            .cloned()
-            .collect();
+        self.external = hosts.iter().filter(|host| host.external).cloned().collect();
     }
 
     pub fn list_hosts(&self) -> Vec<McpHostEntry> {
@@ -117,11 +113,9 @@ mod tests {
 
     #[test]
     fn read_only_tools_exclude_destructive_entries() {
-        assert!(
-            list_mcp_tools(true)
-                .iter()
-                .all(|tool| tool.risk == ApprovalRisk::Read)
-        );
+        assert!(list_mcp_tools(true)
+            .iter()
+            .all(|tool| tool.risk == ApprovalRisk::Read));
     }
 
     #[test]

@@ -15,14 +15,18 @@ pub struct RecallHit {
 
 pub fn recall(path: &Path, query: &str, limit: usize) -> Result<Vec<RecallHit>, String> {
     let mut ranked: HashMap<i64, RecallHit> = HashMap::new();
+    let profile_id = crate::gateway::profiles::active_profile_id_or_default(path)?;
 
-    for (rank, hit) in fts_search(path, query, limit * 2)?.into_iter().enumerate() {
+    for (rank, hit) in fts_search(path, &profile_id, query, limit * 2)?
+        .into_iter()
+        .enumerate()
+    {
         let score = 1.0 / (60.0 + rank as f32);
         merge_hit(&mut ranked, hit, score);
     }
 
     if let Ok(query_vector) = embed_text(path, query) {
-        for (rank, hit) in vector_search(path, &query_vector, limit * 2)?
+        for (rank, hit) in vector_search(path, &profile_id, &query_vector, limit * 2)?
             .into_iter()
             .enumerate()
         {
@@ -53,7 +57,12 @@ fn merge_hit(map: &mut HashMap<i64, RecallHit>, hit: RecallHit, score: f32) {
         });
 }
 
-fn fts_search(path: &Path, query: &str, limit: usize) -> Result<Vec<RecallHit>, String> {
+fn fts_search(
+    path: &Path,
+    profile_id: &str,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<RecallHit>, String> {
     let connection = Connection::open(path).map_err(|error| error.to_string())?;
     let fts_query = query
         .split_whitespace()
@@ -69,14 +78,14 @@ fn fts_search(path: &Path, query: &str, limit: usize) -> Result<Vec<RecallHit>, 
             "SELECT c.id, c.chunk_text, c.domain
              FROM memory_chunks_fts
              JOIN memory_chunks c ON c.id = memory_chunks_fts.rowid
-             WHERE memory_chunks_fts MATCH ?1
+             WHERE c.profile_id = ?1 AND memory_chunks_fts MATCH ?2
              ORDER BY rank
-             LIMIT ?2",
+             LIMIT ?3",
         )
         .map_err(|error| error.to_string())?;
 
     let rows = statement
-        .query_map(params![fts_query, limit as i64], |row| {
+        .query_map(params![profile_id, fts_query, limit as i64], |row| {
             Ok(RecallHit {
                 chunk_id: row.get(0)?,
                 text: row.get(1)?,
@@ -90,20 +99,26 @@ fn fts_search(path: &Path, query: &str, limit: usize) -> Result<Vec<RecallHit>, 
     Ok(rows)
 }
 
-fn vector_search(path: &Path, query_vector: &[f32], limit: usize) -> Result<Vec<RecallHit>, String> {
+fn vector_search(
+    path: &Path,
+    profile_id: &str,
+    query_vector: &[f32],
+    limit: usize,
+) -> Result<Vec<RecallHit>, String> {
     let connection = Connection::open(path).map_err(|error| error.to_string())?;
     let mut statement = connection
         .prepare(
             "SELECT c.id, c.chunk_text, c.domain, e.embedding
              FROM memory_embeddings e
              JOIN memory_chunks c ON c.id = e.chunk_id
+             WHERE c.profile_id = ?1
              ORDER BY c.id DESC
-             LIMIT 256",
+             LIMIT ?2",
         )
         .map_err(|error| error.to_string())?;
 
     let mut scored = statement
-        .query_map([], |row| {
+        .query_map(params![profile_id, 256_i64], |row| {
             Ok((
                 row.get::<_, i64>(0)?,
                 row.get::<_, String>(1)?,
@@ -143,11 +158,12 @@ pub fn store_chunk_with_embedding(
     domain: &str,
     chunk_text: &str,
 ) -> Result<i64, String> {
+    let profile_id = crate::gateway::profiles::active_profile_id_or_default(db_path)?;
     connection
         .execute(
-            "INSERT INTO memory_chunks (document_id, entity_id, domain, chunk_text)
-             VALUES (?1, ?2, ?3, ?4)",
-            params![document_id, entity_id, domain, chunk_text],
+            "INSERT INTO memory_chunks (profile_id, document_id, entity_id, domain, chunk_text)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![profile_id, document_id, entity_id, domain, chunk_text],
         )
         .map_err(|error| error.to_string())?;
     let chunk_id = connection.last_insert_rowid();
@@ -182,6 +198,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::*;
+    use crate::gateway::profiles::{seed_default_profiles, switch_profile};
     use crate::memory::schema::migrate;
 
     fn temp_db() -> PathBuf {
@@ -219,5 +236,73 @@ mod tests {
         assert!(hits[0].text.to_lowercase().contains("alice"));
 
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn recall_is_scoped_to_active_profile() {
+        let path = temp_db();
+        let app_data =
+            std::env::temp_dir().join(format!("jarvis-memory-recall-app-{}", std::process::id()));
+        std::fs::create_dir_all(&app_data).expect("app data");
+        seed_default_profiles(&path, &app_data).expect("seed");
+
+        let connection = Connection::open(&path).expect("open");
+        let work_profile =
+            crate::gateway::profiles::active_profile_id_or_default(&path).expect("work profile");
+        connection
+            .execute(
+                "INSERT INTO memory_documents (profile_id, domain, source, content) VALUES (?1, 'general', 'test', 'work secret')",
+                params![work_profile],
+            )
+            .expect("work document");
+        let document_id = connection.last_insert_rowid();
+        store_chunk_with_embedding(
+            &connection,
+            &path,
+            document_id,
+            None,
+            "general",
+            "work secret recall",
+        )
+        .expect("work chunk");
+
+        switch_profile(&path, &app_data, "personal").expect("switch");
+        let personal_connection = Connection::open(&path).expect("open personal");
+        let personal_profile = crate::gateway::profiles::active_profile_id_or_default(&path)
+            .expect("personal profile");
+        personal_connection
+            .execute(
+                "INSERT INTO memory_documents (profile_id, domain, source, content) VALUES (?1, 'general', 'test', 'personal secret')",
+                params![personal_profile],
+            )
+            .expect("personal document");
+        let personal_document_id = personal_connection.last_insert_rowid();
+        store_chunk_with_embedding(
+            &personal_connection,
+            &path,
+            personal_document_id,
+            None,
+            "general",
+            "personal secret recall",
+        )
+        .expect("personal chunk");
+
+        let personal_hits = recall(&path, "secret", 10).expect("personal recall");
+        assert!(personal_hits
+            .iter()
+            .any(|hit| hit.text.contains("personal")));
+        assert!(personal_hits
+            .iter()
+            .all(|hit| !hit.text.contains("work secret")));
+
+        switch_profile(&path, &app_data, "work").expect("switch back");
+        let work_hits = recall(&path, "secret", 10).expect("work recall");
+        assert!(work_hits.iter().any(|hit| hit.text.contains("work secret")));
+        assert!(work_hits
+            .iter()
+            .all(|hit| !hit.text.contains("personal secret")));
+
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_dir_all(app_data);
     }
 }

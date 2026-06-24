@@ -307,9 +307,7 @@ pub fn compose_meeting_copilot_v2(
         related_people,
         changes_since_last_prep: changes,
         summary: reply.clone(),
-        created_at: chrono::Local::now()
-            .format("%Y-%m-%dT%H:%M:%S")
-            .to_string(),
+        created_at: chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string(),
     };
     upsert_meeting_prep(path, &record)?;
 

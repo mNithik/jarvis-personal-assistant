@@ -4,6 +4,10 @@ mod sandbox;
 
 pub use checks::{checks_succeeded, resolve_jarvis_project_dir, run_project_checks};
 pub use planner::plan_coding_assist;
+pub use sandbox::{execute_wasm_file, validate_wasm_artifact};
+
+#[cfg(test)]
+pub use sandbox::test_minimal_wasm_with_export;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BuilderAction {
@@ -74,10 +78,7 @@ pub fn parse_builder_command(command: &str) -> Option<BuilderAction> {
         }
     }
 
-    if matches!(
-        normalized.as_str(),
-        "debug this repo" | "debug the repo"
-    ) {
+    if matches!(normalized.as_str(), "debug this repo" | "debug the repo") {
         return Some(BuilderAction::PlanDebug {
             command: trimmed.to_string(),
         });

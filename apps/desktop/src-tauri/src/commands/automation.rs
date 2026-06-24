@@ -16,10 +16,7 @@ pub fn list_ocr_watches_cmd(state: State<'_, AppState>) -> Result<Vec<OcrWatchRe
 }
 
 #[tauri::command]
-pub fn save_ocr_watch_cmd(
-    state: State<'_, AppState>,
-    watch: OcrWatchRecord,
-) -> Result<(), String> {
+pub fn save_ocr_watch_cmd(state: State<'_, AppState>, watch: OcrWatchRecord) -> Result<(), String> {
     save_ocr_watch(&state.db_path, &watch)
 }
 
@@ -44,10 +41,7 @@ pub fn save_desktop_schedule_cmd(
 }
 
 #[tauri::command]
-pub fn delete_desktop_schedule_cmd(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<(), String> {
+pub fn delete_desktop_schedule_cmd(state: State<'_, AppState>, id: String) -> Result<(), String> {
     delete_desktop_schedule(&state.db_path, &id)
 }
 

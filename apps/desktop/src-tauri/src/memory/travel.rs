@@ -70,7 +70,10 @@ pub fn format_travel_summary(path: &Path) -> Result<String, String> {
 pub fn format_travel_checklist(path: &Path) -> Result<String, String> {
     let items = list_travel(path)?;
     let Some(trip) = items.first() else {
-        return Ok("There is no saved trip in travel memory yet. Extract travel from an email first.".to_string());
+        return Ok(
+            "There is no saved trip in travel memory yet. Extract travel from an email first."
+                .to_string(),
+        );
     };
     if trip.checklist.is_empty() {
         return Ok(format!(
@@ -92,7 +95,10 @@ pub fn format_travel_checklist(path: &Path) -> Result<String, String> {
 pub fn format_travel_timeline(path: &Path) -> Result<String, String> {
     let items = list_travel(path)?;
     let Some(trip) = items.first() else {
-        return Ok("There is no saved trip in travel memory yet. Extract travel from an email first.".to_string());
+        return Ok(
+            "There is no saved trip in travel memory yet. Extract travel from an email first."
+                .to_string(),
+        );
     };
     if trip.timeline.is_empty() {
         return Ok(format!(

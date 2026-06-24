@@ -3,7 +3,8 @@ use crate::env_local;
 use crate::models::{ModelProviderChatRequest, ModelProviderMessage};
 use crate::providers::{chat_with_failover, presets, resolve_provider};
 
-const SYSTEM_PROMPT: &str = "You are JARVIS coding planner for a local Tauri + React desktop repo. \
+const SYSTEM_PROMPT: &str =
+    "You are JARVIS coding planner for a local Tauri + React desktop repo. \
 Given a debug or coding request, produce a short actionable checklist (3-6 bullets): \
 what to inspect first, which checks to run, likely failure areas, and safe next steps. \
 Do not claim you edited files. Do not invent test output.";

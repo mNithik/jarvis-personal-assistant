@@ -98,9 +98,14 @@ pub fn test_mcp_host_connection(
     }
     if host_id.starts_with("jira") {
         crate::env_local::init_local_env();
-        if std::env::var("JIRA_API_TOKEN").unwrap_or_default().trim().is_empty() {
+        if std::env::var("JIRA_API_TOKEN")
+            .unwrap_or_default()
+            .trim()
+            .is_empty()
+        {
             return Err(
-                "Missing Jira token. Set JIRA_API_TOKEN (and JIRA_URL, JIRA_EMAIL) in .env.".to_string(),
+                "Missing Jira token. Set JIRA_API_TOKEN (and JIRA_URL, JIRA_EMAIL) in .env."
+                    .to_string(),
             );
         }
     }
@@ -108,7 +113,8 @@ pub fn test_mcp_host_connection(
         && crate::env_local::provider_api_key("huggingface").is_none()
     {
         return Err(
-            "Missing HuggingFace token. Set HF_TOKEN or JARVIS_HUGGINGFACE_API_KEY in .env.".to_string(),
+            "Missing HuggingFace token. Set HF_TOKEN or JARVIS_HUGGINGFACE_API_KEY in .env."
+                .to_string(),
         );
     }
     if host_id.starts_with("zapier") {
@@ -119,11 +125,18 @@ pub fn test_mcp_host_connection(
             .trim()
             .is_empty()
         {
-            return Err("Missing Zapier token. Set ZAPIER_MCP_TOKEN or ZAPIER_API_KEY in .env.".to_string());
+            return Err(
+                "Missing Zapier token. Set ZAPIER_MCP_TOKEN or ZAPIER_API_KEY in .env.".to_string(),
+            );
         }
     }
     if host_id.starts_with("obsidian-rest")
-        && host.env.get("OBSIDIAN_API_KEY").map(|value| value.trim()).unwrap_or("").is_empty()
+        && host
+            .env
+            .get("OBSIDIAN_API_KEY")
+            .map(|value| value.trim())
+            .unwrap_or("")
+            .is_empty()
     {
         return Err(
             "Missing Obsidian REST API key. Save it in the Obsidian setup wizard or set OBSIDIAN_API_KEY on the MCP host.".to_string(),
@@ -139,7 +152,12 @@ pub fn test_mcp_host_connection(
     } else {
         "get_routines"
     };
-    crate::gateway::mcp_host::call_mcp_tool(config, host_id, tool, serde_json::json!({ "query": "health" }))
+    crate::gateway::mcp_host::call_mcp_tool(
+        config,
+        host_id,
+        tool,
+        serde_json::json!({ "query": "health" }),
+    )
 }
 
 fn preset(

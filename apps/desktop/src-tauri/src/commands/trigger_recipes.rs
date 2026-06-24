@@ -9,7 +9,9 @@ use crate::gateway::trigger_recipes::{
 use crate::AppState;
 
 #[tauri::command]
-pub fn list_trigger_recipes_cmd(state: State<'_, AppState>) -> Result<Vec<TriggerRecipeRecord>, String> {
+pub fn list_trigger_recipes_cmd(
+    state: State<'_, AppState>,
+) -> Result<Vec<TriggerRecipeRecord>, String> {
     let config = crate::gateway::config::load_gateway_config(&state.app_data_dir);
     seed_default_recipes(&state.db_path, &config)?;
     list_trigger_recipes(&state.db_path)

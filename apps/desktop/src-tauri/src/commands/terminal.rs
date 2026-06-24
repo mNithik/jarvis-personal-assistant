@@ -133,6 +133,8 @@ mod tests {
 
     #[test]
     fn rejects_relative_handoff_paths() {
-        assert!(!is_allowed_handoff_path(Path::new("jarvis-handoffs/test.md")));
+        assert!(!is_allowed_handoff_path(Path::new(
+            "jarvis-handoffs/test.md"
+        )));
     }
 }

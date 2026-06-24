@@ -17,6 +17,16 @@ impl Agent for CommandAgent {
     }
 
     fn run_step(&self, ctx: &AgentContext) -> Result<StepResult, String> {
+        if ctx.route.capability_id == "platform.profiles" {
+            return run_profile_switch(ctx);
+        }
+        if ctx.route.capability_id == "platform.skill" {
+            return run_installed_skill(ctx);
+        }
+        if ctx.route.capability_id == "labs.ambient" {
+            return run_ambient_command(ctx);
+        }
+
         match ctx.step_kind.as_str() {
             "study_setup" => run_study(ctx),
             "search_files" => run_search_files(ctx),
@@ -209,12 +219,12 @@ fn run_search_pdfs(ctx: &AgentContext) -> Result<StepResult, String> {
 
 fn resolve_pdf_from_action(action: PdfCommandAction) -> Result<crate::models::FileRecord, String> {
     match action {
-        PdfCommandAction::OpenCurrent | PdfCommandAction::ReadCurrent | PdfCommandAction::SummarizeCurrent => {
-            files::list_pdf_files()?
-                .into_iter()
-                .next()
-                .ok_or_else(|| "No PDFs found in Documents.".to_string())
-        }
+        PdfCommandAction::OpenCurrent
+        | PdfCommandAction::ReadCurrent
+        | PdfCommandAction::SummarizeCurrent => files::list_pdf_files()?
+            .into_iter()
+            .next()
+            .ok_or_else(|| "No PDFs found in Documents.".to_string()),
         PdfCommandAction::OpenByIndex { index }
         | PdfCommandAction::ReadByIndex { index }
         | PdfCommandAction::SummarizeByIndex { index } => files::list_pdf_files()?
@@ -234,8 +244,9 @@ fn resolve_pdf_from_action(action: PdfCommandAction) -> Result<crate::models::Fi
 }
 
 fn run_open_pdf(ctx: &AgentContext) -> Result<StepResult, String> {
-    let action = parse_pdf_command_action(&ctx.command)
-        .ok_or_else(|| "PDF action needs a command like 'open pdf 2' or 'open pdf about taxes'.".to_string())?;
+    let action = parse_pdf_command_action(&ctx.command).ok_or_else(|| {
+        "PDF action needs a command like 'open pdf 2' or 'open pdf about taxes'.".to_string()
+    })?;
     let file = resolve_pdf_from_action(action)?;
     let reply = files::open_file_path(&file.path)?;
     Ok(StepResult::ok(reply))
@@ -289,14 +300,63 @@ fn run_open_desktop(ctx: &AgentContext) -> Result<StepResult, String> {
     Ok(StepResult::ok(reply))
 }
 
+fn run_profile_switch(ctx: &AgentContext) -> Result<StepResult, String> {
+    let profile_id = crate::gateway::profiles::profile_id_from_command(&ctx.command)
+        .ok_or_else(|| "Specify work, personal, or lab profile.".to_string())?;
+    let reply =
+        crate::gateway::profiles::switch_profile(&ctx.db_path, &ctx.app_data_dir, profile_id)?;
+    Ok(StepResult::ok(reply))
+}
+
+fn run_installed_skill(ctx: &AgentContext) -> Result<StepResult, String> {
+    let skill =
+        crate::gateway::skills::match_dynamic_skill(&ctx.command, &ctx.db_path, &ctx.app_data_dir)
+            .ok_or_else(|| "No installed skill matched that command.".to_string())?;
+    let skill_root = crate::gateway::skills::skill_root_for_manifest(
+        &ctx.db_path,
+        &ctx.app_data_dir,
+        &skill.id,
+    )?;
+    Ok(crate::gateway::skills_executor::execute_skill(
+        &skill,
+        Some(&skill_root),
+        &ctx.command,
+    ))
+}
+
+fn run_ambient_command(ctx: &AgentContext) -> Result<StepResult, String> {
+    if !ctx.config.labs.ambient_copilot {
+        return Ok(StepResult::ok(
+            "Ambient copilot is disabled. Enable gateway.labs.ambientCopilot first.".to_string(),
+        ));
+    }
+    let normalized = ctx.command.to_lowercase();
+    if normalized.contains("end ambient") {
+        if let Some(session) = crate::gateway::ambient::active_ambient_session(&ctx.db_path)? {
+            crate::gateway::ambient::end_ambient_session(&ctx.db_path, &session.id)?;
+            return Ok(StepResult::ok("Ended ambient copilot session.".to_string()));
+        }
+        return Ok(StepResult::ok("No active ambient session.".to_string()));
+    }
+    let session = crate::gateway::ambient::start_ambient_session(&ctx.db_path, None, None, true)?;
+    Ok(StepResult::ok(format!(
+        "Ambient copilot session {} started. Suggestions are read-only.",
+        session.id
+    )))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::gateway::config::GatewayConfig;
+    use crate::gateway::profiles::seed_default_profiles;
+    use crate::gateway::skills::{SkillHandler, SkillManifest};
     use crate::gateway::types::{
         GatewayAgentKind, GatewayConfidenceBand, GatewayDecisionPolicy, GatewayModelTier,
         GatewayRoute, GatewaySensitivity, RouteLevel,
     };
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
 
     fn command_ctx(command: &str, step_kind: &str) -> AgentContext {
         AgentContext {
@@ -349,5 +409,160 @@ mod tests {
         let result = CommandAgent.run_step(&ctx);
         assert!(result.is_ok());
         assert!(result.unwrap().integration_handoff.is_none());
+    }
+
+    fn skill_ctx(command: &str, manifest: &SkillManifest) -> AgentContext {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0);
+        let app_data_dir = std::env::temp_dir().join(format!("jarvis-skill-exec-{nanos}"));
+        let db_path = std::env::temp_dir().join(format!("jarvis-skill-exec-{nanos}.db"));
+        std::fs::create_dir_all(&app_data_dir).expect("app data");
+        seed_default_profiles(&db_path, &app_data_dir).expect("seed");
+        let skill_dir = app_data_dir.join("skills").join(&manifest.id);
+        std::fs::create_dir_all(&skill_dir).expect("skill dir");
+        let raw = serde_json::to_string_pretty(manifest).expect("serialize manifest");
+        std::fs::write(skill_dir.join("skill.json"), raw).expect("write manifest");
+
+        let mut ctx = command_ctx(command, "installed_skill");
+        ctx.db_path = db_path;
+        ctx.app_data_dir = app_data_dir;
+        ctx.route.capability_id = "platform.skill".into();
+        ctx
+    }
+
+    fn cleanup_skill_ctx(ctx: &AgentContext) {
+        let _ = std::fs::remove_dir_all(&ctx.app_data_dir);
+        let _ = std::fs::remove_file(&ctx.db_path);
+    }
+
+    #[test]
+    fn installed_http_skill_executes_local_get() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut request = [0_u8; 1024];
+            let _ = stream.read(&mut request);
+            let response = b"HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\nhello world";
+            stream.write_all(response).expect("write response");
+        });
+
+        let manifest = SkillManifest {
+            id: "local-http".into(),
+            version: "1.0.0".into(),
+            label: "Local Http".into(),
+            keywords: vec!["local http".into()],
+            agent: "command".into(),
+            permissions: vec!["read".into()],
+            enabled: true,
+            handler: SkillHandler::Http {
+                url: format!("http://127.0.0.1:{port}/health"),
+                method: "GET".into(),
+            },
+        };
+        let ctx = skill_ctx("run local http", &manifest);
+
+        let result = run_installed_skill(&ctx).expect("run skill");
+        assert!(result.success);
+        assert!(result.reply.contains("hello world"));
+
+        handle.join().expect("join");
+        cleanup_skill_ctx(&ctx);
+    }
+
+    #[test]
+    fn installed_http_skill_rejects_non_local_url() {
+        let manifest = SkillManifest {
+            id: "remote-http".into(),
+            version: "1.0.0".into(),
+            label: "Remote Http".into(),
+            keywords: vec!["remote http".into()],
+            agent: "command".into(),
+            permissions: vec!["read".into()],
+            enabled: true,
+            handler: SkillHandler::Http {
+                url: "https://example.com".into(),
+                method: "GET".into(),
+            },
+        };
+        let ctx = skill_ctx("run remote http", &manifest);
+
+        let result = run_installed_skill(&ctx).expect("run skill");
+        assert!(!result.success);
+        assert!(result.reply.to_lowercase().contains("local"));
+
+        cleanup_skill_ctx(&ctx);
+    }
+
+    #[test]
+    fn installed_script_skill_executes_safe_command() {
+        let manifest = SkillManifest {
+            id: "script-echo".into(),
+            version: "1.0.0".into(),
+            label: "Script Echo".into(),
+            keywords: vec!["script echo".into()],
+            agent: "command".into(),
+            permissions: vec!["execute".into()],
+            enabled: true,
+            handler: SkillHandler::Script {
+                command: "cmd /C echo hello-script".into(),
+            },
+        };
+        let ctx = skill_ctx("run script echo", &manifest);
+
+        let result = run_installed_skill(&ctx).expect("run skill");
+        assert!(result.success);
+        assert!(result.reply.to_lowercase().contains("hello-script"));
+
+        cleanup_skill_ctx(&ctx);
+    }
+
+    #[test]
+    fn installed_script_skill_rejects_unsafe_command() {
+        let manifest = SkillManifest {
+            id: "script-unsafe".into(),
+            version: "1.0.0".into(),
+            label: "Script Unsafe".into(),
+            keywords: vec!["script unsafe".into()],
+            agent: "command".into(),
+            permissions: vec!["execute".into()],
+            enabled: true,
+            handler: SkillHandler::Script {
+                command: "cmd /C echo hi && dir".into(),
+            },
+        };
+        let ctx = skill_ctx("run script unsafe", &manifest);
+
+        let result = run_installed_skill(&ctx).expect("run skill");
+        assert!(!result.success);
+        assert!(result.reply.to_lowercase().contains("unsafe"));
+
+        cleanup_skill_ctx(&ctx);
+    }
+
+    #[test]
+    fn installed_wasm_skill_resolves_its_skill_directory_context() {
+        let manifest = SkillManifest {
+            id: "wasm-skill".into(),
+            version: "1.0.0".into(),
+            label: "Wasm Skill".into(),
+            keywords: vec!["wasm skill".into()],
+            agent: "command".into(),
+            permissions: vec![],
+            enabled: true,
+            handler: SkillHandler::Wasm {
+                module: "dist/skill.wasm".into(),
+                entrypoint: Some("run".into()),
+            },
+        };
+        let ctx = skill_ctx("run wasm skill", &manifest);
+
+        let result = run_installed_skill(&ctx).expect("run skill");
+        assert!(!result.success);
+        assert!(result.reply.contains("not wired yet"));
+
+        cleanup_skill_ctx(&ctx);
     }
 }

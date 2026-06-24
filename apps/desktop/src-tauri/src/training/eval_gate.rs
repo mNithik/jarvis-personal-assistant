@@ -122,11 +122,13 @@ pub fn run_training_eval_gate(
     baseline_config.routing.jarvis_router_enabled = false;
     let baseline_context = RouterContext {
         db_path: None,
+        app_data_dir: None,
         config: baseline_config,
     };
 
     let current_context = RouterContext {
         db_path: None,
+        app_data_dir: None,
         config: config.clone(),
     };
 
@@ -136,7 +138,9 @@ pub fn run_training_eval_gate(
 
     let baseline_pct = accuracy_pct(baseline_correct, baseline_total);
     let current_pct = accuracy_pct(current_correct, current_total);
-    let export_record_count = load_training_records(export_path).map(|records| records.len()).unwrap_or(0);
+    let export_record_count = load_training_records(export_path)
+        .map(|records| records.len())
+        .unwrap_or(0);
 
     Ok(TrainingEvalGateResult {
         total_cases: current_total,
@@ -183,16 +187,16 @@ mod tests {
     #[test]
     fn route_eval_files_include_supervisor_golden() {
         let files = discover_route_eval_files(&evals_dir()).expect("discover");
-        assert!(files.iter().any(|path| path.ends_with("f_l3_supervisor.json")));
+        assert!(files
+            .iter()
+            .any(|path| path.ends_with("f_l3_supervisor.json")));
     }
 
     #[test]
     fn training_eval_gate_passes_on_golden_routes() {
         let config = GatewayConfig::default();
-        let export_path = std::env::temp_dir().join(format!(
-            "jarvis-training-eval-{}.jsonl",
-            std::process::id()
-        ));
+        let export_path =
+            std::env::temp_dir().join(format!("jarvis-training-eval-{}.jsonl", std::process::id()));
         let result = run_training_eval_gate(&config, &export_path).expect("gate");
         assert!(result.total_cases >= 20, "expected many golden route cases");
         assert_eq!(result.accuracy_pct, 100.0);

@@ -18,6 +18,7 @@ use crate::gateway::{
 #[derive(Debug, Clone)]
 pub struct RouterContext {
     pub db_path: Option<std::path::PathBuf>,
+    pub app_data_dir: Option<std::path::PathBuf>,
     pub config: GatewayConfig,
 }
 
@@ -30,6 +31,33 @@ pub fn route_turn(request: &TurnRequest, context: &RouterContext) -> GatewayRout
 fn route_turn_internal(command: &str, context: &RouterContext) -> GatewayRoute {
     if let Some(route) = route_l0(command) {
         return route;
+    }
+    if let (Some(db_path), Some(app_data_dir)) =
+        (context.db_path.as_deref(), context.app_data_dir.as_deref())
+    {
+        if let Some(skill) =
+            crate::gateway::skills::match_dynamic_skill(command, db_path, app_data_dir)
+        {
+            return GatewayRoute {
+                capability_id: "platform.skill".to_string(),
+                capability_label: format!("Installed Skill: {}", skill.label),
+                agent: crate::gateway::types::GatewayAgentKind::Command,
+                tier: crate::gateway::types::GatewayModelTier::Local,
+                sensitivity: classify_sensitivity(&normalize_command(command)),
+                score: 3,
+                confidence: crate::gateway::types::GatewayConfidenceBand::High,
+                decision_policy: crate::gateway::types::GatewayDecisionPolicy::Execute,
+                decision_reason:
+                    "Matched an installed skill keyword at runtime. Safe to execute when gateway takeover is enabled."
+                        .to_string(),
+                reason: format!(
+                    "Matched installed skill \"{}\" from app_data/skills at runtime.",
+                    skill.id
+                ),
+                route_level: crate::gateway::types::RouteLevel::L0,
+                resolved_provider: None,
+            };
+        }
     }
     if let Some(route) = route_l0_5(command) {
         return route;
@@ -76,6 +104,9 @@ fn finalize_route(mut route: GatewayRoute, config: &GatewayConfig) -> GatewayRou
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+
+    use crate::gateway::profiles::{seed_default_profiles, switch_profile};
     use crate::gateway::types::{
         GatewayAgentKind, GatewayConfidenceBand, GatewayDecisionPolicy, GatewaySensitivity,
         RouteLevel, TurnSource,
@@ -84,6 +115,7 @@ mod tests {
     fn context() -> RouterContext {
         RouterContext {
             db_path: None,
+            app_data_dir: None,
             config: GatewayConfig::default(),
         }
     }
@@ -95,6 +127,30 @@ mod tests {
             source: Some(TurnSource::Text),
             idempotency_key: None,
         }
+    }
+
+    fn write_skill(
+        dir: &std::path::Path,
+        id: &str,
+        label: &str,
+        keywords: &[&str],
+    ) -> Result<(), String> {
+        let skill_dir = dir.join(id);
+        fs::create_dir_all(&skill_dir).map_err(|error| error.to_string())?;
+        let manifest = crate::gateway::skills::SkillManifest {
+            id: id.to_string(),
+            version: "1.0.0".to_string(),
+            label: label.to_string(),
+            keywords: keywords.iter().map(|keyword| keyword.to_string()).collect(),
+            agent: "command".to_string(),
+            permissions: vec!["read".to_string()],
+            enabled: true,
+            handler: crate::gateway::skills::SkillHandler::Route {
+                capability_id: "command.general".to_string(),
+            },
+        };
+        let raw = serde_json::to_string_pretty(&manifest).map_err(|error| error.to_string())?;
+        fs::write(skill_dir.join("skill.json"), raw).map_err(|error| error.to_string())
     }
 
     #[test]
@@ -188,7 +244,10 @@ mod tests {
 
     #[test]
     fn secret_routes_require_confirmation() {
-        let route = route_turn(&request("Save this API key to the model config"), &context());
+        let route = route_turn(
+            &request("Save this API key to the model config"),
+            &context(),
+        );
         assert_eq!(route.sensitivity, GatewaySensitivity::Secret);
         assert_eq!(route.decision_policy, GatewayDecisionPolicy::Confirm);
     }
@@ -219,5 +278,57 @@ mod tests {
         assert_eq!(route.capability_id, "command.general");
         assert_eq!(route.route_level, RouteLevel::Fallback);
         assert!(route.reason.contains("Ollama L2 router degraded mode"));
+    }
+
+    #[test]
+    fn installed_skill_route_honors_active_profile_override() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0);
+        let app_data_dir =
+            std::env::temp_dir().join(format!("jarvis-router-skill-profile-app-{nanos}"));
+        let db_path = std::env::temp_dir().join(format!("jarvis-router-skill-profile-{nanos}.db"));
+        fs::create_dir_all(&app_data_dir).expect("app data dir");
+        seed_default_profiles(&db_path, &app_data_dir).expect("seed profiles");
+
+        let global_skills = crate::gateway::skills::skills_root(&app_data_dir);
+        write_skill(
+            &global_skills,
+            "shared-skill",
+            "Global Skill",
+            &["shared command"],
+        )
+        .expect("write global skill");
+
+        let personal_skills = crate::gateway::skills::skills_root(&app_data_dir).join("personal");
+        write_skill(
+            &personal_skills,
+            "shared-skill",
+            "Personal Skill",
+            &["personal command"],
+        )
+        .expect("write personal skill");
+
+        let mut context = context();
+        context.db_path = Some(db_path.clone());
+        context.app_data_dir = Some(app_data_dir.clone());
+
+        let work_route = route_turn(&request("run shared command"), &context);
+        assert_eq!(work_route.capability_id, "platform.skill");
+
+        let hidden_personal_route = route_turn(&request("run personal command"), &context);
+        assert_ne!(hidden_personal_route.capability_id, "platform.skill");
+
+        switch_profile(&db_path, &app_data_dir, "personal").expect("switch profile");
+
+        let personal_route = route_turn(&request("run personal command"), &context);
+        assert_eq!(personal_route.capability_id, "platform.skill");
+
+        let hidden_global_route = route_turn(&request("run shared command"), &context);
+        assert_ne!(hidden_global_route.capability_id, "platform.skill");
+
+        let _ = fs::remove_dir_all(&app_data_dir);
+        let _ = fs::remove_file(&db_path);
     }
 }

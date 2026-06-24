@@ -70,12 +70,22 @@ fn list_week_commitments(db_path: &Path) -> String {
         let lines: Vec<_> = tasks
             .iter()
             .filter(|task| {
-                task.due.as_deref().and_then(|due| {
-                    chrono::NaiveDate::parse_from_str(&due[..10.min(due.len())], "%Y-%m-%d").ok()
-                }).is_some_and(|due| due >= today && due <= week_end)
+                task.due
+                    .as_deref()
+                    .and_then(|due| {
+                        chrono::NaiveDate::parse_from_str(&due[..10.min(due.len())], "%Y-%m-%d")
+                            .ok()
+                    })
+                    .is_some_and(|due| due >= today && due <= week_end)
             })
             .take(8)
-            .map(|task| format!("- {} (due {})", task.title, task.due.as_deref().unwrap_or("")))
+            .map(|task| {
+                format!(
+                    "- {} (due {})",
+                    task.title,
+                    task.due.as_deref().unwrap_or("")
+                )
+            })
             .collect();
         if !lines.is_empty() {
             return format!("Commitments this week:\n{}", lines.join("\n"));

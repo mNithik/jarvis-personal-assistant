@@ -119,7 +119,12 @@ fn capability_registry() -> &'static [CapabilityRoute] {
             label: "Study Setup",
             agent: GatewayAgentKind::Command,
             tier: GatewayModelTier::Local,
-            keywords: &["study setup", "launch study", "study routine", "focus workspace"],
+            keywords: &[
+                "study setup",
+                "launch study",
+                "study routine",
+                "focus workspace",
+            ],
             reason: "Matched the study setup capability registry.",
         },
         CapabilityRoute {
@@ -346,12 +351,7 @@ fn capability_registry() -> &'static [CapabilityRoute] {
             label: "Zapier MCP",
             agent: GatewayAgentKind::Integrations,
             tier: GatewayModelTier::Worker,
-            keywords: &[
-                "zapier actions",
-                "list zapier",
-                "my zaps",
-                "run zapier",
-            ],
+            keywords: &["zapier actions", "list zapier", "my zaps", "run zapier"],
             reason: "Matched the Zapier MCP capability registry.",
         },
         CapabilityRoute {
@@ -508,12 +508,7 @@ fn capability_registry() -> &'static [CapabilityRoute] {
             label: "Writer",
             agent: GatewayAgentKind::Writer,
             tier: GatewayModelTier::Worker,
-            keywords: &[
-                "draft ",
-                "write a note",
-                "summarize for notion",
-                "compose ",
-            ],
+            keywords: &["draft ", "write a note", "summarize for notion", "compose "],
             reason: "Matched the writer capability registry.",
         },
         CapabilityRoute {
@@ -528,6 +523,31 @@ fn capability_registry() -> &'static [CapabilityRoute] {
                 "read clipboard",
             ],
             reason: "Matched the clipboard capability registry.",
+        },
+        CapabilityRoute {
+            id: "platform.profiles",
+            label: "Profiles",
+            agent: GatewayAgentKind::Command,
+            tier: GatewayModelTier::Local,
+            keywords: &[
+                "switch to work profile",
+                "switch to personal profile",
+                "switch to lab profile",
+                "switch profile",
+            ],
+            reason: "Matched the profile switch capability registry.",
+        },
+        CapabilityRoute {
+            id: "labs.ambient",
+            label: "Ambient Copilot",
+            agent: GatewayAgentKind::Command,
+            tier: GatewayModelTier::Local,
+            keywords: &[
+                "ambient copilot",
+                "start ambient session",
+                "end ambient session",
+            ],
+            reason: "Matched the ambient copilot lab capability registry.",
         },
     ]
 }

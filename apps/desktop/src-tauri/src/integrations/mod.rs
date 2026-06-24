@@ -23,7 +23,11 @@ pub fn parse_notion_command(command: &str) -> Option<NotionAction> {
         return Some(NotionAction::ListNotes);
     }
 
-    const SEARCH_PREFIXES: &[&str] = &["search notion for ", "search notes for ", "find notion note "];
+    const SEARCH_PREFIXES: &[&str] = &[
+        "search notion for ",
+        "search notes for ",
+        "find notion note ",
+    ];
     for prefix in SEARCH_PREFIXES {
         if normalized.starts_with(prefix) {
             let query = trimmed[prefix.len()..].trim();
@@ -88,7 +92,9 @@ pub fn parse_spotify_command(command: &str) -> Option<SpotifyAction> {
     if normalized.contains("pause") && normalized.contains("spotify") {
         return Some(SpotifyAction::Pause);
     }
-    if (normalized.contains("skip") || normalized.contains("next")) && normalized.contains("spotify") {
+    if (normalized.contains("skip") || normalized.contains("next"))
+        && normalized.contains("spotify")
+    {
         return Some(SpotifyAction::Skip);
     }
     if normalized.contains("previous") && normalized.contains("spotify") {
@@ -97,7 +103,11 @@ pub fn parse_spotify_command(command: &str) -> Option<SpotifyAction> {
     if normalized.contains("play") && normalized.contains("spotify") {
         for prefix in ["play ", "play music ", "play song "] {
             if let Some(rest) = normalized.strip_prefix(prefix) {
-                let query = rest.replace(" on spotify", "").replace("spotify", "").trim().to_string();
+                let query = rest
+                    .replace(" on spotify", "")
+                    .replace("spotify", "")
+                    .trim()
+                    .to_string();
                 if !query.is_empty() && query != "music" {
                     return Some(SpotifyAction::PlayQuery { query });
                 }
@@ -140,7 +150,12 @@ pub fn parse_gmail_command(command: &str) -> Option<GmailAction> {
         }
     }
 
-    for prefix in ["read the email about ", "read email about ", "show the email about ", "show email about "] {
+    for prefix in [
+        "read the email about ",
+        "read email about ",
+        "show the email about ",
+        "show email about ",
+    ] {
         if normalized.starts_with(prefix) {
             let query = trimmed[prefix.len()..].trim();
             if !query.is_empty() {
@@ -183,7 +198,12 @@ pub fn parse_gmail_command(command: &str) -> Option<GmailAction> {
         return Some(GmailAction::ListUnread);
     }
 
-    for prefix in ["search gmail for ", "search email for ", "search emails for ", "find email "] {
+    for prefix in [
+        "search gmail for ",
+        "search email for ",
+        "search emails for ",
+        "find email ",
+    ] {
         if normalized.starts_with(prefix) {
             let query = trimmed[prefix.len()..].trim();
             if !query.is_empty() {
@@ -198,19 +218,18 @@ pub fn parse_gmail_command(command: &str) -> Option<GmailAction> {
 }
 
 pub fn is_notion_command(command: &str) -> bool {
-    parse_notion_command(command).is_some()
-        || {
-            let n = command.trim().to_lowercase();
-            n.contains("notion") || n.contains("my notes")
-        }
+    parse_notion_command(command).is_some() || {
+        let n = command.trim().to_lowercase();
+        n.contains("notion") || n.contains("my notes")
+    }
 }
 
 pub fn is_spotify_command(command: &str) -> bool {
-    parse_spotify_command(command).is_some()
-        || {
-            let n = command.trim().to_lowercase();
-            (n.contains("spotify") || n.contains("music")) && (n.contains("play") || n.contains("pause") || n.contains("skip"))
-        }
+    parse_spotify_command(command).is_some() || {
+        let n = command.trim().to_lowercase();
+        (n.contains("spotify") || n.contains("music"))
+            && (n.contains("play") || n.contains("pause") || n.contains("skip"))
+    }
 }
 
 pub fn is_gmail_command(command: &str) -> bool {
@@ -238,7 +257,8 @@ pub fn parse_calendar_command(command: &str) -> Option<CalendarAction> {
             | "what is on my calendar today"
             | "list today's events"
             | "list todays events"
-    ) || normalized.contains("calendar today") {
+    ) || normalized.contains("calendar today")
+    {
         return Some(CalendarAction::ListToday);
     }
 
@@ -249,7 +269,9 @@ pub fn parse_calendar_command(command: &str) -> Option<CalendarAction> {
             | "put this meeting on my calendar"
             | "make a calendar event from this email"
             | "turn this email into a calendar event"
-    ) || (normalized.contains("email") && normalized.contains("calendar") && normalized.contains("add"))
+    ) || (normalized.contains("email")
+        && normalized.contains("calendar")
+        && normalized.contains("add"))
     {
         return Some(CalendarAction::CreateFromEmail);
     }
@@ -308,13 +330,11 @@ pub fn parse_ocr_notion_command(command: &str) -> Option<OcrNotionAction> {
 }
 
 pub fn is_ocr_notion_command(command: &str) -> bool {
-    parse_ocr_notion_command(command).is_some()
-        || parse_ocr_watch_command(command).is_some()
-        || {
-            let n = command.trim().to_lowercase();
-            n.contains("notion")
-                && (n.contains("ocr") || n.contains("screen text") || n.contains("screen history"))
-        }
+    parse_ocr_notion_command(command).is_some() || parse_ocr_watch_command(command).is_some() || {
+        let n = command.trim().to_lowercase();
+        n.contains("notion")
+            && (n.contains("ocr") || n.contains("screen text") || n.contains("screen history"))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -395,9 +415,7 @@ pub fn parse_email_notion_command(command: &str) -> Option<EmailNotionAction> {
 
     if matches!(
         normalized.as_str(),
-        "save this email to notion"
-            | "save this email as a note"
-            | "save current email to notion"
+        "save this email to notion" | "save this email as a note" | "save current email to notion"
     ) {
         return Some(EmailNotionAction::SaveCurrentEmail);
     }
@@ -487,30 +505,12 @@ pub fn parse_email_notion_command(command: &str) -> Option<EmailNotionAction> {
     }
 
     for (prefix, action) in [
-        (
-            "save travel from the email about ",
-            "travel_query",
-        ),
-        (
-            "save travel from email about ",
-            "travel_query",
-        ),
-        (
-            "save expense from the email about ",
-            "expense_query",
-        ),
-        (
-            "save expense from email about ",
-            "expense_query",
-        ),
-        (
-            "save package from the email about ",
-            "package_query",
-        ),
-        (
-            "save package from email about ",
-            "package_query",
-        ),
+        ("save travel from the email about ", "travel_query"),
+        ("save travel from email about ", "travel_query"),
+        ("save expense from the email about ", "expense_query"),
+        ("save expense from email about ", "expense_query"),
+        ("save package from the email about ", "package_query"),
+        ("save package from email about ", "package_query"),
     ] {
         if normalized.starts_with(prefix) {
             let rest = trimmed[prefix.len()..].trim();
@@ -557,9 +557,8 @@ pub fn parse_email_notion_command(command: &str) -> Option<EmailNotionAction> {
 }
 
 pub fn is_email_notion_command(command: &str) -> bool {
-    parse_email_notion_command(command).is_some()
-        || {
-            let n = command.trim().to_lowercase();
-            n.contains("email") && n.contains("notion") && n.contains("save")
-        }
+    parse_email_notion_command(command).is_some() || {
+        let n = command.trim().to_lowercase();
+        n.contains("email") && n.contains("notion") && n.contains("save")
+    }
 }

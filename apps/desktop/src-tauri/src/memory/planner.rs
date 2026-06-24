@@ -27,10 +27,7 @@ pub fn is_replan_command(command: &str) -> bool {
     let normalized = command.trim().to_lowercase();
     matches!(
         normalized.as_str(),
-        "replan my day"
-            | "adjust my plan"
-            | "something came up"
-            | "replan day"
+        "replan my day" | "adjust my plan" | "something came up" | "replan day"
     ) || normalized.starts_with("replan my day")
 }
 
@@ -83,7 +80,9 @@ fn rank_tasks(
     ranked.sort_by(|left, right| {
         let left_score = task_priority_score(left, today, urgent_emails);
         let right_score = task_priority_score(right, today, urgent_emails);
-        right_score.cmp(&left_score).then_with(|| left.title.cmp(&right.title))
+        right_score
+            .cmp(&left_score)
+            .then_with(|| left.title.cmp(&right.title))
     });
     ranked
 }
@@ -119,15 +118,14 @@ fn task_priority_score(
 fn gmail_urgency_boost(task: &NotionPlannerTask, urgent_emails: &[GmailMessageRecord]) -> i32 {
     let title_lower = task.title.to_lowercase();
     for email in urgent_emails {
-        let combined = format!(
-            "{} {} {}",
-            email.subject, email.snippet, email.body
-        )
-        .to_lowercase();
+        let combined = format!("{} {} {}", email.subject, email.snippet, email.body).to_lowercase();
         if combined.contains(&title_lower) {
             return 50;
         }
-        for word in title_lower.split_whitespace().filter(|word| word.len() >= 4) {
+        for word in title_lower
+            .split_whitespace()
+            .filter(|word| word.len() >= 4)
+        {
             if combined.contains(word) {
                 return 35;
             }
@@ -199,7 +197,8 @@ fn format_task_section(tasks: &[NotionPlannerTask], today: chrono::NaiveDate) ->
 fn format_calendar_section(config: Option<&GatewayConfig>, token: Option<&str>) -> String {
     let Some(token) = token else {
         if config.is_some_and(|value| value.features.calendar) {
-            return "Calendar: connect Google Calendar in Settings to include live events.".to_string();
+            return "Calendar: connect Google Calendar in Settings to include live events."
+                .to_string();
         }
         return "Calendar: disabled in gateway settings.".to_string();
     };
@@ -238,11 +237,10 @@ pub fn compose_morning_plan(
 ) -> Result<DayPlanRecord, String> {
     notion::resolve_credentials(db_path)?;
     let today = today_plan_date();
-    let today_date = chrono::NaiveDate::parse_from_str(&today, "%Y-%m-%d")
-        .map_err(|error| error.to_string())?;
+    let today_date =
+        chrono::NaiveDate::parse_from_str(&today, "%Y-%m-%d").map_err(|error| error.to_string())?;
 
-    let memory_snapshot =
-        brief::compose_daily_brief_v2(db_path, Some(app_data_dir), config)?;
+    let memory_snapshot = brief::compose_daily_brief_v2(db_path, Some(app_data_dir), config)?;
     let tasks = notion::list_planner_tasks(db_path)?;
     let calendar_token = if config.is_some_and(|value| value.features.calendar) {
         google::get_session_token("calendar").ok()
@@ -315,7 +313,8 @@ pub fn replan_day(
 
     let replan_note = if revised_top_three == baseline.top_three {
         if urgent_emails.is_empty() {
-            "\n\nReplan note: priorities are unchanged; keep executing the current Top 3.".to_string()
+            "\n\nReplan note: priorities are unchanged; keep executing the current Top 3."
+                .to_string()
         } else {
             "\n\nReplan note: priorities are unchanged, but urgent Gmail threads were considered."
                 .to_string()
@@ -391,7 +390,10 @@ mod tests {
             },
         ];
         let top = build_top_three(&tasks, today, None);
-        assert_eq!(top.first().map(String::as_str), Some("Overdue (due 2026-06-10)"));
+        assert_eq!(
+            top.first().map(String::as_str),
+            Some("Overdue (due 2026-06-10)")
+        );
     }
 
     #[test]

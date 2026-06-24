@@ -1,8 +1,37 @@
 use std::path::Path;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 
-pub const MEMORY_SCHEMA_VERSION: i64 = 1;
+pub const MEMORY_SCHEMA_VERSION: i64 = 3;
+
+fn active_profile_partition_id(connection: &Connection) -> String {
+    connection
+        .query_row(
+            "SELECT value FROM app_meta WHERE key = 'active_profile_id'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .ok()
+        .flatten()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "work".to_string())
+}
+
+fn column_exists(connection: &Connection, table: &str, column: &str) -> Result<bool, String> {
+    let mut statement = connection
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|error| error.to_string())?;
+    for value in rows {
+        if value.map_err(|error| error.to_string())? == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
 
 pub fn migrate(path: &Path) -> Result<(), String> {
     let connection = Connection::open(path).map_err(|error| error.to_string())?;
@@ -11,6 +40,7 @@ pub fn migrate(path: &Path) -> Result<(), String> {
             "
             CREATE TABLE IF NOT EXISTS memory_entities (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                profile_id TEXT NOT NULL DEFAULT 'work',
                 domain TEXT NOT NULL,
                 label TEXT NOT NULL,
                 metadata_json TEXT NOT NULL DEFAULT '{}',
@@ -29,6 +59,7 @@ pub fn migrate(path: &Path) -> Result<(), String> {
 
             CREATE TABLE IF NOT EXISTS memory_documents (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                profile_id TEXT NOT NULL DEFAULT 'work',
                 domain TEXT NOT NULL,
                 source TEXT NOT NULL,
                 content TEXT NOT NULL,
@@ -37,6 +68,7 @@ pub fn migrate(path: &Path) -> Result<(), String> {
 
             CREATE TABLE IF NOT EXISTS memory_chunks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                profile_id TEXT NOT NULL DEFAULT 'work',
                 document_id INTEGER NOT NULL,
                 entity_id INTEGER,
                 domain TEXT NOT NULL,
@@ -61,6 +93,12 @@ pub fn migrate(path: &Path) -> Result<(), String> {
 
             CREATE INDEX IF NOT EXISTS idx_memory_entities_domain_label
                 ON memory_entities(domain, label);
+            CREATE INDEX IF NOT EXISTS idx_memory_entities_profile_domain_label
+                ON memory_entities(profile_id, domain, label);
+            CREATE INDEX IF NOT EXISTS idx_memory_documents_profile_domain
+                ON memory_documents(profile_id, domain, created_at);
+            CREATE INDEX IF NOT EXISTS idx_memory_chunks_profile_domain
+                ON memory_chunks(profile_id, domain, id DESC);
             CREATE INDEX IF NOT EXISTS idx_memory_facts_entity_predicate
                 ON memory_facts(entity_id, predicate);
 
@@ -68,6 +106,55 @@ pub fn migrate(path: &Path) -> Result<(), String> {
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+            ",
+        )
+        .map_err(|error| error.to_string())?;
+
+    if !column_exists(&connection, "memory_entities", "profile_id")? {
+        connection
+            .execute("ALTER TABLE memory_entities ADD COLUMN profile_id TEXT", [])
+            .map_err(|error| error.to_string())?;
+    }
+    connection
+        .execute(
+            "UPDATE memory_entities SET profile_id = ?1 WHERE profile_id IS NULL OR trim(profile_id) = ''",
+            [active_profile_partition_id(&connection)],
+        )
+        .map_err(|error| error.to_string())?;
+    if !column_exists(&connection, "memory_documents", "profile_id")? {
+        connection
+            .execute(
+                "ALTER TABLE memory_documents ADD COLUMN profile_id TEXT",
+                [],
+            )
+            .map_err(|error| error.to_string())?;
+    }
+    connection
+        .execute(
+            "UPDATE memory_documents SET profile_id = ?1 WHERE profile_id IS NULL OR trim(profile_id) = ''",
+            [active_profile_partition_id(&connection)],
+        )
+        .map_err(|error| error.to_string())?;
+    if !column_exists(&connection, "memory_chunks", "profile_id")? {
+        connection
+            .execute("ALTER TABLE memory_chunks ADD COLUMN profile_id TEXT", [])
+            .map_err(|error| error.to_string())?;
+    }
+    connection
+        .execute(
+            "UPDATE memory_chunks SET profile_id = ?1 WHERE profile_id IS NULL OR trim(profile_id) = ''",
+            [active_profile_partition_id(&connection)],
+        )
+        .map_err(|error| error.to_string())?;
+    connection
+        .execute_batch(
+            "
+            CREATE INDEX IF NOT EXISTS idx_memory_entities_profile_domain_label
+                ON memory_entities(profile_id, domain, label);
+            CREATE INDEX IF NOT EXISTS idx_memory_documents_profile_domain
+                ON memory_documents(profile_id, domain, created_at);
+            CREATE INDEX IF NOT EXISTS idx_memory_chunks_profile_domain
+                ON memory_chunks(profile_id, domain, id DESC);
             ",
         )
         .map_err(|error| error.to_string())?;

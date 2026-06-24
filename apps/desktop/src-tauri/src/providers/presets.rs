@@ -154,9 +154,19 @@ pub fn model_presets() -> Vec<ModelPreset> {
 
 pub fn provider_defaults() -> Vec<ProviderDefaults> {
     vec![
-        provider("local_ollama", "http://127.0.0.1:11434/v1", "qwen3:4b", true),
+        provider(
+            "local_ollama",
+            "http://127.0.0.1:11434/v1",
+            "qwen3:4b",
+            true,
+        ),
         provider("lm_studio", "http://127.0.0.1:1234/v1", "", false),
-        provider("nvidia_nim", "https://integrate.api.nvidia.com/v1", "", false),
+        provider(
+            "nvidia_nim",
+            "https://integrate.api.nvidia.com/v1",
+            "",
+            false,
+        ),
         provider(
             "gemini",
             "https://generativelanguage.googleapis.com/v1beta",
@@ -190,7 +200,13 @@ pub fn find_preset(id: &str) -> Option<ModelPreset> {
 pub fn requires_stored_key(provider_id: &str) -> bool {
     matches!(
         provider_id,
-        "nvidia_nim" | "gemini" | "groq" | "openrouter" | "cerebras" | "huggingface" | "openai"
+        "nvidia_nim"
+            | "gemini"
+            | "groq"
+            | "openrouter"
+            | "cerebras"
+            | "huggingface"
+            | "openai"
             | "anthropic"
     )
 }

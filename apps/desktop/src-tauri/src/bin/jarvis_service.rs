@@ -35,6 +35,7 @@ fn run_service_loop() {
     runtime.block_on(async {
         loop {
             ctx.reload_config();
+            jarvis_lib::gateway::runtime::headless_api::sync_headless_local_turn_api(ctx.clone());
             if ctx.config().enabled {
                 let _ = ctx.run_proactive_tick_headless();
             }
@@ -114,7 +115,8 @@ mod windows {
         }
 
         let app_data = resolve_app_data();
-        HeadlessGatewayContext::new(app_data.clone(), app_data.join("jarvis.db")).clear_service_status();
+        HeadlessGatewayContext::new(app_data.clone(), app_data.join("jarvis.db"))
+            .clear_service_status();
 
         let _ = status_handle.set_service_status(ServiceStatus {
             service_type: ServiceType::OWN_PROCESS,

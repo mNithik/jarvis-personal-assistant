@@ -28,7 +28,11 @@ pub fn ensure_trigger_table(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-pub fn enqueue_trigger(conn: &Connection, kind: &str, payload: &str) -> Result<TriggerEvent, String> {
+pub fn enqueue_trigger(
+    conn: &Connection,
+    kind: &str,
+    payload: &str,
+) -> Result<TriggerEvent, String> {
     ensure_trigger_table(conn)?;
     let id = format!("trigger-{}-{}", kind, uuid_like());
     conn.execute(
@@ -142,10 +146,8 @@ mod tests {
 
     #[test]
     fn enqueue_and_claim_trigger() {
-        let path = std::env::temp_dir().join(format!(
-            "jarvis-trigger-queue-{}",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("jarvis-trigger-queue-{}", std::process::id()));
         let conn = Connection::open(&path).expect("open db");
         crate::migrations::apply_pending_migrations(&conn, &path).expect("migrate");
         enqueue_trigger(&conn, "ocr_watch", r#"{"watchId":"w1"}"#).expect("enqueue");

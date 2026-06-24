@@ -71,8 +71,8 @@ impl ApprovalGate {
 
         match tool.risk {
             ApprovalRisk::Read => ApprovalOutcome::Allowed,
-            ApprovalRisk::Write | ApprovalRisk::Destructive => ApprovalOutcome::ApprovalRequired(
-                build_request(
+            ApprovalRisk::Write | ApprovalRisk::Destructive => {
+                ApprovalOutcome::ApprovalRequired(build_request(
                     session_id,
                     turn_id,
                     format!("Approve tool: {}", tool.label),
@@ -81,8 +81,8 @@ impl ApprovalGate {
                         tool.id, tool.risk
                     ),
                     tool.risk.clone(),
-                ),
-            ),
+                ))
+            }
         }
     }
 }
@@ -214,7 +214,9 @@ mod tests {
     #[test]
     fn destructive_tools_require_approval() {
         let outcome = ApprovalGate::evaluate_tool("delete_provider_key", "session-a", 3);
-        assert!(matches!(outcome, ApprovalOutcome::ApprovalRequired(request) if request.risk == ApprovalRisk::Destructive));
+        assert!(
+            matches!(outcome, ApprovalOutcome::ApprovalRequired(request) if request.risk == ApprovalRisk::Destructive)
+        );
     }
 
     #[test]

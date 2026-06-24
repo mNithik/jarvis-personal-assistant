@@ -62,7 +62,10 @@ pub fn upsert_package(path: &Path, record: &PackageMemoryRecord) -> Result<(), S
     Ok(())
 }
 
-pub fn import_package_records(path: &Path, records: &[PackageMemoryRecord]) -> Result<usize, String> {
+pub fn import_package_records(
+    path: &Path,
+    records: &[PackageMemoryRecord],
+) -> Result<usize, String> {
     for record in records {
         upsert_package(path, record)?;
     }

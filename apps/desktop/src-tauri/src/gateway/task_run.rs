@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::db::TaskStateRecord;
 
-use super::task_loop::{TaskStepsPayload, StepStatus};
+use super::task_loop::{StepStatus, TaskStepsPayload};
 use super::types::GatewayPolicyClass;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -77,7 +77,11 @@ pub struct TaskRunSummary {
 }
 
 impl TaskRunRecord {
-    pub fn new(id: impl Into<String>, session_id: impl Into<String>, command: impl Into<String>) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        session_id: impl Into<String>,
+        command: impl Into<String>,
+    ) -> Self {
         Self {
             id: id.into(),
             session_id: session_id.into(),
@@ -113,7 +117,10 @@ fn map_step_status(status: &super::task_loop::StepStatus) -> TaskRunStepStatus {
     }
 }
 
-pub fn from_task_state(record: &TaskStateRecord, policy_class: GatewayPolicyClass) -> TaskRunRecord {
+pub fn from_task_state(
+    record: &TaskStateRecord,
+    policy_class: GatewayPolicyClass,
+) -> TaskRunRecord {
     let payload: TaskStepsPayload =
         serde_json::from_str(&record.steps_json).unwrap_or(TaskStepsPayload {
             failure_count: 0,

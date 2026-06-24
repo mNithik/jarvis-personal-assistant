@@ -3,12 +3,10 @@ use std::sync::LazyLock;
 
 static EMAIL_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}").unwrap());
-static SK_KEY_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"sk-[A-Za-z0-9_-]{8,}").unwrap());
+static SK_KEY_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"sk-[A-Za-z0-9_-]{8,}").unwrap());
 static AIZA_KEY_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"AIza[A-Za-z0-9_-]{20,}").unwrap());
-static LONG_URL_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"https?://[^\s]{32,}").unwrap());
+static LONG_URL_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"https?://[^\s]{32,}").unwrap());
 static PROMPT_INJECTION_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"(?i)(ignore|disregard|override)\s+(all\s+)?(previous|prior|system|developer)\s+instructions?",
@@ -35,9 +33,7 @@ pub fn redact_for_cloud(input: &str) -> RedactionResult {
     ] {
         if pattern.is_match(&text) {
             redacted = true;
-            text = pattern
-                .replace_all(&text, "[REDACTED]")
-                .into_owned();
+            text = pattern.replace_all(&text, "[REDACTED]").into_owned();
         }
     }
 
@@ -89,7 +85,10 @@ mod tests {
         );
 
         assert!(result.redacted);
-        assert!(!result.text.to_lowercase().contains("ignore previous instructions"));
+        assert!(!result
+            .text
+            .to_lowercase()
+            .contains("ignore previous instructions"));
         assert!(result.text.contains("[REDACTED]"));
     }
 }

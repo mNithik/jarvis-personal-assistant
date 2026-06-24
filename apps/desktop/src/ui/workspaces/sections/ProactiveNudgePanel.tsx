@@ -26,7 +26,7 @@ export function ProactiveNudgePanel() {
   }
 
   return (
-    <section className="proactive-nudge-panel" key="proactive-nudges">
+    <section className="proactive-nudge-panel" data-testid="proactive-nudge-panel">
       <div>
         <p className="section-kicker">Proactive</p>
         <h3>Anomaly nudges</h3>
@@ -38,6 +38,7 @@ export function ProactiveNudgePanel() {
             <button
               className="secondary-button"
               type="button"
+              data-testid="proactive-nudge-dismiss"
               onClick={() => {
                 dismissProactiveNudge(nudge.id).then(refresh).catch(() => refresh());
               }}
@@ -47,6 +48,7 @@ export function ProactiveNudgePanel() {
             <button
               className="primary-button"
               type="button"
+              data-testid="proactive-nudge-acknowledge"
               onClick={() => {
                 acceptProactiveNudge(nudge.id).then(refresh).catch(() => refresh());
               }}

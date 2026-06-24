@@ -5,5 +5,19 @@
     "fixture": "topic_graph",
     "expectSuccess": true,
     "expectReplyContains": "Connections"
+  },
+  {
+    "command": "topic graph for product review",
+    "capabilityId": "memory.life",
+    "fixture": "topic_graph",
+    "expectSuccess": true,
+    "expectReplyContains": "Connections"
+  },
+  {
+    "command": "what is connected to product review",
+    "capabilityId": "memory.life",
+    "fixture": "topic_graph",
+    "expectSuccess": true,
+    "expectReplyContains": "Connections"
   }
 ]

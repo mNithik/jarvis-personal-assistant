@@ -1,0 +1,6 @@
+[
+  { "phrase": "switch to work profile", "capabilityId": "platform.profiles" },
+  { "phrase": "switch to personal profile", "capabilityId": "platform.profiles" },
+  { "phrase": "switch to lab profile", "capabilityId": "platform.profiles" },
+  { "phrase": "switch profile", "capabilityId": "platform.profiles" }
+]

@@ -258,6 +258,7 @@ pub struct GatewayLabsConfig {
     pub council_runtime: bool,
     pub proactive_anomaly: bool,
     pub world_model_queries: bool,
+    pub ambient_copilot: bool,
 }
 
 impl Default for GatewayLabsConfig {
@@ -268,6 +269,7 @@ impl Default for GatewayLabsConfig {
             council_runtime: false,
             proactive_anomaly: false,
             world_model_queries: false,
+            ambient_copilot: false,
         }
     }
 }
@@ -395,7 +397,8 @@ pub fn load_gateway_config(app_data_dir: &Path) -> GatewayConfig {
         Err(_) => return GatewayConfig::default(),
     };
 
-    serde_json::from_str(&raw).unwrap_or_default()
+    let normalized = raw.strip_prefix('\u{feff}').unwrap_or(&raw);
+    serde_json::from_str(normalized).unwrap_or_default()
 }
 
 pub fn ensure_default_gateway_config(app_data_dir: &Path) -> GatewayConfig {
@@ -519,6 +522,23 @@ mod tests {
     fn defaults_when_file_missing() {
         let dir = temp_dir();
         assert_eq!(load_gateway_config(&dir), gateway_default_install_preset());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn accepts_utf8_bom_prefixed_gateway_json() {
+        let dir = temp_dir();
+        fs::create_dir_all(&dir).expect("create dir");
+        let path = gateway_config_path(&dir);
+        let raw = "\u{feff}{\"enabled\":true,\"channels\":{\"localWsEnabled\":true,\"localWsPort\":18789}}";
+        fs::write(&path, raw.as_bytes()).expect("write config");
+
+        let loaded = load_gateway_config(&dir);
+
+        assert!(loaded.enabled);
+        assert!(loaded.channels.local_ws_enabled);
+        assert_eq!(loaded.channels.local_ws_port, 18789);
+
         let _ = fs::remove_dir_all(dir);
     }
 }

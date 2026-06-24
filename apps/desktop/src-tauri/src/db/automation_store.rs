@@ -185,10 +185,12 @@ pub fn list_ocr_watches(path: &Path) -> Result<Vec<OcrWatchRecord>, String> {
                 log_to_notion,
                 create_task_on_match,
             )
-            .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                error,
-            ))))
+            .map_err(|error| {
+                rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    error,
+                )))
+            })
         })
         .map_err(|error| error.to_string())?;
 
@@ -376,8 +378,7 @@ pub fn list_saved_workflows(path: &Path) -> Result<Vec<SavedWorkflowRecord>, Str
 
 pub fn save_saved_workflow(path: &Path, workflow: &SavedWorkflowRecord) -> Result<(), String> {
     let connection = open_connection(path)?;
-    let steps_json =
-        serde_json::to_string(&workflow.steps).map_err(|error| error.to_string())?;
+    let steps_json = serde_json::to_string(&workflow.steps).map_err(|error| error.to_string())?;
     connection
         .execute(
             "INSERT INTO saved_workflows (id, name, steps_json, source, updated_at)

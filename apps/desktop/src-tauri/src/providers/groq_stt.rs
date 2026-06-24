@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use base64::{engine::general_purpose, Engine as _};
-use reqwest::blocking::{Client, multipart};
+use reqwest::blocking::{multipart, Client};
 
 pub fn transcribe_audio_base64(api_key: &str, audio_base64: &str) -> Result<String, String> {
     let trimmed = audio_base64.trim();

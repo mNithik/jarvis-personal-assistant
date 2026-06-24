@@ -180,7 +180,11 @@ fn call_external_stdio_tool(
         .ok_or_else(|| "MCP tool response missing result.".to_string())
 }
 
-fn apply_host_env(host_id: &str, env: &std::collections::HashMap<String, String>, command: &mut Command) {
+fn apply_host_env(
+    host_id: &str,
+    env: &std::collections::HashMap<String, String>,
+    command: &mut Command,
+) {
     for (key, value) in env {
         if !value.trim().is_empty() {
             command.env(key, value);
@@ -207,7 +211,9 @@ fn apply_host_env(host_id: &str, env: &std::collections::HashMap<String, String>
         }
     }
     if host_id.starts_with("zapier") {
-        if let Ok(token) = std::env::var("ZAPIER_MCP_TOKEN").or_else(|_| std::env::var("ZAPIER_API_KEY")) {
+        if let Ok(token) =
+            std::env::var("ZAPIER_MCP_TOKEN").or_else(|_| std::env::var("ZAPIER_API_KEY"))
+        {
             let trimmed = token.trim();
             if !trimmed.is_empty() {
                 command.env("ZAPIER_MCP_TOKEN", trimmed);

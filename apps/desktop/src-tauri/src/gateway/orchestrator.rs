@@ -14,7 +14,6 @@ use super::{
     capabilities::find_capability,
     config::{GatewayConfig, GatewayMode},
     policy::{policy_class_label, route_policy_class},
-    verifier::council_verify_send,
     router::{route_turn, RouterContext},
     state::PendingApproval,
     task_loop::{plan_steps, start_or_resume_turn, TaskLoopContext},
@@ -22,6 +21,7 @@ use super::{
         ApprovalRequest, GatewayEvent, GatewayEventKind, RouteLevel, TurnRequest, TurnResult,
         TurnSource,
     },
+    verifier::council_verify_send,
 };
 
 #[derive(Debug)]
@@ -67,9 +67,7 @@ impl GatewayOrchestrator {
         execution: Option<TurnExecutionEnv<'_>>,
     ) -> GatewayTurnResponse {
         let export_enabled = config.training.export_enabled;
-        let app_data_dir_for_export = execution
-            .as_ref()
-            .map(|env| env.app_data_dir.to_path_buf());
+        let app_data_dir_for_export = execution.as_ref().map(|env| env.app_data_dir.to_path_buf());
 
         let mut response = Self::build_turn_response(
             request.clone(),
@@ -82,10 +80,7 @@ impl GatewayOrchestrator {
             groq_api_key,
         );
 
-        if let (Some(env), Some(route)) = (
-            execution.as_ref(),
-            response.result.route.as_ref(),
-        ) {
+        if let (Some(env), Some(route)) = (execution.as_ref(), response.result.route.as_ref()) {
             Self::maybe_log_turn_audit(
                 env.app_data_dir,
                 route,
@@ -161,27 +156,30 @@ impl GatewayOrchestrator {
                     let planned = steps
                         .iter()
                         .enumerate()
-                        .map(|(index, step)| format!("{}. {} ({})", index + 1, step.description, step.kind))
+                        .map(|(index, step)| {
+                            format!("{}. {} ({})", index + 1, step.description, step.kind)
+                        })
                         .collect::<Vec<_>>()
                         .join("\n");
                     response.result.legacy = false;
                     response.result.reply = format!(
                         "Dry run for {}: {}\n{}",
-                        route.capability_label,
-                        request.command,
-                        planned
+                        route.capability_label, request.command, planned
                     );
                     response.events.push(GatewayEvent {
                         id: format!("gateway-event-{turn_id}-dry-run"),
                         session_id: response.result.session_id.clone(),
                         turn_id: Some(turn_id),
                         kind: GatewayEventKind::Thinking,
-                        message: "Gateway dry-run mode planned task steps without executing tools.".to_string(),
+                        message: "Gateway dry-run mode planned task steps without executing tools."
+                            .to_string(),
                         created_at: unix_timestamp_string(),
                         approval: None,
                     });
                 }
-            } else if config.enabled && capability_enabled(config, response.result.route.as_ref(), &request.command) {
+            } else if config.enabled
+                && capability_enabled(config, response.result.route.as_ref(), &request.command)
+            {
                 if let Some(route) = response.result.route.clone() {
                     let loop_ctx = TaskLoopContext {
                         db_path: env.db_path,
@@ -248,7 +246,10 @@ impl GatewayOrchestrator {
                     pending.request.title
                 );
                 let event = GatewayEvent {
-                    id: format!("gateway-event-approval-{}-verifier-blocked", pending.request.id),
+                    id: format!(
+                        "gateway-event-approval-{}-verifier-blocked",
+                        pending.request.id
+                    ),
                     session_id: pending.request.session_id.clone(),
                     turn_id: None,
                     kind: GatewayEventKind::Error,
@@ -351,10 +352,8 @@ impl GatewayOrchestrator {
                 }
                 Err(reason) => {
                     if let Some(request) = approval.as_mut() {
-                        request.detail = format!(
-                            "{}\n\nCouncil verifier BLOCKED: {reason}",
-                            request.detail
-                        );
+                        request.detail =
+                            format!("{}\n\nCouncil verifier BLOCKED: {reason}", request.detail);
                         request.title = format!("Verifier blocked: {}", request.title);
                     } else {
                         approval = Some(ApprovalRequest {
@@ -595,8 +594,9 @@ fn maybe_run_talker(
         messages: vec![
             ModelProviderMessage {
                 role: "system".to_string(),
-                content: "You are JARVIS, a concise desktop assistant. Reply in one or two sentences."
-                    .to_string(),
+                content:
+                    "You are JARVIS, a concise desktop assistant. Reply in one or two sentences."
+                        .to_string(),
             },
             ModelProviderMessage {
                 role: "user".to_string(),
@@ -649,11 +649,7 @@ fn format_quota_trace(config: &GatewayConfig, provider: Option<&str>) -> String 
     }
 }
 
-fn maybe_export_training_turn(
-    app_data_dir: &Path,
-    phrase: &str,
-    response: &GatewayTurnResponse,
-) {
+fn maybe_export_training_turn(app_data_dir: &Path, phrase: &str, response: &GatewayTurnResponse) {
     let Some(route) = response.result.route.as_ref() else {
         return;
     };
@@ -713,6 +709,7 @@ mod tests {
     fn router_context() -> RouterContext {
         RouterContext {
             db_path: None,
+            app_data_dir: None,
             config: GatewayConfig::default(),
         }
     }
@@ -771,7 +768,8 @@ mod tests {
     fn run_turn_executes_study_when_gateway_and_flag_enabled() {
         let mut bus = EventBus::default();
         let mut escalation = EscalationTracker::default();
-        let db_path = std::env::temp_dir().join(format!("jarvis-orch-study-{}.db", std::process::id()));
+        let db_path =
+            std::env::temp_dir().join(format!("jarvis-orch-study-{}.db", std::process::id()));
         let _ = std::fs::remove_file(&db_path);
         crate::db::init_database(&db_path).expect("init db");
 
@@ -800,6 +798,7 @@ mod tests {
                 &config,
                 &RouterContext {
                     db_path: Some(db_path.clone()),
+                    app_data_dir: Some(app_data_dir.clone()),
                     config: config.clone(),
                 },
                 &mut bus,
@@ -817,7 +816,8 @@ mod tests {
     fn plan_only_mode_routes_without_executing_task_loop() {
         let mut bus = EventBus::default();
         let mut escalation = EscalationTracker::default();
-        let db_path = std::env::temp_dir().join(format!("jarvis-orch-plan-only-{}.db", std::process::id()));
+        let db_path =
+            std::env::temp_dir().join(format!("jarvis-orch-plan-only-{}.db", std::process::id()));
         let _ = std::fs::remove_file(&db_path);
         crate::db::init_database(&db_path).expect("init db");
 
@@ -847,6 +847,7 @@ mod tests {
                 &config,
                 &RouterContext {
                     db_path: Some(db_path.clone()),
+                    app_data_dir: Some(app_data_dir.clone()),
                     config: config.clone(),
                 },
                 &mut bus,
@@ -857,7 +858,10 @@ mod tests {
 
         assert!(!response.result.legacy);
         assert!(response.result.reply.contains("plan-only"));
-        assert!(!response.events.iter().any(|event| event.kind == GatewayEventKind::ToolStart));
+        assert!(!response
+            .events
+            .iter()
+            .any(|event| event.kind == GatewayEventKind::ToolStart));
         let _ = std::fs::remove_file(db_path_for_cleanup);
     }
 
@@ -865,7 +869,8 @@ mod tests {
     fn dry_run_mode_returns_planned_steps_without_executing_task_loop() {
         let mut bus = EventBus::default();
         let mut escalation = EscalationTracker::default();
-        let db_path = std::env::temp_dir().join(format!("jarvis-orch-dry-run-{}.db", std::process::id()));
+        let db_path =
+            std::env::temp_dir().join(format!("jarvis-orch-dry-run-{}.db", std::process::id()));
         let _ = std::fs::remove_file(&db_path);
         crate::db::init_database(&db_path).expect("init db");
 
@@ -895,6 +900,7 @@ mod tests {
                 &config,
                 &RouterContext {
                     db_path: Some(db_path.clone()),
+                    app_data_dir: Some(app_data_dir.clone()),
                     config: config.clone(),
                 },
                 &mut bus,
@@ -906,7 +912,10 @@ mod tests {
         assert!(!response.result.legacy);
         assert!(response.result.reply.contains("Dry run"));
         assert!(response.result.reply.contains("launch study setup"));
-        assert!(!response.events.iter().any(|event| event.kind == GatewayEventKind::ToolStart));
+        assert!(!response
+            .events
+            .iter()
+            .any(|event| event.kind == GatewayEventKind::ToolStart));
         let _ = std::fs::remove_file(db_path_for_cleanup);
     }
 
@@ -932,11 +941,9 @@ mod tests {
         assert!(response.awaiting_approval);
         assert!(response.approval.is_some());
         assert!(response.result.legacy);
-        assert!(
-            response
-                .events
-                .iter()
-                .any(|event| event.kind == GatewayEventKind::ApprovalRequired)
-        );
+        assert!(response
+            .events
+            .iter()
+            .any(|event| event.kind == GatewayEventKind::ApprovalRequired));
     }
 }

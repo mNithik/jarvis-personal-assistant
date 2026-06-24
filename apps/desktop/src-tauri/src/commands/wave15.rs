@@ -28,7 +28,9 @@ pub fn infer_topic_graph_cmd(state: State<'_, crate::AppState>) -> Result<usize,
 }
 
 #[tauri::command]
-pub fn list_user_goals_cmd(state: State<'_, crate::AppState>) -> Result<Vec<UserGoalRecord>, String> {
+pub fn list_user_goals_cmd(
+    state: State<'_, crate::AppState>,
+) -> Result<Vec<UserGoalRecord>, String> {
     crate::gateway::sync::list_user_goals(&state.db_path)
 }
 
@@ -77,11 +79,17 @@ pub fn list_proactive_nudges_cmd(
 }
 
 #[tauri::command]
-pub fn dismiss_proactive_nudge_cmd(state: State<'_, crate::AppState>, id: String) -> Result<(), String> {
+pub fn dismiss_proactive_nudge_cmd(
+    state: State<'_, crate::AppState>,
+    id: String,
+) -> Result<(), String> {
     crate::gateway::anomaly::dismiss_nudge(&state.db_path, &id)
 }
 
 #[tauri::command]
-pub fn accept_proactive_nudge_cmd(state: State<'_, crate::AppState>, id: String) -> Result<(), String> {
+pub fn accept_proactive_nudge_cmd(
+    state: State<'_, crate::AppState>,
+    id: String,
+) -> Result<(), String> {
     crate::gateway::anomaly::accept_nudge(&state.db_path, &id)
 }

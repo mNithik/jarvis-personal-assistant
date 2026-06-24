@@ -1,24 +1,24 @@
 pub mod brief;
 pub mod cag;
+pub mod controls;
 pub mod day_plan_store;
 pub mod embed;
-pub mod knowledge_router;
-pub mod planner;
-pub mod vault;
 pub mod entity_store;
-pub mod controls;
 pub mod expense;
+pub mod knowledge_router;
 pub mod meeting;
 pub mod package;
 pub mod people;
+pub mod planner;
 pub mod recall;
 pub mod schema;
 pub mod school;
+pub mod topic_graph;
 pub mod travel;
 pub mod travel_copilot;
-pub mod topic_graph;
-pub mod world_model;
 pub mod triples;
+pub mod vault;
+pub mod world_model;
 
 use std::path::Path;
 
@@ -30,8 +30,8 @@ use crate::models::{
 };
 
 use self::expense::{
-    format_expense_summary, format_monthly_expense_summary,
-    format_recurring_expense_summary, format_weekly_expense_summary,
+    format_expense_summary, format_monthly_expense_summary, format_recurring_expense_summary,
+    format_weekly_expense_summary,
 };
 use self::meeting::format_meeting_prep_summary;
 use self::package::{
@@ -41,9 +41,7 @@ use self::people::{format_people_summary, upsert_person};
 use self::recall::{recall, store_chunk_with_embedding};
 use self::schema::migrate;
 use self::school::format_school_plan_summary;
-use self::travel::{
-    format_travel_checklist, format_travel_summary, format_travel_timeline,
-};
+use self::travel::{format_travel_checklist, format_travel_summary, format_travel_timeline};
 use self::triples::{lookup_birthday, lookup_entity_fact};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -170,18 +168,14 @@ pub fn parse_memory_command(command: &str) -> Option<MemoryAction> {
 
     if matches!(
         normalized.as_str(),
-        "show weekly expenses"
-            | "list weekly expenses"
-            | "what did i spend this week"
+        "show weekly expenses" | "list weekly expenses" | "what did i spend this week"
     ) {
         return Some(MemoryAction::ListWeeklyExpenses);
     }
 
     if matches!(
         normalized.as_str(),
-        "show monthly expenses"
-            | "list monthly expenses"
-            | "what did i spend this month"
+        "show monthly expenses" | "list monthly expenses" | "what did i spend this month"
     ) {
         return Some(MemoryAction::ListMonthlyExpenses);
     }
@@ -192,7 +186,11 @@ pub fn parse_memory_command(command: &str) -> Option<MemoryAction> {
             .trim_end_matches('?')
             .trim()
             .strip_suffix(" this month")
-            .unwrap_or(trimmed["how much did i spend on ".len()..].trim().trim_end_matches('?'))
+            .unwrap_or(
+                trimmed["how much did i spend on ".len()..]
+                    .trim()
+                    .trim_end_matches('?'),
+            )
             .trim()
             .to_string();
         if !category.is_empty() {
@@ -202,18 +200,14 @@ pub fn parse_memory_command(command: &str) -> Option<MemoryAction> {
 
     if matches!(
         normalized.as_str(),
-        "show travel checklist"
-            | "what do i need for this trip"
-            | "what do i need for this travel"
+        "show travel checklist" | "what do i need for this trip" | "what do i need for this travel"
     ) {
         return Some(MemoryAction::ShowTravelChecklist);
     }
 
     if matches!(
         normalized.as_str(),
-        "show trip timeline"
-            | "show travel timeline"
-            | "what is the trip timeline"
+        "show trip timeline" | "show travel timeline" | "what is the trip timeline"
     ) {
         return Some(MemoryAction::ShowTravelTimeline);
     }
@@ -299,11 +293,12 @@ pub fn is_memory_command(command: &str) -> bool {
 
 pub fn remember(path: &Path, content: &str, domain: &str) -> Result<String, String> {
     ensure_schema(path)?;
+    let profile_id = crate::gateway::profiles::active_profile_id_or_default(path)?;
     let connection = Connection::open(path).map_err(|error| error.to_string())?;
     connection
         .execute(
-            "INSERT INTO memory_documents (domain, source, content) VALUES (?1, 'manual', ?2)",
-            params![domain, content],
+            "INSERT INTO memory_documents (profile_id, domain, source, content) VALUES (?1, ?2, 'manual', ?3)",
+            params![profile_id, domain, content],
         )
         .map_err(|error| error.to_string())?;
     let document_id = connection.last_insert_rowid();
@@ -324,7 +319,9 @@ pub fn recall_text(path: &Path, query: &str) -> Result<String, String> {
 
     let hits = recall(path, query, 3)?;
     if hits.is_empty() {
-        return Ok(format!("I could not find anything in memory about \"{query}\"."));
+        return Ok(format!(
+            "I could not find anything in memory about \"{query}\"."
+        ));
     }
 
     Ok(hits
@@ -379,11 +376,17 @@ pub fn import_travel_records(path: &Path, records: &[TravelMemoryRecord]) -> Res
     travel::import_travel_records(path, records)
 }
 
-pub fn import_expense_records(path: &Path, records: &[ExpenseMemoryRecord]) -> Result<usize, String> {
+pub fn import_expense_records(
+    path: &Path,
+    records: &[ExpenseMemoryRecord],
+) -> Result<usize, String> {
     expense::import_expense_records(path, records)
 }
 
-pub fn import_package_records(path: &Path, records: &[PackageMemoryRecord]) -> Result<usize, String> {
+pub fn import_package_records(
+    path: &Path,
+    records: &[PackageMemoryRecord],
+) -> Result<usize, String> {
     package::import_package_records(path, records)
 }
 

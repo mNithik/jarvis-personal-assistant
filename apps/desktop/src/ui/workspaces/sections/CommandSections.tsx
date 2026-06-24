@@ -9,6 +9,7 @@ import {
 import type { CommandSectionProps } from "./sectionTypes";
 import { buildPlannerCopilotCard } from "./PlannerSections";
 import { ProactiveNudgePanel } from "./ProactiveNudgePanel";
+import { AmbientCopilotPanel } from "./AmbientCopilotPanel";
 
 export function buildCommandWorkspaceSections({
   activeConversationContext,
@@ -71,6 +72,7 @@ export function buildCommandWorkspaceSections({
 }: CommandSectionProps): ReactNode[] {
   return [
     <ProactiveNudgePanel key="proactive-nudges" />,
+    <AmbientCopilotPanel key="ambient-copilot" />,
     <section className="command-panel" key="command-center">
       <div>
         <p className="section-kicker">Command Center</p>
@@ -80,6 +82,7 @@ export function buildCommandWorkspaceSections({
         <label>
           <span className="sr-only">Command input</span>
           <input
+            data-testid="command-input"
             value={input}
             onChange={(event) => setInput(event.target.value)}
             placeholder="Tell JARVIS what you want to do..."
@@ -89,7 +92,7 @@ export function buildCommandWorkspaceSections({
           {isRoutingCommand ? "Routing..." : "Route command"}
         </button>
       </form>
-      <div className="gateway-preview-card">
+      <div className="gateway-preview-card" data-testid="gateway-preview">
         <span className="gateway-preview-label">Gateway preview</span>
         <span className="gateway-preview-route">
           {isPreviewingGateway

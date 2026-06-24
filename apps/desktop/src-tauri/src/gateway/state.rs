@@ -1,15 +1,12 @@
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    sync::Mutex,
-    time::SystemTime,
-};
+use std::{collections::HashMap, path::PathBuf, sync::Mutex, time::SystemTime};
 
 use crate::providers::escalation::EscalationTracker;
 
 use super::{
     bus::EventBus,
-    config::{ensure_default_gateway_config, load_gateway_config, save_gateway_config, GatewayConfig},
+    config::{
+        ensure_default_gateway_config, load_gateway_config, save_gateway_config, GatewayConfig,
+    },
     orchestrator::GatewayTurnResponse,
     types::{ApprovalRequest, GatewayEvent},
 };
@@ -72,7 +69,10 @@ impl GatewayState {
     }
 
     pub fn next_turn_id(&self, session_id: &str) -> Result<u64, String> {
-        let mut counters = self.turn_counters.lock().map_err(|error| error.to_string())?;
+        let mut counters = self
+            .turn_counters
+            .lock()
+            .map_err(|error| error.to_string())?;
         let turn_id = counters.entry(session_id.to_string()).or_insert(1);
         let current = *turn_id;
         *turn_id += 1;
@@ -88,7 +88,10 @@ impl GatewayState {
         Ok(())
     }
 
-    pub fn take_pending_approval(&self, approval_id: &str) -> Result<Option<PendingApproval>, String> {
+    pub fn take_pending_approval(
+        &self,
+        approval_id: &str,
+    ) -> Result<Option<PendingApproval>, String> {
         let mut approvals = self
             .pending_approvals
             .lock()

@@ -17,15 +17,17 @@ impl Agent for FinanceAgent {
         }
 
         let normalized = ctx.command.to_lowercase();
-        if normalized.contains("trade") || normalized.contains("buy stock") || normalized.contains("sell stock") {
+        if normalized.contains("trade")
+            || normalized.contains("buy stock")
+            || normalized.contains("sell stock")
+        {
             return Ok(StepResult::failed(
                 "Finance agent is read-only. Trading and transfers are not supported.",
             ));
         }
 
-        memory::run_memory_action(&ctx.db_path, &ctx.command).map(|reply| {
-            StepResult::ok(format!("Finance (read-only): {reply}"))
-        })
+        memory::run_memory_action(&ctx.db_path, &ctx.command)
+            .map(|reply| StepResult::ok(format!("Finance (read-only): {reply}")))
     }
 }
 

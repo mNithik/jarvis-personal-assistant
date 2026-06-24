@@ -136,7 +136,8 @@ pub fn recall_context_with_config(
 
     if snippets.is_empty() {
         if let Some(vault_query) = parse_vault_search_query(trimmed).or_else(|| {
-            if trimmed.to_lowercase().contains("vault") || trimmed.to_lowercase().contains("obsidian")
+            if trimmed.to_lowercase().contains("vault")
+                || trimmed.to_lowercase().contains("obsidian")
             {
                 Some(trimmed.to_string())
             } else {
@@ -163,7 +164,10 @@ pub fn recall_context_with_config(
             if snippets.is_empty() {
                 if let (Some(config), Some(host_id)) = (
                     config,
-                    knowledge.obsidian_host_id.as_deref().filter(|value| !value.is_empty()),
+                    knowledge
+                        .obsidian_host_id
+                        .as_deref()
+                        .filter(|value| !value.is_empty()),
                 ) {
                     if let Ok(reply) = call_mcp_tool(
                         config,
@@ -183,11 +187,19 @@ pub fn recall_context_with_config(
     }
 
     if snippets.is_empty() {
-        if let Some(path) = knowledge.readwise_csv_path.as_deref().filter(|v| !v.is_empty()) {
+        if let Some(path) = knowledge
+            .readwise_csv_path
+            .as_deref()
+            .filter(|v| !v.is_empty())
+        {
             snippets.extend(load_readwise_snippets(path, trimmed, limit));
         }
         if snippets.is_empty() {
-            if let Some(path) = knowledge.zotero_bib_path.as_deref().filter(|v| !v.is_empty()) {
+            if let Some(path) = knowledge
+                .zotero_bib_path
+                .as_deref()
+                .filter(|v| !v.is_empty())
+            {
                 snippets.extend(load_zotero_snippets(path, trimmed, limit));
             }
         }
@@ -254,7 +266,10 @@ fn load_readwise_snippets(path: &str, query: &str, limit: usize) -> Vec<Knowledg
         .filter_map(|line| {
             let fields = parse_csv_line(line);
             let title = fields.get(title_idx)?.trim();
-            let highlight = fields.get(highlight_idx).map(|value| value.trim()).unwrap_or("");
+            let highlight = fields
+                .get(highlight_idx)
+                .map(|value| value.trim())
+                .unwrap_or("");
             if title.is_empty() && highlight.is_empty() {
                 return None;
             }
@@ -448,8 +463,12 @@ mod tests {
     #[test]
     fn rag_hits_travel_notes_when_no_graph_match() {
         let path = temp_db();
-        super::super::remember(&path, "Saved travel note: pack rain jacket for Seattle", "travel")
-            .expect("remember");
+        super::super::remember(
+            &path,
+            "Saved travel note: pack rain jacket for Seattle",
+            "travel",
+        )
+        .expect("remember");
         let bundle = recall_context(&path, "what did I save about travel", 3);
         assert!(
             bundle
@@ -464,16 +483,16 @@ mod tests {
     #[test]
     fn cag_stub_serves_tool_catalog_intent() {
         let path = temp_db();
-        let app_data = std::env::temp_dir().join(format!("jarvis-cag-router-{}", std::process::id()));
+        let app_data =
+            std::env::temp_dir().join(format!("jarvis-cag-router-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&app_data);
         super::super::cag::ensure_default_cag_policy(&app_data).expect("seed");
-        let bundle = recall_context_with_config(&path, Some(&app_data), None, "show tool catalog policy", 2);
-        assert!(
-            bundle
-                .snippets
-                .iter()
-                .any(|snippet| snippet.source == KnowledgeSource::Cag)
-        );
+        let bundle =
+            recall_context_with_config(&path, Some(&app_data), None, "show tool catalog policy", 2);
+        assert!(bundle
+            .snippets
+            .iter()
+            .any(|snippet| snippet.source == KnowledgeSource::Cag));
         let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_dir_all(app_data);
     }

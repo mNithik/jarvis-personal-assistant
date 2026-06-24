@@ -11,6 +11,7 @@ import { startLocalAudioRecorder } from "../services/localAudioRecorder";
 import {
   getLocalSpeechOutputStatus,
   getLocalVoiceBackendStatus,
+  recordAmbientSignal,
   getVoiceCorrections,
   getWakeModeStatus,
   saveLocalSpeechOutputPaths,
@@ -441,6 +442,14 @@ export function useJarvisVoiceRuntime(options: UseJarvisVoiceRuntimeOptions) {
     void routeCommandFromVoiceRef.current(normalizedTranscript);
   }
 
+  function noteAmbientTranscript(transcript: string) {
+    const normalizedTranscript = transcript.trim();
+    if (normalizedTranscript.length < 8) {
+      return;
+    }
+    void recordAmbientSignal(normalizedTranscript).catch(() => undefined);
+  }
+
   function startBrowserVoiceRecognition() {
     stopWakeListener();
     stopCommandListener();
@@ -453,6 +462,7 @@ export function useJarvisVoiceRuntime(options: UseJarvisVoiceRuntimeOptions) {
         setInput(normalized);
 
         if (isFinal) {
+          noteAmbientTranscript(normalized);
           setVoiceSessionPhase("processing");
           setStatusMessage(
             shouldAutoRouteVoice
@@ -630,6 +640,7 @@ export function useJarvisVoiceRuntime(options: UseJarvisVoiceRuntimeOptions) {
         const normalized = applyVoiceCorrections(transcript);
         setVoiceTranscript(normalized);
         setInput(normalized);
+        noteAmbientTranscript(normalized);
 
         if (shouldAutoRouteVoice) {
           setStatusMessage("Local voice transcript captured. Routing now.");
@@ -683,6 +694,7 @@ export function useJarvisVoiceRuntime(options: UseJarvisVoiceRuntimeOptions) {
         const normalized = applyVoiceCorrections(transcript);
         setVoiceTranscript(normalized);
         setInput(normalized);
+        noteAmbientTranscript(normalized);
 
         if (shouldAutoRouteVoice) {
           setStatusMessage("Groq voice transcript captured. Routing now.");

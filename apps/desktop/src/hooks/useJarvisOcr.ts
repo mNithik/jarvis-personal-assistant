@@ -40,6 +40,7 @@ import {
   extractImageOcrText,
   launchDesktopApp,
   listOcrWatches,
+  recordAmbientSignal,
   saveOcrWatch,
   writeClipboardText,
 } from "../services/jarvisApi";
@@ -310,6 +311,9 @@ export function useJarvisOcr({
               current.rect,
             );
             const summary = summarizeOcrText(cleaned) || cleaned.slice(0, 800);
+            void recordAmbientSignal(
+              `OCR watch match on ${targetLabel}: ${summary.slice(0, 160)}`,
+            ).catch(() => undefined);
             setCommandResult({
               title: "Screen watch changed",
               detail: `Detected ${describeOcrWatchRule(current.rule)} on ${targetLabel}.\n\n${formatOcrResultDetail(cleaned)}`,

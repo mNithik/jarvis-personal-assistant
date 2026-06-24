@@ -1,0 +1,5 @@
+[
+  { "phrase": "hello skill", "capabilityId": "platform.skill" },
+  { "phrase": "wave16 hello", "capabilityId": "platform.skill" },
+  { "phrase": "run hello skill", "capabilityId": "platform.skill" }
+]

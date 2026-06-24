@@ -84,7 +84,10 @@ pub fn append_entry(app_data_dir: &Path, record: AuditRecord<'_>) -> Result<(), 
         .append(true)
         .open(&path)
         .map_err(|error| error.to_string())
-        .and_then(|mut file| file.write_all(line.as_bytes()).map_err(|error| error.to_string()))
+        .and_then(|mut file| {
+            file.write_all(line.as_bytes())
+                .map_err(|error| error.to_string())
+        })
 }
 
 pub fn read_recent_entries(app_data_dir: &Path, limit: usize) -> Result<Vec<String>, String> {
@@ -204,7 +207,8 @@ pub fn rollback_audit_entry(
         .lines()
         .nth(line_index)
         .ok_or_else(|| "Audit entry not found.".to_string())?;
-    let entry = parse_audit_line(line, line_index).ok_or_else(|| "Could not parse audit entry.".to_string())?;
+    let entry = parse_audit_line(line, line_index)
+        .ok_or_else(|| "Could not parse audit entry.".to_string())?;
     let rollback_ref = entry
         .rollback_ref
         .as_deref()

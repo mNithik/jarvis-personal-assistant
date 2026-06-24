@@ -24,20 +24,30 @@ impl Agent for IntegrationsAgent {
 
     fn run_step(&self, ctx: &AgentContext) -> Result<StepResult, String> {
         match ctx.step_kind.as_str() {
-            "list_unread_emails" | "search_gmail" | "read_current_email"
-            | "read_email_by_index" | "read_email_by_query" | "triage_gmail_inbox"
+            "list_unread_emails"
+            | "search_gmail"
+            | "read_current_email"
+            | "read_email_by_index"
+            | "read_email_by_query"
+            | "triage_gmail_inbox"
             | "draft_gmail_reply" => return run_gmail(ctx),
-            "list_today_calendar_events" | "create_calendar_event"
+            "list_today_calendar_events"
+            | "create_calendar_event"
             | "create_calendar_event_from_current_email" => return run_calendar(ctx),
             "spotify_play" | "spotify_pause" | "spotify_next" | "spotify_previous"
             | "spotify_play_query" => return run_spotify(ctx),
-            "notion_list_notes" | "notion_search_notes" | "notion_create_note"
+            "notion_list_notes"
+            | "notion_search_notes"
+            | "notion_create_note"
             | "notion_create_task" => return run_notion(ctx),
-            "read_screen_save_to_notion" | "save_ocr_history_to_notion"
-            | "save_screen_text_to_notion" | "start_ocr_watch" | "stop_ocr_watch"
-            |             "show_ocr_watches" | "pause_ocr_watches" | "resume_ocr_watches" => {
-                return run_ocr_notion(ctx)
-            }
+            "read_screen_save_to_notion"
+            | "save_ocr_history_to_notion"
+            | "save_screen_text_to_notion"
+            | "start_ocr_watch"
+            | "stop_ocr_watch"
+            | "show_ocr_watches"
+            | "pause_ocr_watches"
+            | "resume_ocr_watches" => return run_ocr_notion(ctx),
             "mcp_call" => return run_mcp(ctx),
             _ => {}
         }
@@ -96,10 +106,7 @@ fn run_notion(ctx: &AgentContext) -> Result<StepResult, String> {
             )))
         }
         NotionAction::CreateTask { title } => {
-            let note = notion::create_note(
-                &ctx.db_path,
-                &format!("Task: {}", title.trim()),
-            )?;
+            let note = notion::create_note(&ctx.db_path, &format!("Task: {}", title.trim()))?;
             Ok(StepResult::ok(format!(
                 "Created Notion task \"{}\" at {}",
                 note.title, note.url
@@ -163,7 +170,9 @@ fn run_gmail(ctx: &AgentContext) -> Result<StepResult, String> {
         GmailAction::Search { query } => {
             let emails = google_gmail::search(&token, &query, 5)?;
             store_session_emails(&ctx.session_id, emails.clone());
-            Ok(StepResult::ok(google_gmail::format_search_reply(&query, &emails)))
+            Ok(StepResult::ok(google_gmail::format_search_reply(
+                &query, &emails,
+            )))
         }
         GmailAction::ReadCurrentEmail => {
             let email = get_current_email(&ctx.session_id).ok_or_else(|| {
@@ -228,12 +237,8 @@ fn run_calendar(ctx: &AgentContext) -> Result<StepResult, String> {
             let parsed = google_calendar::parse_calendar_from_nl(&ctx.command).ok_or_else(|| {
                 "I could not parse a calendar time from that command. Try something like \"add gym tomorrow at 6 PM to my calendar\".".to_string()
             })?;
-            let created = google_calendar::create_event(
-                &token,
-                &parsed.title,
-                parsed.start,
-                parsed.end,
-            )?;
+            let created =
+                google_calendar::create_event(&token, &parsed.title, parsed.start, parsed.end)?;
             Ok(StepResult::ok(google_calendar::format_create_reply(
                 &created.summary,
                 created.html_link.as_deref(),
@@ -246,12 +251,8 @@ fn run_calendar(ctx: &AgentContext) -> Result<StepResult, String> {
             let parsed = google_calendar::build_calendar_from_email(&email).ok_or_else(|| {
                 "I could not find a meeting time in the current email.".to_string()
             })?;
-            let created = google_calendar::create_event(
-                &token,
-                &parsed.title,
-                parsed.start,
-                parsed.end,
-            )?;
+            let created =
+                google_calendar::create_event(&token, &parsed.title, parsed.start, parsed.end)?;
             Ok(StepResult::ok(google_calendar::format_create_reply(
                 &created.summary,
                 created.html_link.as_deref(),
@@ -272,9 +273,8 @@ fn run_ocr_notion(ctx: &AgentContext) -> Result<StepResult, String> {
         return crate::agents::ocr_watch::run_ocr_watch_terminal(ctx);
     }
 
-    let action = parse_ocr_notion_command(&ctx.command).ok_or_else(|| {
-        "Could not parse an OCR to Notion command.".to_string()
-    })?;
+    let action = parse_ocr_notion_command(&ctx.command)
+        .ok_or_else(|| "Could not parse an OCR to Notion command.".to_string())?;
 
     match action {
         OcrNotionAction::ReadScreenAndSave => {
@@ -319,9 +319,8 @@ fn run_email_notion(ctx: &AgentContext) -> Result<StepResult, String> {
         ));
     }
 
-    let action = parse_email_notion_command(&ctx.command).ok_or_else(|| {
-        "Could not parse an email to Notion command.".to_string()
-    })?;
+    let action = parse_email_notion_command(&ctx.command)
+        .ok_or_else(|| "Could not parse an email to Notion command.".to_string())?;
 
     match action {
         EmailNotionAction::SaveCurrentEmail => {
@@ -402,7 +401,9 @@ fn run_email_notion(ctx: &AgentContext) -> Result<StepResult, String> {
                 "integrations.email_notion",
                 action_name,
                 payload,
-                format!("Handing off email to Notion action `{action_name}` to the desktop bridge."),
+                format!(
+                    "Handing off email to Notion action `{action_name}` to the desktop bridge."
+                ),
             ))
         }
     }
@@ -441,7 +442,10 @@ fn run_mcp(ctx: &AgentContext) -> Result<StepResult, String> {
     }
 }
 
-fn config_with_preset_host(config: &crate::gateway::config::GatewayConfig, host_id: &str) -> crate::gateway::config::GatewayConfig {
+fn config_with_preset_host(
+    config: &crate::gateway::config::GatewayConfig,
+    host_id: &str,
+) -> crate::gateway::config::GatewayConfig {
     if config.mcp_hosts.iter().any(|entry| entry.id == host_id) {
         return config.clone();
     }
@@ -450,7 +454,8 @@ fn config_with_preset_host(config: &crate::gateway::config::GatewayConfig, host_
         .find(|entry| entry.id == host_id)
     {
         let mut next = config.clone();
-        next.mcp_hosts.push(crate::gateway::mcp_presets::preset_to_host(&preset));
+        next.mcp_hosts
+            .push(crate::gateway::mcp_presets::preset_to_host(&preset));
         return next;
     }
     config.clone()
@@ -547,11 +552,7 @@ fn parse_zapier_nl_command(command: &str) -> Option<(String, String, Value)> {
     if !normalized.contains("zapier") && !normalized.contains("zaps") {
         return None;
     }
-    Some((
-        "zapier".to_string(),
-        "list_actions".to_string(),
-        json!({}),
-    ))
+    Some(("zapier".to_string(), "list_actions".to_string(), json!({})))
 }
 
 fn parse_mcp_command(command: &str) -> Option<(String, String, Value)> {
@@ -633,7 +634,10 @@ mod tests {
         let result = IntegrationsAgent.run_step(&ctx).expect("step");
         assert!(result.success);
         assert_eq!(
-            result.integration_handoff.as_ref().map(|h| h.action.as_str()),
+            result
+                .integration_handoff
+                .as_ref()
+                .map(|h| h.action.as_str()),
             Some("pause")
         );
     }
@@ -699,10 +703,7 @@ mod tests {
                 .to_string(),
         )]));
 
-        let ctx = integration_ctx(
-            "what's on my calendar today",
-            "integrations.calendar",
-        );
+        let ctx = integration_ctx("what's on my calendar today", "integrations.calendar");
         let result = IntegrationsAgent.run_step(&ctx).expect("step");
         assert!(result.success);
         assert!(result.integration_handoff.is_none());
@@ -764,7 +765,10 @@ mod tests {
         );
         assert!(get_current_email(&session).is_some());
 
-        let db_path = std::env::temp_dir().join(format!("jarvis-email-notion-agent-{}.db", std::process::id()));
+        let db_path = std::env::temp_dir().join(format!(
+            "jarvis-email-notion-agent-{}.db",
+            std::process::id()
+        ));
         let _ = std::fs::remove_file(&db_path);
         init_database(&db_path).expect("init db");
 
@@ -784,18 +788,26 @@ mod tests {
         let result = IntegrationsAgent.run_step(&ctx).expect("step");
         assert!(result.success);
         assert_eq!(
-            result.integration_handoff.as_ref().map(|h| h.action.as_str()),
+            result
+                .integration_handoff
+                .as_ref()
+                .map(|h| h.action.as_str()),
             Some("save_first_emails")
         );
         assert_eq!(
-            result.integration_handoff.as_ref().and_then(|h| h.payload.as_deref()),
+            result
+                .integration_handoff
+                .as_ref()
+                .and_then(|h| h.payload.as_deref()),
             Some("3")
         );
     }
 
     #[test]
     fn gmail_read_by_index_uses_session_email_store() {
-        use crate::gateway::models::{clear_all_session_emails, store_session_emails, GmailMessageRecord};
+        use crate::gateway::models::{
+            clear_all_session_emails, store_session_emails, GmailMessageRecord,
+        };
         use std::collections::HashMap;
 
         use crate::integrations::google::auth;
@@ -837,10 +849,8 @@ mod tests {
 
     #[test]
     fn ocr_watch_terminal_for_start_watch() {
-        let db_path = std::env::temp_dir().join(format!(
-            "jarvis-ocr-watch-terminal-{}",
-            std::process::id()
-        ));
+        let db_path =
+            std::env::temp_dir().join(format!("jarvis-ocr-watch-terminal-{}", std::process::id()));
         let _ = std::fs::remove_file(&db_path);
         let _ = crate::db::init_database(&db_path);
 

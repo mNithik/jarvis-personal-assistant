@@ -19,7 +19,10 @@ impl Agent for WriterAgent {
             "integrations.notion",
             "create_note",
             Some(draft.clone()),
-            format!("Writer draft ready for Notion handoff ({} chars). Approve before sending.", draft.len()),
+            format!(
+                "Writer draft ready for Notion handoff ({} chars). Approve before sending.",
+                draft.len()
+            ),
         ))
     }
 }
@@ -27,12 +30,7 @@ impl Agent for WriterAgent {
 pub fn extract_draft_body(command: &str) -> String {
     let trimmed = command.trim();
     let normalized = trimmed.to_lowercase();
-    const PREFIXES: &[&str] = &[
-        "draft ",
-        "write ",
-        "summarize for notion ",
-        "compose ",
-    ];
+    const PREFIXES: &[&str] = &["draft ", "write ", "summarize for notion ", "compose "];
     for prefix in PREFIXES {
         if normalized.starts_with(prefix) {
             let body = trimmed[prefix.len()..].trim();

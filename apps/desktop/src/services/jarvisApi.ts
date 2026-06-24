@@ -229,6 +229,7 @@ export type GatewayLabsConfig = {
   councilRuntime?: boolean;
   proactiveAnomaly: boolean;
   worldModelQueries: boolean;
+  ambientCopilot?: boolean;
 };
 
 export type GatewayConfig = {
@@ -1329,6 +1330,7 @@ export type TopicGraphBundle = {
 
 export type UserGoalRecord = {
   id: string;
+  profileId?: string;
   title: string;
   description: string;
   status: string;
@@ -1383,4 +1385,73 @@ export function dismissProactiveNudge(id: string) {
 
 export function acceptProactiveNudge(id: string) {
   return invoke<void>("accept_proactive_nudge_cmd", { id });
+}
+
+export type UserProfileRecord = {
+  id: string;
+  name: string;
+  kind: string;
+  createdAt: string;
+};
+
+export type InstalledSkillRecord = {
+  id: string;
+  version: string;
+  label: string;
+  enabled: boolean;
+  keywords: string[];
+  sourceScope: string;
+  profileId?: string | null;
+};
+
+export type AmbientSuggestionRecord = {
+  id: string;
+  sessionId: string;
+  message: string;
+  status: string;
+  createdAt: string;
+};
+
+export function listUserProfiles() {
+  return invoke<UserProfileRecord[]>("list_user_profiles_cmd");
+}
+
+export function getActiveProfile() {
+  return invoke<UserProfileRecord | null>("get_active_profile_cmd");
+}
+
+export function switchUserProfile(profileId: string) {
+  return invoke<string>("switch_user_profile_cmd", { profileId });
+}
+
+export function listInstalledSkills() {
+  return invoke<InstalledSkillRecord[]>("list_installed_skills_cmd");
+}
+
+export function startAmbientSession(options?: {
+  desktopProjectId?: string;
+  ocrWatchId?: string;
+  consentGiven?: boolean;
+}) {
+  return invoke("start_ambient_session_cmd", {
+    desktopProjectId: options?.desktopProjectId ?? null,
+    ocrWatchId: options?.ocrWatchId ?? null,
+    consentGiven: options?.consentGiven ?? false,
+  });
+}
+
+export function endAmbientSession(sessionId: string) {
+  return invoke<void>("end_ambient_session_cmd", { sessionId });
+}
+
+export function listAmbientSuggestions(limit = 10) {
+  return invoke<AmbientSuggestionRecord[]>("list_ambient_suggestions_cmd", { limit });
+}
+
+export function dismissAmbientSuggestion(id: string) {
+  return invoke<void>("dismiss_ambient_suggestion_cmd", { id });
+}
+
+export function recordAmbientSignal(signal: string) {
+  return invoke<AmbientSuggestionRecord | null>("record_ambient_signal_cmd", { signal });
 }

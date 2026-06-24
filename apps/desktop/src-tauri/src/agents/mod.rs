@@ -1,7 +1,7 @@
 pub mod automation;
+pub mod builder;
 pub mod command;
 pub mod finance;
-pub mod builder;
 pub mod integrations;
 mod memory_agent;
 pub use memory_agent::MemoryAgent;
@@ -101,13 +101,21 @@ pub fn dispatch_step(ctx: &AgentContext, bus: &mut EventBus) -> Result<StepResul
         )));
     }
 
-    let tool_id = format!("agent-{}-{}", format!("{:?}", ctx.route.agent).to_lowercase(), ctx.turn_id);
+    let tool_id = format!(
+        "agent-{}-{}",
+        format!("{:?}", ctx.route.agent).to_lowercase(),
+        ctx.turn_id
+    );
     bus.publish(crate::gateway::types::GatewayEvent {
         id: format!("{tool_id}-start"),
         session_id: ctx.session_id.clone(),
         turn_id: Some(ctx.turn_id),
         kind: crate::gateway::types::GatewayEventKind::ToolStart,
-        message: format!("Running {} step: {}", format!("{:?}", ctx.route.agent).to_lowercase(), ctx.step_description),
+        message: format!(
+            "Running {} step: {}",
+            format!("{:?}", ctx.route.agent).to_lowercase(),
+            ctx.step_description
+        ),
         created_at: unix_timestamp_string(),
         approval: None,
     });
@@ -313,7 +321,10 @@ pub fn parse_pdf_command_action(command: &str) -> Option<PdfCommandAction> {
 }
 
 pub fn is_list_pdfs_command(command: &str) -> bool {
-    matches!(parse_pdf_command_action(command), Some(PdfCommandAction::List))
+    matches!(
+        parse_pdf_command_action(command),
+        Some(PdfCommandAction::List)
+    )
 }
 
 pub fn extract_pdf_search_query(command: &str) -> Option<String> {

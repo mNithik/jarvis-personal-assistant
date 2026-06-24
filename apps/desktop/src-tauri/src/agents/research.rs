@@ -32,9 +32,7 @@ impl Agent for ResearchAgent {
             "research.web",
             "search_google",
             Some(query.clone()),
-            format!(
-                "Research handoff: searching the web for \"{query}\" via the desktop bridge."
-            ),
+            format!("Research handoff: searching the web for \"{query}\" via the desktop bridge."),
         ))
     }
 }

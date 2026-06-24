@@ -269,7 +269,11 @@ pub fn list_project_bundles(
     let entries = fs::read_dir(&bundles_dir).map_err(|error| error.to_string())?;
     for entry in entries {
         let entry = entry.map_err(|error| error.to_string())?;
-        if !entry.file_type().map_err(|error| error.to_string())?.is_dir() {
+        if !entry
+            .file_type()
+            .map_err(|error| error.to_string())?
+            .is_dir()
+        {
             continue;
         }
         let manifest_path = entry.path().join("manifest.json");

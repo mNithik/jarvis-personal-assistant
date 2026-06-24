@@ -2,9 +2,7 @@ use std::path::Path;
 
 use crate::gateway::config::GatewayConfig;
 
-use super::{
-    expense, knowledge_router, meeting, package, school, travel, MemoryAction,
-};
+use super::{expense, knowledge_router, meeting, package, school, travel, MemoryAction};
 
 pub fn compose_daily_brief_v2(
     db_path: &Path,
@@ -63,7 +61,10 @@ pub fn compose_daily_brief_v2(
     }
 
     if sections.len() <= 1 {
-        sections.push("No memory records yet. Add expenses, packages, or notes to enrich your brief.".to_string());
+        sections.push(
+            "No memory records yet. Add expenses, packages, or notes to enrich your brief."
+                .to_string(),
+        );
     }
 
     Ok(sections.join("\n\n"))

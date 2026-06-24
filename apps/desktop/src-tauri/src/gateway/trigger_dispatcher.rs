@@ -32,7 +32,9 @@ pub fn process_trigger_queue(
         "gmail_label_inbox" => dispatch_gmail_label_inbox(app, db_path, config, &event.payload),
         "calendar_event_soon" => dispatch_calendar_event_soon(app, db_path, config, &event.payload),
         "replan_day" => dispatch_replan_day(app, db_path, config),
-        "meeting_followup_bundle" => dispatch_meeting_followup_bundle(app, db_path, config, &event.payload),
+        "meeting_followup_bundle" => {
+            dispatch_meeting_followup_bundle(app, db_path, config, &event.payload)
+        }
         other => {
             let _ = complete_trigger(&conn, &event.id, false);
             return Err(format!("Unknown trigger kind: {other}"));
@@ -68,9 +70,13 @@ fn dispatch_morning_brief(app: &AppHandle, config: &GatewayConfig) -> Result<Str
     let router_context = crate::gateway::router::RouterContext {
         config: config.clone(),
         db_path: Some(app_state.db_path.clone()),
+        app_data_dir: Some(app_state.app_data_dir.clone()),
     };
 
-    let mut bus = gateway_state.bus.lock().map_err(|error| error.to_string())?;
+    let mut bus = gateway_state
+        .bus
+        .lock()
+        .map_err(|error| error.to_string())?;
     let mut escalation = gateway_state
         .escalation
         .lock()
@@ -109,8 +115,7 @@ fn dispatch_channel_turn(
     config: &GatewayConfig,
     payload: &str,
 ) -> Result<String, String> {
-    let channel_request =
-        crate::gateway::channels::parse_local_channel_payload(payload)?;
+    let channel_request = crate::gateway::channels::parse_local_channel_payload(payload)?;
     let turn_request: TurnRequest = channel_request.into();
 
     let gateway_state = app
@@ -128,10 +133,14 @@ fn dispatch_channel_turn(
 
     let router_context = crate::gateway::router::RouterContext {
         db_path: Some(db_path.to_path_buf()),
+        app_data_dir: Some(app_state.app_data_dir.clone()),
         config: config.clone(),
     };
 
-    let mut bus = gateway_state.bus.lock().map_err(|error| error.to_string())?;
+    let mut bus = gateway_state
+        .bus
+        .lock()
+        .map_err(|error| error.to_string())?;
     let mut escalation = gateway_state
         .escalation
         .lock()
@@ -198,10 +207,14 @@ fn dispatch_gmail_label_inbox(
 
     let router_context = crate::gateway::router::RouterContext {
         db_path: Some(db_path.to_path_buf()),
+        app_data_dir: Some(app_state.app_data_dir.clone()),
         config: config.clone(),
     };
 
-    let mut bus = gateway_state.bus.lock().map_err(|error| error.to_string())?;
+    let mut bus = gateway_state
+        .bus
+        .lock()
+        .map_err(|error| error.to_string())?;
     let mut escalation = gateway_state
         .escalation
         .lock()
@@ -266,10 +279,14 @@ fn dispatch_calendar_event_soon(
 
     let router_context = crate::gateway::router::RouterContext {
         db_path: Some(db_path.to_path_buf()),
+        app_data_dir: Some(app_state.app_data_dir.clone()),
         config: config.clone(),
     };
 
-    let mut bus = gateway_state.bus.lock().map_err(|error| error.to_string())?;
+    let mut bus = gateway_state
+        .bus
+        .lock()
+        .map_err(|error| error.to_string())?;
     let mut escalation = gateway_state
         .escalation
         .lock()
@@ -317,10 +334,14 @@ fn dispatch_replan_day(
 
     let router_context = crate::gateway::router::RouterContext {
         db_path: Some(db_path.to_path_buf()),
+        app_data_dir: Some(app_state.app_data_dir.clone()),
         config: config.clone(),
     };
 
-    let mut bus = gateway_state.bus.lock().map_err(|error| error.to_string())?;
+    let mut bus = gateway_state
+        .bus
+        .lock()
+        .map_err(|error| error.to_string())?;
     let mut escalation = gateway_state
         .escalation
         .lock()
@@ -384,10 +405,8 @@ mod tests {
 
     #[test]
     fn unknown_trigger_kind_fails() {
-        let dir = std::env::temp_dir().join(format!(
-            "jarvis-trigger-dispatch-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("jarvis-trigger-dispatch-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("dir");
         let db_path = dir.join("test.db");
         let conn = rusqlite::Connection::open(&db_path).expect("db");

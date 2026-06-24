@@ -56,6 +56,7 @@ mod tests {
     fn replans_open_chrome_substep() {
         let context = RouterContext {
             db_path: None,
+            app_data_dir: None,
             config: GatewayConfig::default(),
         };
         let route = replan_supervisor_step("open chrome", &context).expect("route");

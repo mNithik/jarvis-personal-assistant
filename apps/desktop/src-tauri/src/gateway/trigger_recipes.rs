@@ -83,9 +83,7 @@ pub fn seed_default_recipes(db_path: &Path, config: &GatewayConfig) -> Result<()
         return Ok(());
     }
 
-    let now = chrono::Local::now()
-        .format("%Y-%m-%dT%H:%M:%S")
-        .to_string();
+    let now = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
     let defaults = vec![
         TriggerRecipeRecord {
             id: "recipe-morning-brief".into(),
@@ -144,7 +142,9 @@ pub fn sync_recipes_to_config(db_path: &Path, config: &mut GatewayConfig) -> Res
         match recipe.kind.as_str() {
             "morning_brief" => {
                 config.proactive.morning_brief_enabled = true;
-                if let Some(time) = recipe.schedule_value.filter(|value| !value.trim().is_empty())
+                if let Some(time) = recipe
+                    .schedule_value
+                    .filter(|value| !value.trim().is_empty())
                 {
                     config.proactive.morning_brief_time = time;
                 }
@@ -218,11 +218,8 @@ mod tests {
     #[test]
     fn save_and_edit_recipe_roundtrip() {
         let path = temp_db();
-        crate::migrations::apply_pending_migrations(
-            &Connection::open(&path).expect("open"),
-            &path,
-        )
-        .expect("migrate");
+        crate::migrations::apply_pending_migrations(&Connection::open(&path).expect("open"), &path)
+            .expect("migrate");
         let recipe = TriggerRecipeRecord {
             id: "test-morning".into(),
             name: "Morning brief".into(),

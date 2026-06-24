@@ -4,8 +4,7 @@ use std::process::Command;
 pub fn resolve_jarvis_project_dir(start: &Path) -> Result<PathBuf, String> {
     let mut dir = start.to_path_buf();
     loop {
-        if dir.join("package.json").is_file()
-            && dir.join("src-tauri").join("Cargo.toml").is_file()
+        if dir.join("package.json").is_file() && dir.join("src-tauri").join("Cargo.toml").is_file()
         {
             return Ok(dir);
         }

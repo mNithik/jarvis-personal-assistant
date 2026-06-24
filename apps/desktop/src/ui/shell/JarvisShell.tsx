@@ -4,6 +4,7 @@ import WorkspaceSurface from "./WorkspaceSurface";
 
 type JarvisShellProps = {
   uiState: JarvisUiState;
+  activeProfileName: string | null;
   quickBar: ReactNode;
   cockpitOverlay: ReactNode;
   floatingPanels: ReactNode;
@@ -15,6 +16,7 @@ type JarvisShellProps = {
 
 export default function JarvisShell({
   uiState,
+  activeProfileName,
   quickBar,
   cockpitOverlay,
   floatingPanels,
@@ -29,6 +31,9 @@ export default function JarvisShell({
       {cockpitOverlay}
       {floatingPanels}
       {systemDrawer}
+      <div className="shell-status-strip">
+        <span>Active: {activeProfileName ?? "Default gateway.json"}</span>
+      </div>
       {uiState.activeSurface === "home" ? homeSurface : null}
       {uiState.activeSurface === "workspace" ? (
         <section className="workspace-surface">

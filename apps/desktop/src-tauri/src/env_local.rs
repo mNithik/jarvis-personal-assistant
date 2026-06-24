@@ -3,10 +3,7 @@
 //! Checked before Windows Credential Manager so you can paste all keys once
 //! while building. Copy `.env.example` to `.env` at the repo root.
 
-use std::{
-    path::PathBuf,
-    sync::Once,
-};
+use std::{path::PathBuf, sync::Once};
 
 static INIT: Once = Once::new();
 
@@ -47,16 +44,22 @@ fn provider_env_keys(provider: &str) -> &'static [&'static str] {
         "groq" => &["JARVIS_GROQ_API_KEY", "GROQ_API_KEY"],
         "openrouter" => &["JARVIS_OPENROUTER_API_KEY", "OPENROUTER_API_KEY"],
         "cerebras" => &["JARVIS_CEREBRAS_API_KEY", "CEREBRAS_API_KEY"],
-        "nvidia_nim" => &["JARVIS_NVIDIA_NIM_API_KEY", "NVIDIA_API_KEY", "NVIDIA_NIM_API_KEY"],
+        "nvidia_nim" => &[
+            "JARVIS_NVIDIA_NIM_API_KEY",
+            "NVIDIA_API_KEY",
+            "NVIDIA_NIM_API_KEY",
+        ],
         "gemini" => &["JARVIS_GEMINI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"],
         "openai" => &["JARVIS_OPENAI_API_KEY", "OPENAI_API_KEY"],
         "anthropic" => &["JARVIS_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"],
-        "huggingface" => &["JARVIS_HUGGINGFACE_API_KEY", "HUGGINGFACE_API_KEY", "HF_TOKEN"],
+        "huggingface" => &[
+            "JARVIS_HUGGINGFACE_API_KEY",
+            "HUGGINGFACE_API_KEY",
+            "HF_TOKEN",
+        ],
         "notion" => &["JARVIS_NOTION_TOKEN", "NOTION_TOKEN", "NOTION_API_KEY"],
         "spotify" => &["JARVIS_SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_ID"],
-        "google" | "google_calendar" | "gmail" => {
-            &["JARVIS_GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_ID"]
-        }
+        "google" | "google_calendar" | "gmail" => &["JARVIS_GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_ID"],
         "github" => &[
             "JARVIS_GITHUB_TOKEN",
             "GITHUB_PERSONAL_ACCESS_TOKEN",
@@ -88,6 +91,9 @@ mod tests {
     #[test]
     fn maps_provider_to_env_key_names() {
         assert_eq!(provider_env_keys("groq")[0], "JARVIS_GROQ_API_KEY");
-        assert_eq!(provider_env_keys("nvidia_nim")[0], "JARVIS_NVIDIA_NIM_API_KEY");
+        assert_eq!(
+            provider_env_keys("nvidia_nim")[0],
+            "JARVIS_NVIDIA_NIM_API_KEY"
+        );
     }
 }

@@ -20,9 +20,8 @@ impl Agent for BuilderAgent {
             ));
         }
 
-        let action = parse_builder_command(&ctx.command).ok_or_else(|| {
-            "Could not parse a builder or coding command.".to_string()
-        })?;
+        let action = parse_builder_command(&ctx.command)
+            .ok_or_else(|| "Could not parse a builder or coding command.".to_string())?;
 
         match action {
             BuilderAction::CreateHandoff {
@@ -42,14 +41,13 @@ impl Agent for BuilderAgent {
                 ))
             }
             BuilderAction::RunProjectChecks => {
-                let project_dir = resolve_jarvis_project_dir(&std::env::current_dir().map_err(
-                    |error| {
+                let project_dir =
+                    resolve_jarvis_project_dir(&std::env::current_dir().map_err(|error| {
                         format!(
                             "Could not resolve the current JARVIS project directory: {}",
                             error
                         )
-                    },
-                )?)?;
+                    })?)?;
 
                 match run_project_checks(&project_dir) {
                     Ok(summary) => {
@@ -142,7 +140,10 @@ mod tests {
         let result = BuilderAgent.run_step(&ctx).expect("step");
         assert!(result.success);
         assert_eq!(
-            result.integration_handoff.as_ref().map(|h| h.action.as_str()),
+            result
+                .integration_handoff
+                .as_ref()
+                .map(|h| h.action.as_str()),
             Some("create_builder_handoff")
         );
         assert!(result

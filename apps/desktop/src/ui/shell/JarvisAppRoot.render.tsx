@@ -1,6 +1,8 @@
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 
 import { MODEL_PROVIDER_LABELS } from "../../features/legacy/appHelpers";
+import { ACTIVE_PROFILE_CHANGED_EVENT } from "../../features/gateway/profileEvents";
+import { getActiveProfile, type UserProfileRecord } from "../../services/jarvisApi";
 import { executeUiQuickAction } from "../model/uiActionAdapter";
 import { workspaceRegistry } from "../model/workspaceRegistry";
 import { JarvisWorkspaceId } from "../model/jarvisTypes";
@@ -28,6 +30,7 @@ import JarvisPanelContent from "./JarvisPanelContent";
 import type { JarvisAppRootRenderProps } from "./jarvisAppRootTypes";
 
 export default function JarvisAppRootRender(props: JarvisAppRootRenderProps) {
+  const [activeProfile, setActiveProfile] = useState<UserProfileRecord | null>(null);
   const {
     uiState,
     dispatchUi,
@@ -90,6 +93,29 @@ export default function JarvisAppRootRender(props: JarvisAppRootRenderProps) {
     memoryTotal,
     connectedIntegrations,
   } = shellViewModel;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void getActiveProfile()
+      .then((profile) => {
+        if (!cancelled) {
+          setActiveProfile(profile);
+        }
+      })
+      .catch(() => undefined);
+
+    function handleActiveProfileChanged(event: Event) {
+      const profileEvent = event as CustomEvent<UserProfileRecord | null>;
+      setActiveProfile(profileEvent.detail ?? null);
+    }
+
+    window.addEventListener(ACTIVE_PROFILE_CHANGED_EVENT, handleActiveProfileChanged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(ACTIVE_PROFILE_CHANGED_EVENT, handleActiveProfileChanged);
+    };
+  }, []);
 
   const systemDrawerContent = (
     <JarvisSystemDrawer drawerContext={drawerContext} />
@@ -531,6 +557,7 @@ export default function JarvisAppRootRender(props: JarvisAppRootRenderProps) {
       <JarvisAppProvider value={jarvisAppContextValue}>
         <JarvisShell
           uiState={uiState}
+          activeProfileName={activeProfile?.name ?? null}
           quickBar={quickBarNode}
           cockpitOverlay={cockpitOverlayNode}
           floatingPanels={floatingPanelsNode}

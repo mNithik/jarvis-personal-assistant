@@ -8,7 +8,11 @@ pub struct VaultSnippet {
     pub excerpt: String,
 }
 
-pub fn search_local_vault(vault_path: &Path, query: &str, limit: usize) -> Result<Vec<VaultSnippet>, String> {
+pub fn search_local_vault(
+    vault_path: &Path,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<VaultSnippet>, String> {
     let needle = query.trim().to_lowercase();
     if needle.is_empty() {
         return Ok(Vec::new());
@@ -44,7 +48,10 @@ fn collect_markdown_hits(
         let entry = entry.map_err(|error| error.to_string())?;
         let path = entry.path();
         if path.is_dir() {
-            let name = path.file_name().and_then(|value| value.to_str()).unwrap_or("");
+            let name = path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("");
             if name.starts_with('.') {
                 continue;
             }
@@ -117,8 +124,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("jarvis-vault-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("vault dir");
-        fs::write(dir.join("project-alpha.md"), "# Project Alpha\nBudget review on Friday.")
-            .expect("write note");
+        fs::write(
+            dir.join("project-alpha.md"),
+            "# Project Alpha\nBudget review on Friday.",
+        )
+        .expect("write note");
 
         let hits = search_local_vault(&dir, "budget", 5).expect("search");
         assert_eq!(hits.len(), 1);

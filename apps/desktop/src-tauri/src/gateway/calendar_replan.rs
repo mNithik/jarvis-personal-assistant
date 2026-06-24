@@ -34,13 +34,7 @@ fn calendar_fingerprint(token: &str) -> Result<String, String> {
     let events = google::calendar::list_today(token)?;
     let parts = events
         .iter()
-        .map(|event| {
-            format!(
-                "{}@{}",
-                event.summary,
-                event.start.as_deref().unwrap_or("")
-            )
-        })
+        .map(|event| format!("{}@{}", event.summary, event.start.as_deref().unwrap_or("")))
         .collect::<Vec<_>>();
     Ok(parts.join("|"))
 }
@@ -84,11 +78,9 @@ fn followup_already_enqueued(db_path: &Path, event_id: &str) -> Result<bool, Str
     let key = format!("{FOLLOWUP_ENQUEUED_PREFIX}{event_id}");
     let conn = rusqlite::Connection::open(db_path).map_err(|error| error.to_string())?;
     let value: Option<String> = conn
-        .query_row(
-            "SELECT value FROM app_meta WHERE key = ?1",
-            [&key],
-            |row| row.get(0),
-        )
+        .query_row("SELECT value FROM app_meta WHERE key = ?1", [&key], |row| {
+            row.get(0)
+        })
         .optional()
         .map_err(|error| error.to_string())?;
     Ok(value.is_some())
@@ -112,10 +104,7 @@ pub fn maybe_enqueue_meeting_followup_bundle(
     config: &GatewayConfig,
     token: &str,
 ) -> Result<(), String> {
-    if !config.enabled
-        || !config.labs.project_bundle_pilot
-        || !config.features.calendar
-    {
+    if !config.enabled || !config.labs.project_bundle_pilot || !config.features.calendar {
         return Ok(());
     }
 

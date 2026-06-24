@@ -1,6 +1,6 @@
 use super::{Agent, AgentContext, StepResult};
 use crate::gateway::types::GatewayAgentKind;
-use crate::memory::{self, knowledge_router, brief, planner};
+use crate::memory::{self, brief, knowledge_router, planner};
 
 pub struct MemoryAgent;
 
@@ -71,8 +71,11 @@ impl Agent for MemoryAgent {
         }
 
         if brief::is_daily_brief_command(&ctx.command) {
-            let composed =
-                brief::compose_daily_brief_v2(&ctx.db_path, Some(&ctx.app_data_dir), Some(&ctx.config))?;
+            let composed = brief::compose_daily_brief_v2(
+                &ctx.db_path,
+                Some(&ctx.app_data_dir),
+                Some(&ctx.config),
+            )?;
             return Ok(StepResult::ok(format!("{knowledge_prefix}{composed}")));
         }
 
@@ -104,9 +107,8 @@ impl Agent for MemoryAgent {
             };
         }
 
-        memory::run_memory_action(&ctx.db_path, &ctx.command).map(|reply| {
-            StepResult::ok(format!("{knowledge_prefix}{reply}"))
-        })
+        memory::run_memory_action(&ctx.db_path, &ctx.command)
+            .map(|reply| StepResult::ok(format!("{knowledge_prefix}{reply}")))
     }
 }
 
@@ -114,7 +116,8 @@ fn run_meeting_copilot(ctx: &AgentContext, knowledge_prefix: &str) -> Result<Ste
     let (summary, start) = if ctx.config.features.calendar {
         match crate::integrations::google::get_session_token("calendar") {
             Ok(token) => {
-                match crate::integrations::google::calendar::find_event_starting_within(&token, 60) {
+                match crate::integrations::google::calendar::find_event_starting_within(&token, 60)
+                {
                     Ok(Some(event)) => (Some(event.summary), event.start),
                     Ok(None) => (None, None),
                     Err(error) => {

@@ -176,7 +176,11 @@ async fn run_desktop_gateway_loop(app: AppHandle, config: GatewayConfig) -> Resu
         .map_err(|error| error.to_string())?;
 
     while !runtime().shutdown.load(Ordering::SeqCst) {
-        let message = read.next().await.transpose().map_err(|error| error.to_string())?;
+        let message = read
+            .next()
+            .await
+            .transpose()
+            .map_err(|error| error.to_string())?;
         let Some(message) = message else {
             break;
         };
@@ -219,7 +223,11 @@ async fn run_headless_gateway_loop(
         .map_err(|error| error.to_string())?;
 
     while !runtime().shutdown.load(Ordering::SeqCst) {
-        let message = read.next().await.transpose().map_err(|error| error.to_string())?;
+        let message = read
+            .next()
+            .await
+            .transpose()
+            .map_err(|error| error.to_string())?;
         let Some(message) = message else {
             break;
         };
@@ -323,7 +331,9 @@ async fn handle_gateway_payload(
             ctx.run_turn(turn_request.clone().into())?.result.reply
         } else {
             let app = app.ok_or_else(|| "Desktop app handle unavailable".to_string())?;
-            run_channel_turn_internal(app, turn_request.into())?.result.reply
+            run_channel_turn_internal(app, turn_request.into())?
+                .result
+                .reply
         };
         post_discord_message(token, &message.channel_id, &reply).await?;
         if let Ok(mut status) = runtime().status.lock() {

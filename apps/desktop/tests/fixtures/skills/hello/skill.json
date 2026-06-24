@@ -1,0 +1,13 @@
+{
+  "id": "hello",
+  "version": "1.0.0",
+  "label": "Hello skill",
+  "keywords": ["hello skill", "wave16 hello"],
+  "agent": "command",
+  "permissions": ["read"],
+  "enabled": true,
+  "handler": {
+    "type": "route",
+    "capabilityId": "command.general"
+  }
+}

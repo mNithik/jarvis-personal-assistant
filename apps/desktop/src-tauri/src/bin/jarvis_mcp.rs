@@ -5,8 +5,9 @@ use jarvis_lib::gateway::mcp::list_mcp_tools;
 use rmcp::{
     handler::server::wrapper::Parameters,
     model::{CallToolResult, Content, ServerCapabilities, ServerInfo},
-    schemars, service::ServiceExt, tool, tool_handler, tool_router, ErrorData as McpError,
-    ServerHandler,
+    schemars,
+    service::ServiceExt,
+    tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler,
 };
 use tokio::io::{stdin, stdout};
 
@@ -49,7 +50,9 @@ impl JarvisMcpServer {
             "tool": "get_routines",
             "available": list_mcp_tools(true).iter().any(|tool| tool.name == "get_routines")
         });
-        Ok(CallToolResult::success(vec![Content::text(payload.to_string())]))
+        Ok(CallToolResult::success(vec![Content::text(
+            payload.to_string(),
+        )]))
     }
 
     #[tool(description = "Summarize a gateway capability family from the read-only catalog.")]
@@ -71,7 +74,9 @@ impl JarvisMcpServer {
             "matches": matches,
             "totalReadOnlyTools": tools.len(),
         });
-        Ok(CallToolResult::success(vec![Content::text(payload.to_string())]))
+        Ok(CallToolResult::success(vec![Content::text(
+            payload.to_string(),
+        )]))
     }
 }
 

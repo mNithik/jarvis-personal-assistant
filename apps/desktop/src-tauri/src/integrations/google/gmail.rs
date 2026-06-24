@@ -34,7 +34,11 @@ pub fn list_unread(token: &str, max_results: u32) -> Result<Vec<GmailMessageReco
     hydrate_messages(token, &messages)
 }
 
-pub fn search(token: &str, query: &str, max_results: u32) -> Result<Vec<GmailMessageRecord>, String> {
+pub fn search(
+    token: &str,
+    query: &str,
+    max_results: u32,
+) -> Result<Vec<GmailMessageRecord>, String> {
     let path = format!(
         "{GMAIL_API_BASE}/users/me/messages?maxResults={max_results}&q={}",
         percent_encode(query.trim())
@@ -95,11 +99,7 @@ pub fn map_message_record(message: &Value, thread_id: &str) -> Result<GmailMessa
         .and_then(|value| value.as_str())
         .unwrap_or_default()
         .to_string();
-    let date = format_internal_date(
-        message
-            .get("internalDate")
-            .and_then(|value| value.as_str()),
-    );
+    let date = format_internal_date(message.get("internalDate").and_then(|value| value.as_str()));
     let body = extract_plain_text_from_part(message.get("payload"));
 
     Ok(GmailMessageRecord {
@@ -326,9 +326,21 @@ pub fn is_urgent_email(email: &GmailMessageRecord) -> bool {
 
 fn triage_urgency(subject: &str, snippet: &str) -> &'static str {
     let combined = format!("{subject} {snippet}").to_lowercase();
-    if contains_any(&combined, &["urgent", "asap", "action required", "overdue", "final notice"]) {
+    if contains_any(
+        &combined,
+        &[
+            "urgent",
+            "asap",
+            "action required",
+            "overdue",
+            "final notice",
+        ],
+    ) {
         "urgent"
-    } else if contains_any(&combined, &["invoice", "payment", "billing", "receipt", "deadline"]) {
+    } else if contains_any(
+        &combined,
+        &["invoice", "payment", "billing", "receipt", "deadline"],
+    ) {
         "action"
     } else {
         "normal"

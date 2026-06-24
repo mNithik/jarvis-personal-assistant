@@ -26,8 +26,8 @@ pub fn upsert_day_plan(db_path: &Path, record: &DayPlanRecord) -> Result<(), Str
     ensure_day_plans_table(&conn)?;
     let top_three_json =
         serde_json::to_string(&record.top_three).map_err(|error| error.to_string())?;
-    let suggested_actions_json = serde_json::to_string(&record.suggested_actions)
-        .map_err(|error| error.to_string())?;
+    let suggested_actions_json =
+        serde_json::to_string(&record.suggested_actions).map_err(|error| error.to_string())?;
     conn.execute(
         "
         INSERT INTO day_plans (
@@ -77,7 +77,8 @@ pub fn get_day_plan(db_path: &Path, plan_date: &str) -> Result<Option<DayPlanRec
                 top_three: serde_json::from_str(&top_three_json).unwrap_or_default(),
                 full_plan_text: row.get(2)?,
                 notion_page_id: row.get(3)?,
-                suggested_actions: serde_json::from_str(&suggested_actions_json).unwrap_or_default(),
+                suggested_actions: serde_json::from_str(&suggested_actions_json)
+                    .unwrap_or_default(),
                 created_at: row.get(5)?,
                 updated_at: row.get(6)?,
             })

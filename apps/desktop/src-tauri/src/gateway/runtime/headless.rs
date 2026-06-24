@@ -14,7 +14,9 @@ use super::super::{
     config::{load_gateway_config, GatewayConfig},
     orchestrator::{GatewayOrchestrator, GatewayTurnResponse, TurnExecutionEnv},
     router::RouterContext,
+    state::PendingApproval,
     trigger_queue::{claim_next_trigger, complete_trigger, enqueue_trigger},
+    types::ApprovalRequest,
     types::{TurnRequest, TurnSource},
 };
 
@@ -32,6 +34,7 @@ pub struct HeadlessGatewayContext {
     pub app_data_dir: PathBuf,
     pub bus: Mutex<EventBus>,
     pub turn_counters: Mutex<HashMap<String, u64>>,
+    pending_approvals: Mutex<HashMap<String, PendingApproval>>,
     pub escalation: Mutex<EscalationTracker>,
     pub proactive: Mutex<HeadlessProactiveState>,
 }
@@ -45,6 +48,7 @@ impl HeadlessGatewayContext {
             app_data_dir,
             bus: Mutex::new(EventBus::default()),
             turn_counters: Mutex::new(HashMap::new()),
+            pending_approvals: Mutex::new(HashMap::new()),
             escalation: Mutex::new(EscalationTracker::default()),
             proactive: Mutex::new(HeadlessProactiveState::default()),
         }
@@ -65,7 +69,10 @@ impl HeadlessGatewayContext {
     }
 
     pub fn next_turn_id(&self, session_id: &str) -> Result<u64, String> {
-        let mut counters = self.turn_counters.lock().map_err(|error| error.to_string())?;
+        let mut counters = self
+            .turn_counters
+            .lock()
+            .map_err(|error| error.to_string())?;
         let turn_id = counters.entry(session_id.to_string()).or_insert(1);
         let current = *turn_id;
         *turn_id += 1;
@@ -86,13 +93,15 @@ impl HeadlessGatewayContext {
 
         let router_context = RouterContext {
             db_path: Some(self.db_path.clone()),
+            app_data_dir: Some(self.app_data_dir.clone()),
             config: config.clone(),
         };
 
         let mut bus = self.bus.lock().map_err(|error| error.to_string())?;
         let mut escalation = self.escalation.lock().map_err(|error| error.to_string())?;
 
-        Ok(GatewayOrchestrator::run_turn(
+        let original_command = request.command.clone();
+        let response = GatewayOrchestrator::run_turn(
             request,
             turn_id,
             &session_id,
@@ -105,7 +114,19 @@ impl HeadlessGatewayContext {
                 app_data_dir: &self.app_data_dir,
                 escalation: &mut escalation,
             }),
-        ))
+        );
+
+        if response.awaiting_approval {
+            if let Some(approval) = response.approval.clone() {
+                self.store_pending_approval(PendingApproval {
+                    request: approval,
+                    correlation_id: response.correlation_id.clone(),
+                    command: original_command.clone(),
+                })?;
+            }
+        }
+
+        Ok(response)
     }
 
     pub fn run_turn_headless(&self, command: &str) -> Result<GatewayTurnResponse, String> {
@@ -297,8 +318,7 @@ impl HeadlessGatewayContext {
                         {
                             summaries.push(summary);
                         }
-                        proactive =
-                            self.proactive.lock().map_err(|error| error.to_string())?;
+                        proactive = self.proactive.lock().map_err(|error| error.to_string())?;
                     }
                 }
             }
@@ -320,6 +340,37 @@ impl HeadlessGatewayContext {
         self.process_trigger_queue_headless()
     }
 
+    pub fn store_pending_approval(&self, pending: PendingApproval) -> Result<(), String> {
+        let mut approvals = self
+            .pending_approvals
+            .lock()
+            .map_err(|error| error.to_string())?;
+        approvals.insert(pending.request.id.clone(), pending);
+        Ok(())
+    }
+
+    pub fn take_pending_approval(
+        &self,
+        approval_id: &str,
+    ) -> Result<Option<PendingApproval>, String> {
+        let mut approvals = self
+            .pending_approvals
+            .lock()
+            .map_err(|error| error.to_string())?;
+        Ok(approvals.remove(approval_id))
+    }
+
+    pub fn list_pending_approvals(&self) -> Result<Vec<ApprovalRequest>, String> {
+        let approvals = self
+            .pending_approvals
+            .lock()
+            .map_err(|error| error.to_string())?;
+        Ok(approvals
+            .values()
+            .map(|pending| pending.request.clone())
+            .collect())
+    }
+
     fn write_heartbeat_file(&self) -> Result<(), String> {
         let path = self.app_data_dir.join("HEARTBEAT.md");
         let stamp = chrono::Utc::now().to_rfc3339();
@@ -327,7 +378,7 @@ impl HeadlessGatewayContext {
         fs::write(path, body).map_err(|error| error.to_string())
     }
 
-    fn append_service_log(&self, line: &str) {
+    pub fn append_service_log(&self, line: &str) {
         let path = self.app_data_dir.join("service.log");
         let stamp = chrono::Utc::now().to_rfc3339();
         let _ = fs::OpenOptions::new()

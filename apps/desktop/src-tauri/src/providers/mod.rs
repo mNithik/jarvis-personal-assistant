@@ -12,7 +12,9 @@ use crate::gateway::{
 };
 use crate::models::{ModelProviderChatRequest, ModelProviderChatResponse};
 
-use self::presets::{find_preset, model_for_tier, requires_stored_key, ModelPreset, ProviderDefaults};
+use self::presets::{
+    find_preset, model_for_tier, requires_stored_key, ModelPreset, ProviderDefaults,
+};
 use self::quota::{shared_circuit_breaker, shared_quota_tracker};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

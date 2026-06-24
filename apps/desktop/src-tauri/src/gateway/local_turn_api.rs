@@ -6,11 +6,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
 use super::{
-    channels::parse_local_channel_payload,
-    config::GatewayConfig,
-    orchestrator::GatewayOrchestrator,
-    state::GatewayState,
-    types::TurnRequest,
+    channels::parse_local_channel_payload, config::GatewayConfig,
+    orchestrator::GatewayOrchestrator, state::GatewayState, types::TurnRequest,
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -30,9 +27,7 @@ struct ApiRuntime {
 static RUNTIME: OnceLock<Arc<Mutex<Option<ApiRuntime>>>> = OnceLock::new();
 
 fn runtime() -> Arc<Mutex<Option<ApiRuntime>>> {
-    RUNTIME
-        .get_or_init(|| Arc::new(Mutex::new(None)))
-        .clone()
+    RUNTIME.get_or_init(|| Arc::new(Mutex::new(None))).clone()
 }
 
 pub fn get_local_turn_api_status() -> LocalTurnApiStatus {
@@ -114,11 +109,8 @@ fn spawn_listener(app: AppHandle, config: &GatewayConfig) {
                 break;
             }
 
-            let accept = tokio::time::timeout(
-                std::time::Duration::from_secs(1),
-                listener.accept(),
-            )
-            .await;
+            let accept =
+                tokio::time::timeout(std::time::Duration::from_secs(1), listener.accept()).await;
 
             let Ok(Ok((mut stream, _))) = accept else {
                 continue;
@@ -313,7 +305,11 @@ fn list_mobile_approvals(app: &AppHandle) -> Result<String, String> {
     serde_json::to_string(&approvals).map_err(|error| error.to_string())
 }
 
-fn resolve_mobile_approval(app: &AppHandle, approval_id: &str, approved: bool) -> Result<String, String> {
+fn resolve_mobile_approval(
+    app: &AppHandle,
+    approval_id: &str,
+    approved: bool,
+) -> Result<String, String> {
     let gateway_state = app
         .try_state::<GatewayState>()
         .ok_or_else(|| "Gateway state unavailable".to_string())?;
@@ -328,7 +324,10 @@ fn resolve_mobile_approval(app: &AppHandle, approval_id: &str, approved: bool) -
     let pending = gateway_state
         .take_pending_approval(approval_id)?
         .ok_or_else(|| format!("No pending approval found for {approval_id}"))?;
-    let mut bus = gateway_state.bus.lock().map_err(|error| error.to_string())?;
+    let mut bus = gateway_state
+        .bus
+        .lock()
+        .map_err(|error| error.to_string())?;
     let resolution = GatewayOrchestrator::resolve_approval(&pending, approved, &config, &mut bus);
     serde_json::to_string(&resolution).map_err(|error| error.to_string())
 }
@@ -362,10 +361,14 @@ pub fn run_channel_turn_internal(
 
     let router_context = crate::gateway::router::RouterContext {
         db_path: Some(app_state.db_path.clone()),
+        app_data_dir: Some(app_state.app_data_dir.clone()),
         config: config.clone(),
     };
 
-    let mut bus = gateway_state.bus.lock().map_err(|error| error.to_string())?;
+    let mut bus = gateway_state
+        .bus
+        .lock()
+        .map_err(|error| error.to_string())?;
     let mut escalation = gateway_state
         .escalation
         .lock()
@@ -446,6 +449,19 @@ mod tests {
     }
 
     #[test]
+    fn unauthorized_and_not_found_responses_include_http_contract_headers() {
+        let unauthorized = http_response(401, r#"{"error":"unauthorized"}"#);
+        assert!(unauthorized.contains("401 Unauthorized"));
+        assert!(unauthorized.contains("Content-Type: application/json"));
+        assert!(unauthorized.contains("Connection: close"));
+
+        let not_found = http_response(404, r#"{"error":"not found"}"#);
+        assert!(not_found.contains("404 Not Found"));
+        assert!(not_found.contains(r#""error":"not found""#));
+        assert!(not_found.contains("Content-Length: "));
+    }
+
+    #[test]
     fn mobile_paths_parse_for_approve_and_deny() {
         let approve = "POST /mobile/approvals/apr-1/approve HTTP/1.1\r\n\r\n";
         let (method, path, _, _) = parse_http(approve);
@@ -467,6 +483,17 @@ mod tests {
         assert!(requires_auth(Some("secret")));
         assert!(!requires_auth(Some("")));
         assert!(!requires_auth(None));
+    }
+
+    #[test]
+    fn turn_request_body_parses() {
+        let raw = "POST /turn HTTP/1.1\r\nContent-Type: application/json\r\nContent-Length: 44\r\n\r\n{\"command\":\"hi\",\"channel\":\"api\"}";
+        let (method, path, _, body) = parse_http(raw);
+        assert_eq!(method, "POST");
+        assert_eq!(path, "/turn");
+        let parsed: serde_json::Value = serde_json::from_str(body.trim()).expect("json");
+        assert_eq!(parsed["command"], "hi");
+        assert_eq!(parsed["channel"], "api");
     }
 
     #[test]
