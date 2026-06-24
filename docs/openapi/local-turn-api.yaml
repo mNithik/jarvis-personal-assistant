@@ -1,0 +1,84 @@
+openapi: 3.0.3
+info:
+  title: JARVIS Local Turn API
+  version: 0.1.0
+servers:
+  - url: http://127.0.0.1:18789
+paths:
+  /health:
+    get:
+      summary: Liveness
+      responses:
+        "200":
+          description: OK
+  /turn:
+    post:
+      summary: Gateway turn
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [command]
+              properties:
+                command:
+                  type: string
+                channel:
+                  type: string
+                sessionId:
+                  type: string
+      responses:
+        "200":
+          description: Turn result
+  /mobile/brief:
+    get:
+      summary: Mobile day brief
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Brief payload
+  /mobile/approvals:
+    get:
+      summary: Pending approvals
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Approval list
+  /mobile/approvals/{id}/approve:
+    post:
+      summary: Approve pending action
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Resolution
+  /mobile/approvals/{id}/deny:
+    post:
+      summary: Deny pending action
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Resolution
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

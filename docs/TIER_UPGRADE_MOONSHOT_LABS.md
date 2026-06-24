@@ -65,6 +65,12 @@ Add to `GatewayConfig` in `gateway/config.rs`; persist in `gateway.json`.
 
 Planner + critic + executor + verifier with logged votes. Complex tasks only (project bundles, doc pipelines).
 
+**Graduation criteria (F67):**
+
+- Vote log persisted under `app_data/council/{turn_id}.json` for bundle turns
+- ≥85% bundle turns retain vote log on golden fixture replay
+- No auto-execution without approval on hard tasks
+
 ---
 
 ## Lab L4 — Proactive anomaly (Wave 14)
@@ -85,6 +91,12 @@ Graph queries: people ↔ projects ↔ commitments. Simulation: “what if I can
 
 Requires Memory v2 topic graph in production first.
 
+**Graduation criteria (F69):**
+
+- Topic graph UI v2 shipped (canvas + neighbor drill-down)
+- ≥90% world-model golden queries return read-only simulation text
+- Zero external writes from world-model path
+
 ---
 
 ## Lab L6 — Ambient multimodal (Wave 16+)
@@ -92,6 +104,12 @@ Requires Memory v2 topic graph in production first.
 **Flag:** `labs.ambientCopilot`
 
 Real-time suggestions from desktop + OCR + voice during focus sessions. Strict consent UI; off by default.
+
+**Graduation criteria (F70):**
+
+- OCR/voice signals route through `record_ambient_signal_cmd` during consented sessions
+- Dismiss rate &lt;40% over a 2-week manual cohort
+- Zero auto-writes from ambient suggestions (read-only only)
 
 ---
 

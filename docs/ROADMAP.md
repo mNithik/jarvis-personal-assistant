@@ -162,18 +162,32 @@ See [ARCHITECTURE_WAVE15.md](./ARCHITECTURE_WAVE15.md) for Wave 14 graduation ma
 - [x] Lab L5: world model queries (read-only, flag-gated)
 - [x] Optional cloud sync beta (encrypted local export/import of settings + goals + recipes)
 
-### Wave 16+ — Platform
+### Wave 16 — Platform
 
-- [ ] Work/personal/lab profiles
-- [ ] Skill SDK v1
-- [ ] Headless API documentation
-- [ ] Lab L6: ambient multimodal copilot
+- [x] Work/personal/lab profiles
+- [x] Skill SDK v1
+- [x] Headless API documentation
+- [x] Lab L6: ambient multimodal copilot
+
+See [ARCHITECTURE_WAVE16.md](./ARCHITECTURE_WAVE16.md) and [E2E_RUNBOOK.md](./E2E_RUNBOOK.md).
+
+### Wave 17 — Platform follow-through
+
+- [x] T17-A: profile memory partitions (`profile_id`-scoped memory, graph, goals, sync slices)
+- [x] T17-B: Skill SDK v2 execution (`route`/`http`/`script`/`wasm` executor + bounded sandbox)
+- [x] T17-C: topic graph UI v2 (canvas, drill-down, profile label, pagination)
+- [ ] T17-D: hosted cloud sync (auth, encrypted remote store, conflict resolution)
+- [x] T17-E: lab graduation fabric F65-F70 + promotion thresholds
+- [ ] T17-F: marketplace + project operator lane
+
+See [ARCHITECTURE_WAVE17.md](./ARCHITECTURE_WAVE17.md) for dependencies and sequencing.
 
 ## Verify gate (every sprint)
 
 ```powershell
 cd apps/desktop/src-tauri; cargo test --lib -j 1 --no-default-features
 # On Windows, full default-feature tests may fail with STATUS_ENTRYPOINT_NOT_FOUND; use --no-default-features locally and rely on Linux CI for the full harness.
-cd ../..; npx tsc --noEmit
+npm run e2e:ui
+npm run e2e:api
 npm --workspace @jarvis/desktop run build
 ```

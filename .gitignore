@@ -20,3 +20,7 @@ AGENTS.md
 .codex/
 CODEX.md
 .tmp-*/
+
+# Playwright artifacts
+apps/desktop/e2e/test-results/
+apps/desktop/e2e/playwright-report/
