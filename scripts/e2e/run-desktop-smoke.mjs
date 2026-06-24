@@ -133,6 +133,19 @@ async function waitForElementText(elementId, predicate, timeoutMs, description) 
   throw new Error(`Timed out waiting for ${description}`);
 }
 
+async function waitForWindowTitle(expectedTitle, timeoutMs) {
+  const started = Date.now();
+  let lastTitle = "";
+  while (Date.now() - started < timeoutMs) {
+    lastTitle = await webdriverRequest("GET", `/session/${sessionId}/title`);
+    if (lastTitle === expectedTitle) {
+      return lastTitle;
+    }
+    await sleep(500);
+  }
+  throw new Error(`Expected window title "${expectedTitle}", got "${lastTitle}"`);
+}
+
 const desktopDist = path.join(root, "apps/desktop/dist/index.html");
 const appBinary = resolveAppBinary();
 const tauriDriver = resolveTauriDriver();
@@ -182,8 +195,7 @@ try {
   sessionId = session.sessionId;
   assert(sessionId, "WebDriver session did not return a session id");
 
-  const title = await webdriverRequest("GET", `/session/${sessionId}/title`);
-  assert(title === "JARVIS", `Expected window title "JARVIS", got "${title}"`);
+  await waitForWindowTitle("JARVIS", 90000);
   console.log("OK: window title");
 
   const handles = await webdriverRequest("GET", `/session/${sessionId}/window/handles`);
