@@ -39,7 +39,7 @@ jobs:
 
       - name: Run golden eval harness
         working-directory: apps/desktop/src-tauri
-        run: cargo test --lib -j 1 --no-default-features
+        run: cargo test --lib -j 1 --no-default-features --features custom-protocol
 
   playwright-ui:
     runs-on: ubuntu-latest
@@ -131,7 +131,7 @@ jobs:
 
       - name: Build Tauri debug binary
         working-directory: apps/desktop/src-tauri
-        run: cargo build --no-default-features
+        run: cargo build --no-default-features --features custom-protocol
         shell: pwsh
 
       - name: Install tauri-driver
