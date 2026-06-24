@@ -5,6 +5,7 @@
   "type": "module",
   "workspaces": [
     "apps/*",
+    "apps/desktop/e2e",
     "packages/*"
   ],
   "scripts": {
@@ -14,6 +15,12 @@
     "tauri": "tauri dev --config apps/desktop/src-tauri/tauri.conf.json",
     "tauri:build": "npm run tauri:build --workspace @jarvis/desktop",
     "typecheck": "npm exec tsc --noEmit && npm --workspace @jarvis/types run typecheck",
+    "e2e:ui": "npm --workspace @jarvis/desktop-e2e test",
+    "e2e:api": "node scripts/e2e/run-api-smoke.mjs",
+    "e2e:api:service": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/e2e/run-api-service-smoke.ps1",
+    "e2e:desktop": "node scripts/e2e/run-desktop-smoke.mjs",
+    "e2e:smoke:check": "node --check scripts/e2e/run-api-smoke.mjs && node --check scripts/e2e/run-desktop-smoke.mjs",
+    "e2e:smoke:check:windows": "powershell -NoProfile -Command \"[void][scriptblock]::Create((Get-Content -Raw 'scripts/e2e/run-api-service-smoke.ps1')); [void][scriptblock]::Create((Get-Content -Raw 'scripts/e2e/smoke-local-api.ps1')); Write-Host 'PowerShell smoke wrappers parsed successfully.'\"",
     "dev:desktop": "npm --workspace @jarvis/desktop run dev",
     "build:desktop": "npm --workspace @jarvis/desktop run build",
     "tauri:desktop": "npm run tauri",

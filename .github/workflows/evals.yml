@@ -1,0 +1,158 @@
+name: Evals
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  rust-evals:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check smoke scripts syntax
+        run: npm run e2e:smoke:check
+
+      - name: Run golden eval harness
+        working-directory: apps/desktop/src-tauri
+        run: cargo test --lib -j 1 --no-default-features
+
+  playwright-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check smoke scripts syntax
+        run: npm run e2e:smoke:check
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+        working-directory: apps/desktop/e2e
+
+      - name: Run Playwright UI tests
+        run: npm run e2e:ui
+
+  e2e-api:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check smoke scripts syntax
+        run: npm run e2e:smoke:check
+
+      - name: Check PowerShell smoke wrappers syntax
+        run: npm run e2e:smoke:check:windows
+        shell: pwsh
+
+      - name: Build jarvis-service debug binary
+        working-directory: apps/desktop/src-tauri
+        run: cargo build --bin jarvis-service --no-default-features
+        shell: pwsh
+
+      - name: Run API smoke against headless service
+        run: npm run e2e:api:service
+        shell: pwsh
+
+  e2e-desktop:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check smoke scripts syntax
+        run: npm run e2e:smoke:check
+
+      - name: Check PowerShell smoke wrappers syntax
+        run: npm run e2e:smoke:check:windows
+        shell: pwsh
+
+      - name: Build desktop debug
+        run: npm run build --workspace @jarvis/desktop
+        shell: pwsh
+
+      - name: Build Tauri debug binary
+        working-directory: apps/desktop/src-tauri
+        run: cargo build --no-default-features
+        shell: pwsh
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --locked
+        shell: pwsh
+
+      - name: Install EdgeDriver helper
+        run: cargo install --git https://github.com/chippers/msedgedriver-tool
+        shell: pwsh
+
+      - name: Download matching EdgeDriver
+        run: '& "$HOME/.cargo/bin/msedgedriver-tool.exe"'
+        shell: pwsh
+
+      - name: Resolve EdgeDriver path
+        run: |
+          $searchRoots = @(
+            "$HOME/.cargo/bin",
+            $env:RUNNER_TEMP,
+            (Get-Location).Path
+          ) | Where-Object { $_ -and (Test-Path $_) }
+          $driver = Get-ChildItem -Path $searchRoots -Filter msedgedriver.exe -Recurse -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $driver) {
+            throw "Could not find msedgedriver.exe after download."
+          }
+          "NATIVE_DRIVER_PATH=$driver" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Using EdgeDriver at $driver"
+        shell: pwsh
+
+      - name: Run desktop smoke script
+        run: npm run e2e:desktop
+        shell: pwsh
