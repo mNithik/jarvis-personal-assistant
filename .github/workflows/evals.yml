@@ -42,7 +42,10 @@ jobs:
 
       - name: Run golden eval harness
         working-directory: apps/desktop/src-tauri
-        run: cargo test --lib -j 1 --no-default-features --features custom-protocol
+        env:
+          HOME: /home/runner
+          USERPROFILE: /home/runner
+        run: cargo test --lib -j 1 --no-default-features --features custom-protocol gateway::evals::
 
   playwright-ui:
     runs-on: ubuntu-latest

@@ -92,6 +92,8 @@ function elementIdOf(element) {
   return element["element-6066-11e4-a52e-4f735466cecf"] ?? element.ELEMENT;
 }
 
+const WEBDRIVER_ELEMENT_KEY = "element-6066-11e4-a52e-4f735466cecf";
+
 async function findElement(using, value) {
   const element = await webdriverRequest("POST", `/session/${sessionId}/element`, {
     using,
@@ -121,7 +123,19 @@ async function getElementText(elementId) {
 }
 
 async function clickElement(elementId) {
+  await scrollIntoView(elementId);
   await webdriverRequest("POST", `/session/${sessionId}/element/${elementId}/click`, {});
+}
+
+async function scrollIntoView(elementId) {
+  await webdriverRequest("POST", `/session/${sessionId}/execute/sync`, {
+    script: "arguments[0].scrollIntoView({block: 'center'});",
+    args: [{ [WEBDRIVER_ELEMENT_KEY]: elementId }],
+  });
+}
+
+async function submitElement(elementId) {
+  await webdriverRequest("POST", `/session/${sessionId}/element/${elementId}/submit`, {});
 }
 
 async function sendKeys(elementId, text) {
@@ -253,11 +267,7 @@ try {
 
   await clearElement(elementId);
   await sendKeys(elementId, "list trigger recipes");
-  const routeButtonId = await findElement(
-    "xpath",
-    "//button[normalize-space()='Route command']",
-  );
-  await clickElement(routeButtonId);
+  await submitElement(elementId);
   const previewText = await waitForElementText(
     gatewayPreviewRouteId,
     (text) => text && !text.includes("Type a command to preview the route."),
