@@ -102,6 +102,20 @@ async function findElement(using, value) {
   return id;
 }
 
+async function waitForFindElement(using, value, timeoutMs, description) {
+  const started = Date.now();
+  let lastError = null;
+  while (Date.now() - started < timeoutMs) {
+    try {
+      return await findElement(using, value);
+    } catch (error) {
+      lastError = error;
+      await sleep(500);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(`Timed out waiting for ${description}`);
+}
+
 async function getElementText(elementId) {
   return webdriverRequest("GET", `/session/${sessionId}/element/${elementId}/text`);
 }
@@ -202,13 +216,30 @@ try {
   assert(Array.isArray(handles) && handles.length >= 1, "Expected at least one window handle");
   console.log("OK: window handles");
 
-  const elementId = await findElement(
+  await clickElement(
+    await waitForFindElement(
+      "xpath",
+      "//div[@role='tablist']//button[.//span[normalize-space()='Command']]",
+      30000,
+      "Command workspace tab",
+    ),
+  );
+  console.log("OK: command workspace opened");
+
+  const elementId = await waitForFindElement(
     "css selector",
-    'input[placeholder="Tell JARVIS what you want to do..."], input[placeholder="Ask JARVIS from anywhere..."]',
+    '[data-testid="command-input"]',
+    30000,
+    "command input",
   );
   console.log("OK: command input");
 
-  const gatewayPreviewId = await findElement("css selector", '[data-testid="gateway-preview"]');
+  const gatewayPreviewId = await waitForFindElement(
+    "css selector",
+    '[data-testid="gateway-preview"]',
+    30000,
+    "gateway preview card",
+  );
   const gatewayPreviewRouteId = await findElement(
     "css selector",
     '[data-testid="gateway-preview"] .gateway-preview-route',

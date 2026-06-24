@@ -34,6 +34,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build desktop frontend for embedded dist
+        run: npm run build --workspace @jarvis/desktop
+
       - name: Check smoke scripts syntax
         run: npm run e2e:smoke:check
 
