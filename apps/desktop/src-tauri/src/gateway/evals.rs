@@ -1912,7 +1912,7 @@ mod tests {
                     #[cfg(windows)]
                     command: "cmd /C echo skill-script".into(),
                     #[cfg(not(windows))]
-                    command: "sh -c echo skill-script".into(),
+                    command: "sh -c \"echo skill-script\"".into(),
                 },
             },
             SkillManifest {

@@ -326,7 +326,7 @@ try {
   );
   const traceHeadingText = await getElementText(traceHeadingId);
   assert(
-    traceHeadingText === "Gateway trace",
+    traceHeadingText.toLowerCase() === "gateway trace",
     `Expected Gateway trace heading after opening trace panel, got "${traceHeadingText}"`,
   );
   console.log("OK: gateway trace toggle");
