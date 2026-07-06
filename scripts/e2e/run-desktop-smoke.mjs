@@ -303,9 +303,21 @@ try {
   );
   console.log("OK: routed command updates gateway preview");
 
-  const showTraceButtonId = await findElement(
+  await clickElement(
+    await waitForFindElement(
+      "xpath",
+      "//button[normalize-space()='Cockpit']",
+      30000,
+      "Cockpit quick action",
+    ),
+  );
+  console.log("OK: cockpit opened");
+
+  const showTraceButtonId = await waitForFindElement(
     "xpath",
     "//button[normalize-space()='Show gateway trace']",
+    30000,
+    "Show gateway trace button",
   );
   await clickElement(showTraceButtonId);
   const traceHeadingId = await findElement(

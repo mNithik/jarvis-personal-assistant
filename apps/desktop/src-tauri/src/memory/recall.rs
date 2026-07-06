@@ -105,6 +105,7 @@ fn vector_search(
     query_vector: &[f32],
     limit: usize,
 ) -> Result<Vec<RecallHit>, String> {
+    const MIN_VECTOR_SIMILARITY: f32 = 0.45;
     let connection = Connection::open(path).map_err(|error| error.to_string())?;
     let mut statement = connection
         .prepare(
@@ -138,6 +139,7 @@ fn vector_search(
                 score,
             }
         })
+        .filter(|hit| hit.score >= MIN_VECTOR_SIMILARITY)
         .collect::<Vec<_>>();
 
     scored.sort_by(|left, right| {

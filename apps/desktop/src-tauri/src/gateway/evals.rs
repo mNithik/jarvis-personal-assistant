@@ -460,7 +460,11 @@ mod tests {
         );
 
         for file in route_files {
-            run_golden_file(&file);
+            if file == "f_skill_sdk_routes.json" {
+                run_skill_golden_file(&file);
+            } else {
+                run_golden_file(&file);
+            }
         }
 
         for file in execution_files {

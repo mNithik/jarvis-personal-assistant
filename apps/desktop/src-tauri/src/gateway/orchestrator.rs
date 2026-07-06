@@ -92,8 +92,9 @@ impl GatewayOrchestrator {
             );
         }
 
-        if let (Some(env), false) = (execution, response.awaiting_approval) {
-            if config.features.memory
+        if let Some(env) = execution {
+            if !response.awaiting_approval
+                && config.features.memory
                 && response.result.route.as_ref().is_some_and(|route| {
                     route.capability_id.starts_with("memory") || is_memory_command(&request.command)
                 })
@@ -178,6 +179,7 @@ impl GatewayOrchestrator {
                     });
                 }
             } else if config.enabled
+                && !response.awaiting_approval
                 && capability_enabled(config, response.result.route.as_ref(), &request.command)
             {
                 if let Some(route) = response.result.route.clone() {
@@ -372,7 +374,7 @@ impl GatewayOrchestrator {
             }
         }
 
-        let awaiting_approval = approval.is_some() && !config.mode.is_simulation();
+        let awaiting_approval = approval.is_some();
         let legacy = !config.enabled || awaiting_approval;
         let mut reply = if awaiting_approval {
             format!(
