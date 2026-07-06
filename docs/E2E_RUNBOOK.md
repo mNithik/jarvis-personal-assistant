@@ -39,19 +39,6 @@ Run the complete golden harness (F1-F64) on Linux CI in [evals.yml](../.github/w
 
 Current Playwright harness focus: command preview reasoning, gateway settings persistence, trigger recipe CRUD, profile-local installed skill overrides, profile-scoped sync goals, topic graph canvas + neighbor drill-down, ambient flow, and proactive nudge actions.
 
-## CseGraph dev workflow (local only)
-
-CseGraph is a **development-only** context engine for building JARVIS in Cursor. It is not part of the JARVIS runtime.
-
-| Step | Command |
-|------|---------|
-| Index once | `csegraph index .` |
-| Keep fresh | `csegraph watch .` (or refresh after large refactors) |
-| Cursor MCP | `csegraph install --platform cursor` (repo-local `.cursor/mcp.json`, gitignored) |
-| Before deep edits | Use MCP `csegraph_minimal` then `csegraph_context` for the task |
-
-Rust grammars: `pip install "csegraph[rust]"`. Local state lives in `.csegraph/` (gitignored).
-
 ## HTTP smoke (Layer 2)
 
 1. Start JARVIS (`npm run tauri`).
@@ -84,6 +71,22 @@ When `CI=true` or `E2E_STRICT=true`, any missing mobile or turn endpoint becomes
 
 The local manual path still exists if you want to smoke test against the desktop app directly.
 
+## Wave 16 automated coverage (CI)
+
+These rows are exercised by Playwright UI specs and/or `gateway::evals` without live OAuth:
+
+| Manual matrix row | Automated signal |
+|-------------------|------------------|
+| Profiles switch | `f_profile_switch_routes.json`, `eval_fabric_f61_profile_memory_isolation` |
+| Skill SDK route/override | `f_skill_sdk_routes.json`, `eval_fabric_f63_skill_handler_execution`, Playwright installed-skills panel |
+| Sync export/import slices | Playwright sync goals spec; `sync_bundle_round_trips_profile_memory_and_goals` |
+| L6 ambient read-only | `f_ambient_copilot_routes.json`, `eval_fabric_f64_ambient_signal_execution`, Playwright ambient flow |
+| Topic graph canvas | `f_topic_graph_routes.json`, Playwright topic graph specs |
+| Hosted sync T17-D | `sync_remote` unit tests; SyncPanel push/pull UI |
+| Marketplace T17-F | `marketplace` unit tests; Installed skills catalog install |
+
+OAuth-dependent rows (planner, meeting v2 live calendar, mobile PWA on LAN) still require the manual matrix below.
+
 ## Manual integration matrix (Layer 4)
 
 Requires live Google and Notion OAuth. Check each box per release candidate.
@@ -102,7 +105,9 @@ Requires live Google and Notion OAuth. Check each box per release candidate.
 
 ## Lab graduation manual matrix (F65-F70)
 
-Requires fabric green + cohort judgment before flipping lab defaults.
+Requires fabric green + cohort judgment before flipping lab defaults. **Lab defaults remain off** in `gateway/config.rs` until each row passes manual review.
+
+**Automated pre-checks:** F65–F70 fabric rows exist in `f_fabric_index.json`; golden execution evals cover bundle, verifier, ambient signal, and world-model read paths. Manual dismiss/accept rates still require a live cohort.
 
 - [ ] **F65 / L1 bundle:** ≥90% step success on golden fixtures; &lt;5% hard-abort; full audit trail
 - [ ] **F66 / L2 verifier:** catches ≥80% injected bad-send fixtures; latency &lt;2× single-agent p95

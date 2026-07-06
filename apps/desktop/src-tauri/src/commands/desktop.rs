@@ -104,7 +104,20 @@ pub fn open_named_target(db_path: &Path, name: &str) -> Result<String, String> {
 
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = (db_path, name);
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            return Err("No desktop target was provided.".to_string());
+        }
+        if desktop_spawns_disabled() {
+            log_action(
+                db_path,
+                &format!("Open {trimmed} (test noop)"),
+                "open_desktop_target",
+                "success",
+                trimmed,
+            )?;
+            return Ok(format!("Opened {} (test noop).", trimmed));
+        }
         Err("Desktop target opening is currently implemented for Windows only.".to_string())
     }
 }

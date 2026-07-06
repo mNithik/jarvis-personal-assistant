@@ -1455,3 +1455,71 @@ export function dismissAmbientSuggestion(id: string) {
 export function recordAmbientSignal(signal: string) {
   return invoke<AmbientSuggestionRecord | null>("record_ambient_signal_cmd", { signal });
 }
+
+export type RemoteSyncStatus = {
+  connected: boolean;
+  endpoint: string;
+  deviceId: string;
+  lastSyncAt?: string | null;
+  pendingConflicts: number;
+};
+
+export type SyncConflict = {
+  id: string;
+  kind: "goal" | "profile" | "triggerRecipe" | "memoryEntity";
+  localSummary: string;
+  remoteSummary: string;
+  localUpdatedAt?: string | null;
+  remoteUpdatedAt?: string | null;
+};
+
+export type RemoteSyncResult = {
+  summary: string;
+  conflicts: SyncConflict[];
+  applied: boolean;
+};
+
+export type MarketplaceCatalogEntry = {
+  id: string;
+  label: string;
+  version: string;
+  description: string;
+  keywords: string[];
+  sourcePath: string;
+  operatorLane?: string | null;
+};
+
+export function remoteSyncStatus() {
+  return invoke<RemoteSyncStatus>("remote_sync_status_cmd");
+}
+
+export function connectRemoteSync(endpoint: string, deviceToken: string) {
+  return invoke("connect_remote_sync_cmd", { endpoint, deviceToken });
+}
+
+export function pushRemoteSync(passphrase: string) {
+  return invoke<RemoteSyncResult>("push_remote_sync_cmd", { passphrase });
+}
+
+export function pullRemoteSync(passphrase: string, resolutions?: string[]) {
+  return invoke<RemoteSyncResult>("pull_remote_sync_cmd", { passphrase, resolutions });
+}
+
+export function listPendingSyncConflicts() {
+  return invoke<SyncConflict[]>("list_pending_sync_conflicts_cmd");
+}
+
+export function listMarketplaceCatalog() {
+  return invoke<MarketplaceCatalogEntry[]>("list_marketplace_catalog_cmd");
+}
+
+export function installMarketplaceSkill(skillId: string) {
+  return invoke<{ skillId: string; installedPath: string; message: string }>(
+    "install_marketplace_skill_cmd",
+    { skillId },
+  );
+}
+
+export function marketplaceOperatorLane(skillId: string) {
+  return invoke<string>("marketplace_operator_lane_cmd", { skillId });
+}

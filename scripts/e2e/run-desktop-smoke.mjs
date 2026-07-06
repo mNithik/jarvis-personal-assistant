@@ -134,8 +134,20 @@ async function scrollIntoView(elementId) {
   });
 }
 
-async function submitElement(elementId) {
-  await webdriverRequest("POST", `/session/${sessionId}/element/${elementId}/submit`, {});
+async function pressEnter(elementId) {
+  await webdriverRequest("POST", `/session/${sessionId}/actions`, {
+    actions: [
+      {
+        type: "key",
+        id: "keyboard",
+        actions: [
+          { type: "pause", duration: 100 },
+          { type: "keyDown", value: "\uE007" },
+          { type: "keyUp", value: "\uE007" },
+        ],
+      },
+    ],
+  });
 }
 
 async function sendKeys(elementId, text) {
@@ -267,7 +279,7 @@ try {
 
   await clearElement(elementId);
   await sendKeys(elementId, "list trigger recipes");
-  await submitElement(elementId);
+  await pressEnter(elementId);
   const previewText = await waitForElementText(
     gatewayPreviewRouteId,
     (text) => text && !text.includes("Type a command to preview the route."),

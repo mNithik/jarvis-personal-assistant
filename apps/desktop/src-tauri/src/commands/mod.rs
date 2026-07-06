@@ -8,3 +8,4 @@ pub mod trigger_recipes;
 pub mod vision;
 pub mod wave15;
 pub mod wave16;
+pub mod wave17;

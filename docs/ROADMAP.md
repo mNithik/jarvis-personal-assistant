@@ -176,9 +176,9 @@ See [ARCHITECTURE_WAVE16.md](./ARCHITECTURE_WAVE16.md) and [E2E_RUNBOOK.md](./E2
 - [x] T17-A: profile memory partitions (`profile_id`-scoped memory, graph, goals, sync slices)
 - [x] T17-B: Skill SDK v2 execution (`route`/`http`/`script`/`wasm` executor + bounded sandbox)
 - [x] T17-C: topic graph UI v2 (canvas, drill-down, profile label, pagination)
-- [ ] T17-D: hosted cloud sync (auth, encrypted remote store, conflict resolution)
+- [x] T17-D: hosted cloud sync MVP (`gateway/sync_remote.rs`, SyncPanel push/pull, conflict detection)
 - [x] T17-E: lab graduation fabric F65-F70 + promotion thresholds
-- [ ] T17-F: marketplace + project operator lane
+- [x] T17-F: marketplace catalog install + operator lane summary (`gateway/marketplace.rs`)
 
 See [ARCHITECTURE_WAVE17.md](./ARCHITECTURE_WAVE17.md) for dependencies and sequencing.
 

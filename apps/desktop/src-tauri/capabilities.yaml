@@ -181,3 +181,18 @@ capabilities:
     agent: command
     tier: local
     always_enabled: true
+  - id: platform.profiles
+    label: Profiles
+    agent: command
+    tier: local
+    always_enabled: true
+  - id: platform.skill
+    label: Installed skill
+    agent: command
+    tier: local
+    always_enabled: true
+  - id: labs.ambient
+    label: Ambient copilot
+    agent: command
+    tier: local
+    always_enabled: true

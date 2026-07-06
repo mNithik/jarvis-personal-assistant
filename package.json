@@ -21,6 +21,7 @@
     "e2e:desktop": "node scripts/e2e/run-desktop-smoke.mjs",
     "e2e:smoke:check": "node --check scripts/e2e/run-api-smoke.mjs && node --check scripts/e2e/run-desktop-smoke.mjs",
     "e2e:smoke:check:windows": "powershell -NoProfile -Command \"[void][scriptblock]::Create((Get-Content -Raw 'scripts/e2e/run-api-service-smoke.ps1')); [void][scriptblock]::Create((Get-Content -Raw 'scripts/e2e/smoke-local-api.ps1')); Write-Host 'PowerShell smoke wrappers parsed successfully.'\"",
+    "verify": "npm run build --workspace @jarvis/desktop && npm run e2e:smoke:check && npm run e2e:ui",
     "dev:desktop": "npm --workspace @jarvis/desktop run dev",
     "build:desktop": "npm --workspace @jarvis/desktop run build",
     "tauri:desktop": "npm run tauri",

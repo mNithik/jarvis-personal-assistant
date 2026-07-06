@@ -497,6 +497,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "windows")]
     fn installed_script_skill_executes_safe_command() {
         let manifest = SkillManifest {
             id: "script-echo".into(),
@@ -520,6 +521,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "windows")]
     fn installed_script_skill_rejects_unsafe_command() {
         let manifest = SkillManifest {
             id: "script-unsafe".into(),

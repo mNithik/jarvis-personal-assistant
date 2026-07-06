@@ -30,11 +30,12 @@ Wave 17 is where those pieces become coherent and production-safe across profile
 
 | Area | Current implementation | Limitation |
 |------|------------------------|------------|
-| Profiles | `gateway/profiles.rs`, `user_profiles`, `ACTIVE_PROFILE_KEY` | Active profile swaps config and now scopes memory reads/writes, but some follow-on surfaces still need explicit graduation and release-note treatment |
-| Memory graph | `memory_entities`, `memory_relations`, `memory/topic_graph.rs` | Graph and recall storage are profile-scoped, but the UI is still adjacency-oriented and not yet exploratory |
-| Skills | `gateway/skills.rs`, `agents/command.rs`, `packages/skill-sdk` | Runtime matching exists, including optional profile-specific skill directories, but execution is still shallow and Wasm is deferred |
-| Sync | `gateway/sync.rs`, `SyncPanel.tsx` | Export/import now carries profile-scoped goals, graph, and recall slices, but there is no remote auth, hosted store, or conflict strategy |
-| Labs | `gateway/ambient.rs`, fabric eval index | Graduation lanes are documented, but later labs still need production metrics and fabric coverage |
+| Profiles | `gateway/profiles.rs`, `user_profiles`, `ACTIVE_PROFILE_KEY` | Profile-scoped memory, skills, ambient, and sync slices shipped (T17-A) |
+| Memory graph | `memory/topic_graph.rs`, `TopicGraphCanvas.tsx` | Canvas + drill-down shipped (T17-C); manual link/unlink optional |
+| Skills | `gateway/skills.rs`, `skills_executor.rs`, `packages/skill-sdk` | route/http/script/wasm execution shipped (T17-B) |
+| Sync | `gateway/sync.rs`, `gateway/sync_remote.rs`, `SyncPanel.tsx` | Local export/import plus hosted push/pull with conflict detection (T17-D) |
+| Labs | `gateway/ambient.rs`, F65–F70 fabric | Graduation thresholds documented; defaults off until manual cohort pass |
+| Marketplace | `gateway/marketplace.rs`, `InstalledSkillsPanel.tsx` | Bundled catalog install + operator lane summary (T17-F) |
 
 ## Track map
 

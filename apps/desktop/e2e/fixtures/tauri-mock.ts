@@ -322,6 +322,49 @@ export function buildInvokeHandlers(): Record<string, InvokeHandler> {
       ambientSuggestions = ambientSuggestions.filter((suggestion) => suggestion.id !== id);
       return null;
     },
+    remote_sync_status_cmd: () => ({
+      connected: false,
+      endpoint: "",
+      deviceId: "",
+      lastSyncAt: null,
+      pendingConflicts: 0,
+    }),
+    connect_remote_sync_cmd: (args) => ({
+      endpoint: String(args?.endpoint ?? ""),
+      deviceToken: String(args?.deviceToken ?? ""),
+      deviceId: "e2e-device",
+      lastSyncAt: null,
+      lastRemoteVersion: null,
+    }),
+    push_remote_sync_cmd: () => ({
+      summary: "Pushed encrypted sync bundle to hosted store.",
+      conflicts: [],
+      applied: true,
+    }),
+    pull_remote_sync_cmd: () => ({
+      summary: "Imported sync bundle from hosted store.",
+      conflicts: [],
+      applied: true,
+    }),
+    list_pending_sync_conflicts_cmd: () => [],
+    list_marketplace_catalog_cmd: () => [
+      {
+        id: "hello",
+        label: "Hello skill",
+        version: "1.0.0",
+        description: "Wave 16 fixture skill that routes to command.general.",
+        keywords: ["hello skill", "wave16 hello"],
+        sourcePath: "../tests/fixtures/skills/hello",
+        operatorLane: "command",
+      },
+    ],
+    install_marketplace_skill_cmd: (args) => ({
+      skillId: String(args?.skillId ?? "hello"),
+      installedPath: "/tmp/skills/hello",
+      message: 'Installed marketplace skill "Hello skill" v1.0.0 into app_data/skills.',
+    }),
+    marketplace_operator_lane_cmd: () =>
+      "Operator lane for Hello skill: command. Use project bundle pilot surfaces after manual lab sign-off.",
   };
 }
 

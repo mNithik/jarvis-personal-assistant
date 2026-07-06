@@ -23,9 +23,9 @@ sequenceDiagram
   DB->>DB: app_meta.active_profile_id
 ```
 
-## Skill SDK v1
+## Skill SDK v2
 
-Manifest-driven keywords merge at runtime via `match_dynamic_skill`. Handlers: `route`, `http`, `script` (Wasm deferred).
+Manifest-driven keywords merge at runtime via `match_dynamic_skill`. Handlers: `route`, `http`, `script`, and bounded `wasm` execution via `builder/sandbox.rs` and `gateway/skills_executor.rs`.
 
 ## Ambient copilot (L6)
 

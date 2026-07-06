@@ -58,6 +58,60 @@ mod tests {
         }
     }
 
+    fn run_skill_golden_file(file_name: &str) {
+        use crate::db::init_database;
+        use crate::gateway::skills::install_fixture_skill;
+
+        let path = eval_path(file_name);
+        let raw = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+        let cases: Vec<GoldenEvalCase> =
+            serde_json::from_str(&raw).expect("golden eval json should parse");
+        assert!(
+            cases.len() >= 3,
+            "{} should contain at least 3 golden cases",
+            file_name
+        );
+
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0);
+        let db_path = std::env::temp_dir().join(format!("jarvis-skill-golden-db-{nanos}"));
+        let app_data_dir = std::env::temp_dir().join(format!("jarvis-skill-golden-app-{nanos}"));
+        let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_dir_all(&app_data_dir);
+        std::fs::create_dir_all(&app_data_dir).expect("skill golden app dir");
+        init_database(&db_path).expect("skill golden db");
+        install_fixture_skill(&app_data_dir).expect("fixture skill");
+
+        let context = RouterContext {
+            db_path: Some(db_path.clone()),
+            app_data_dir: Some(app_data_dir.clone()),
+            config: crate::gateway::config::GatewayConfig::default(),
+        };
+
+        for case in cases {
+            let route = route_turn(
+                &TurnRequest {
+                    session_id: None,
+                    command: case.phrase.clone(),
+                    source: None,
+                    idempotency_key: None,
+                },
+                &context,
+            );
+            assert_eq!(
+                route.capability_id, case.capability_id,
+                "phrase {:?} expected capability {}",
+                case.phrase, case.capability_id
+            );
+        }
+
+        let _ = std::fs::remove_file(db_path);
+        let _ = std::fs::remove_dir_all(app_data_dir);
+    }
+
     #[test]
     fn eval_golden_f3_study_routes() {
         run_golden_file("f3_study.json");
@@ -765,6 +819,7 @@ mod tests {
 
     fn run_orchestrator_execution_turn(
         db_path: &std::path::Path,
+        app_data_dir: &std::path::Path,
         config: &crate::gateway::config::GatewayConfig,
         command: &str,
     ) -> crate::gateway::orchestrator::GatewayTurnResponse {
@@ -775,10 +830,9 @@ mod tests {
 
         let mut bus = crate::gateway::bus::EventBus::default();
         let mut escalation = EscalationTracker::default();
-        let app_data_dir = std::env::temp_dir();
         let execution = TurnExecutionEnv {
             db_path,
-            app_data_dir: &app_data_dir,
+            app_data_dir,
             escalation: &mut escalation,
         };
         GatewayOrchestrator::run_turn(
@@ -793,7 +847,7 @@ mod tests {
             config,
             &RouterContext {
                 db_path: Some(db_path.to_path_buf()),
-                app_data_dir: Some(app_data_dir.clone()),
+                app_data_dir: Some(app_data_dir.to_path_buf()),
                 config: config.clone(),
             },
             &mut bus,
@@ -862,7 +916,15 @@ mod tests {
             config.features.gmail = true;
             config.features.calendar = true;
 
-            let response = run_orchestrator_execution_turn(&db_path, &config, &case.command);
+            let app_data_dir = std::env::temp_dir().join(format!(
+                "jarvis-eval-policy-app-{}-{}",
+                file_name,
+                case.command.len()
+            ));
+            let _ = std::fs::create_dir_all(&app_data_dir);
+
+            let response =
+                run_orchestrator_execution_turn(&db_path, &app_data_dir, &config, &case.command);
             if case.expect_success {
                 assert!(
                     !response.awaiting_approval,
@@ -917,7 +979,15 @@ mod tests {
                 install_google_execution_fixture("gmail_list_unread");
             }
 
-            let response = run_orchestrator_execution_turn(&db_path, &config, &case.command);
+            let app_data_dir = std::env::temp_dir().join(format!(
+                "jarvis-eval-mission-app-{}-{}",
+                file_name,
+                case.command.len()
+            ));
+            let _ = std::fs::create_dir_all(&app_data_dir);
+
+            let response =
+                run_orchestrator_execution_turn(&db_path, &app_data_dir, &config, &case.command);
             assert!(
                 response
                     .result
@@ -1151,8 +1221,13 @@ mod tests {
                         ),
                     ),
                     (
-                        "/gmail/v1/users/me/messages".to_string(),
-                        r#"{"messages":[{"id":"msg-1"}]}"#.to_string(),
+                        "/users/me/messages?maxResults".to_string(),
+                        r#"{"messages":[{"id":"msg-1","threadId":"thread-1"}]}"#.to_string(),
+                    ),
+                    (
+                        "/users/me/messages/msg-1?format=full".to_string(),
+                        r#"{"id":"msg-1","threadId":"thread-1","snippet":"Product review thread","payload":{"mimeType":"text/plain","headers":[{"name":"Subject","value":"Product review deck"},{"name":"From","value":"Alex <alex@example.com>"}],"body":{"data":"UHJvZHVjdA=="}}}"#
+                            .to_string(),
                     ),
                 ]));
                 save_notion_config(db_path, Some("token-eval"), Some("db-eval")).expect("notion");
@@ -1681,7 +1756,12 @@ mod tests {
         config.enabled = true;
         config.features.memory = true;
 
-        let response = run_orchestrator_execution_turn(&db_path, &config, "switch to work profile");
+        let response = run_orchestrator_execution_turn(
+            &db_path,
+            &app_data_dir,
+            &config,
+            "switch to work profile",
+        );
         assert!(
             !response.result.legacy,
             "profile switch should execute via gateway"
@@ -1711,8 +1791,12 @@ mod tests {
             hidden_personal
         );
 
-        let response =
-            run_orchestrator_execution_turn(&db_path, &config, "switch to personal profile");
+        let response = run_orchestrator_execution_turn(
+            &db_path,
+            &app_data_dir,
+            &config,
+            "switch to personal profile",
+        );
         assert!(
             !response.result.legacy,
             "profile switch should execute via gateway"
@@ -2029,7 +2113,7 @@ mod tests {
 
     #[test]
     fn eval_golden_f_skill_sdk_routes() {
-        run_golden_file("f_skill_sdk_routes.json");
+        run_skill_golden_file("f_skill_sdk_routes.json");
     }
 
     #[test]
@@ -2074,6 +2158,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "windows")]
     fn eval_golden_f_clipboard_execution() {
         run_command_execution_file("f_clipboard_execution.json");
     }

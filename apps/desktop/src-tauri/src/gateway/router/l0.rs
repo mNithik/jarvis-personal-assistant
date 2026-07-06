@@ -293,6 +293,7 @@ fn capability_registry() -> &'static [CapabilityRoute] {
                 "travel copilot",
                 "refresh travel prep",
                 "topic graph for",
+                "show topic graph",
                 "who is involved in",
                 "what commitments",
                 "world model",

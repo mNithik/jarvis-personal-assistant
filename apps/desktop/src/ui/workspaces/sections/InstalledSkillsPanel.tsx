@@ -1,15 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { ACTIVE_PROFILE_CHANGED_EVENT } from "../../../features/gateway/profileEvents";
-import { listInstalledSkills, type InstalledSkillRecord } from "../../../services/jarvisApi";
+import {
+  installMarketplaceSkill,
+  listInstalledSkills,
+  listMarketplaceCatalog,
+  marketplaceOperatorLane,
+  type InstalledSkillRecord,
+  type MarketplaceCatalogEntry,
+} from "../../../services/jarvisApi";
 
 export default function InstalledSkillsPanel() {
   const [skills, setSkills] = useState<InstalledSkillRecord[]>([]);
+  const [catalog, setCatalog] = useState<MarketplaceCatalogEntry[]>([]);
   const [status, setStatus] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
       setSkills(await listInstalledSkills());
+      setCatalog(await listMarketplaceCatalog());
       setStatus(null);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -58,6 +67,39 @@ export default function InstalledSkillsPanel() {
         Profile-local skills in <code>app_data/skills/{"{profileId}"}</code> override global
         skills with the same id.
       </p>
+      <p className="section-kicker">Marketplace (T17-F)</p>
+      {catalog.length === 0 ? (
+        <p className="result-meta">No marketplace catalog entries are bundled yet.</p>
+      ) : (
+        <ul className="memory-list" data-testid="marketplace-catalog">
+          {catalog.map((entry) => (
+            <li key={entry.id}>
+              <strong>{entry.label}</strong> v{entry.version} — {entry.description}
+              <div className="inline-actions">
+                <button
+                  type="button"
+                  className="ghost-button"
+                  data-testid={`marketplace-install-${entry.id}`}
+                  onClick={() => {
+                    void (async () => {
+                      try {
+                        const result = await installMarketplaceSkill(entry.id);
+                        const lane = await marketplaceOperatorLane(entry.id);
+                        setStatus(`${result.message} ${lane}`);
+                        await refresh();
+                      } catch (error) {
+                        setStatus(error instanceof Error ? error.message : String(error));
+                      }
+                    })();
+                  }}
+                >
+                  Install
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
       {status ? <p className="result-meta">{status}</p> : null}
     </div>
   );

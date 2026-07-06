@@ -10,16 +10,20 @@ apps/desktop/src-tauri/target/
 .env.local
 apps/desktop/.env
 apps/desktop/src-tauri/.env
-.csegraph/
 
-# CseGraph local setup (regenerate with `csegraph install`)
+# Local Cursor / Codex setup (gitignored)
 .cursor/
 AGENTS.md
-
-# CseGraph local setup (regenerate with `csegraph install`)
 .codex/
 CODEX.md
 .tmp-*/
+
+# Generated store icons (tauri icon CLI extras)
+apps/desktop/src-tauri/icons/android/
+apps/desktop/src-tauri/icons/ios/
+apps/desktop/src-tauri/icons/Square*.png
+apps/desktop/src-tauri/icons/StoreLogo.png
+apps/desktop/src-tauri/icons/icon.icns
 
 # Playwright artifacts
 apps/desktop/e2e/test-results/

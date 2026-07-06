@@ -2,10 +2,17 @@ import { useEffect, useState } from "react";
 
 import { ACTIVE_PROFILE_CHANGED_EVENT } from "../../features/gateway/profileEvents";
 import {
+  connectRemoteSync,
   exportSyncBundle,
   importSyncBundle,
+  listPendingSyncConflicts,
   listUserGoals,
+  pullRemoteSync,
+  pushRemoteSync,
+  remoteSyncStatus,
   saveUserGoal,
+  type RemoteSyncStatus,
+  type SyncConflict,
   type UserGoalRecord,
 } from "../../services/jarvisApi";
 
@@ -15,6 +22,19 @@ export default function SyncPanel() {
   const [goals, setGoals] = useState<UserGoalRecord[]>([]);
   const [status, setStatus] = useState<string | null>(null);
   const [newGoalTitle, setNewGoalTitle] = useState("");
+  const [remoteEndpoint, setRemoteEndpoint] = useState("");
+  const [deviceToken, setDeviceToken] = useState("");
+  const [remoteStatus, setRemoteStatus] = useState<RemoteSyncStatus | null>(null);
+  const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
+
+  async function refreshRemote() {
+    try {
+      setRemoteStatus(await remoteSyncStatus());
+      setConflicts(await listPendingSyncConflicts());
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
 
   async function refreshGoals() {
     try {
@@ -64,6 +84,7 @@ export default function SyncPanel() {
 
   useEffect(() => {
     void refreshGoals();
+    void refreshRemote();
   }, []);
 
   useEffect(() => {
@@ -82,8 +103,107 @@ export default function SyncPanel() {
       <h3>Encrypted profiles, memory, and settings export</h3>
       <p className="result-meta">
         Local-first sync bundle for gateway settings, profiles, active-profile restore, goals,
-        graph relations, and recall memory slices (no hosted backend in v1).
+        graph relations, and recall memory slices. Hosted sync (T17-D) adds encrypted push/pull with
+        conflict detection.
       </p>
+      <p className="section-kicker">Hosted sync</p>
+      <label className="gateway-field">
+        <span>Remote endpoint (optional HTTP; empty uses local mirror)</span>
+        <input
+          type="text"
+          data-testid="remote-sync-endpoint"
+          value={remoteEndpoint}
+          onChange={(event) => setRemoteEndpoint(event.target.value)}
+          placeholder="https://sync.example.com"
+        />
+      </label>
+      <label className="gateway-field">
+        <span>Device token</span>
+        <input
+          type="password"
+          data-testid="remote-sync-token"
+          value={deviceToken}
+          onChange={(event) => setDeviceToken(event.target.value)}
+          placeholder="device-token"
+        />
+      </label>
+      <div className="inline-actions">
+        <button
+          type="button"
+          className="secondary-button"
+          data-testid="remote-sync-connect"
+          onClick={() => {
+            void (async () => {
+              setStatus(null);
+              try {
+                await connectRemoteSync(remoteEndpoint, deviceToken);
+                await refreshRemote();
+                setStatus("Connected hosted sync account.");
+              } catch (error) {
+                setStatus(error instanceof Error ? error.message : String(error));
+              }
+            })();
+          }}
+        >
+          Connect account
+        </button>
+        <button
+          type="button"
+          className="ghost-button"
+          data-testid="remote-sync-push"
+          onClick={() => {
+            void (async () => {
+              setStatus(null);
+              try {
+                const result = await pushRemoteSync(passphrase || "jarvis");
+                setStatus(result.summary);
+                await refreshRemote();
+              } catch (error) {
+                setStatus(error instanceof Error ? error.message : String(error));
+              }
+            })();
+          }}
+        >
+          Push now
+        </button>
+        <button
+          type="button"
+          className="ghost-button"
+          data-testid="remote-sync-pull"
+          onClick={() => {
+            void (async () => {
+              setStatus(null);
+              try {
+                const result = await pullRemoteSync(passphrase || "jarvis");
+                setStatus(result.summary);
+                setConflicts(result.conflicts);
+                await refreshGoals();
+                await refreshRemote();
+              } catch (error) {
+                setStatus(error instanceof Error ? error.message : String(error));
+              }
+            })();
+          }}
+        >
+          Pull now
+        </button>
+      </div>
+      {remoteStatus ? (
+        <p className="result-meta" data-testid="remote-sync-status">
+          Device {remoteStatus.deviceId || "not connected"} · last sync{" "}
+          {remoteStatus.lastSyncAt ?? "never"} · pending conflicts {remoteStatus.pendingConflicts}
+        </p>
+      ) : null}
+      {conflicts.length > 0 ? (
+        <ul className="memory-list" data-testid="remote-sync-conflicts">
+          {conflicts.map((conflict) => (
+            <li key={`${conflict.kind}-${conflict.id}`}>
+              {conflict.kind}: {conflict.localSummary} vs {conflict.remoteSummary}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <p className="section-kicker">Local bundle</p>
       <label className="gateway-field">
         <span>Passphrase</span>
         <input

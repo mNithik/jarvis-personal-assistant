@@ -1,0 +1,11 @@
+[
+  {
+    "id": "hello",
+    "label": "Hello skill",
+    "version": "1.0.0",
+    "description": "Wave 16 fixture skill that routes to command.general.",
+    "keywords": ["hello skill", "wave16 hello"],
+    "sourcePath": "../tests/fixtures/skills/hello",
+    "operatorLane": "command"
+  }
+]
