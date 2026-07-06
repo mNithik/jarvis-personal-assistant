@@ -1128,11 +1128,13 @@ mod tests {
     fn install_memory_execution_fixture(fixture: &str, db_path: &std::path::Path) {
         use std::collections::HashMap;
 
+        use crate::db::init_database;
         use crate::integrations::google::{auth, client};
         use crate::memory::{self, meeting};
         use crate::models::MeetingPrepMemoryRecord;
         use chrono::{Duration, Local};
 
+        init_database(db_path).expect("init db");
         client::clear_mock_responses();
         auth::clear_test_tokens();
         crate::integrations::notion::clear_mock_responses();
@@ -1484,9 +1486,10 @@ mod tests {
 
             match case.fixture.as_str() {
                 "audit_notion_rollback" => {
-                    use crate::db::save_notion_config;
+                    use crate::db::{init_database, save_notion_config};
                     use crate::integrations::notion;
 
+                    init_database(&db_path).expect("init db");
                     save_notion_config(&db_path, Some("token-eval"), Some("db-eval"))
                         .expect("notion");
                     notion::set_mock_responses(std::collections::HashMap::from([(
@@ -1741,6 +1744,7 @@ mod tests {
         let _ = std::fs::remove_file(&db_path);
         let _ = std::fs::remove_dir_all(&app_data_dir);
         std::fs::create_dir_all(&app_data_dir).expect("app dir");
+        crate::db::init_database(&db_path).expect("init db");
         seed_default_profiles(&db_path, &app_data_dir).expect("seed profiles");
 
         remember(&db_path, "Work launch checklist", "general").expect("remember work");
@@ -1852,6 +1856,7 @@ mod tests {
         let _ = std::fs::remove_file(&db_path);
         let _ = std::fs::remove_dir_all(&app_data_dir);
         std::fs::create_dir_all(app_data_dir.join("skills")).expect("skills root");
+        crate::db::init_database(&db_path).expect("init db");
         seed_default_profiles(&db_path, &app_data_dir).expect("seed profiles");
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
@@ -1900,7 +1905,10 @@ mod tests {
                 permissions: vec!["execute".into()],
                 enabled: true,
                 handler: SkillHandler::Script {
+                    #[cfg(windows)]
                     command: "cmd /C echo skill-script".into(),
+                    #[cfg(not(windows))]
+                    command: "sh -c echo skill-script".into(),
                 },
             },
             SkillManifest {

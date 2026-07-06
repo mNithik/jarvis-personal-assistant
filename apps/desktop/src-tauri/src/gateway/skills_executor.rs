@@ -161,10 +161,10 @@ fn execute_script_skill(
     }
     if !matches!(
         parts[0].to_ascii_lowercase().as_str(),
-        "cmd" | "powershell" | "pwsh"
+        "cmd" | "powershell" | "pwsh" | "sh" | "bash"
     ) {
         return StepResult::failed(format!(
-            "Installed skill \"{}\" v{} script handlers must start with cmd, powershell, or pwsh in v2 MVP.",
+            "Installed skill \"{}\" v{} script handlers must start with cmd, powershell, pwsh, sh, or bash in v2 MVP.",
             label, version
         ));
     }

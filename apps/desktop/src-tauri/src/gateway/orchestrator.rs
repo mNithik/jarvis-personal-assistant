@@ -372,7 +372,7 @@ impl GatewayOrchestrator {
             }
         }
 
-        let awaiting_approval = approval.is_some();
+        let awaiting_approval = approval.is_some() && !config.mode.is_simulation();
         let legacy = !config.enabled || awaiting_approval;
         let mut reply = if awaiting_approval {
             format!(

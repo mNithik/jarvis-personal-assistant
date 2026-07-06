@@ -282,8 +282,11 @@ try {
   await pressEnter(elementId);
   const previewText = await waitForElementText(
     gatewayPreviewRouteId,
-    (text) => text && !text.includes("Type a command to preview the route."),
-    15000,
+    (text) =>
+      text
+      && !text.includes("Type a command to preview the route.")
+      && !text.toLowerCase().includes("thinking"),
+    30000,
     "gateway preview to update after routing",
   );
   assert(

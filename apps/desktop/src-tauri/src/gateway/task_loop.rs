@@ -669,7 +669,11 @@ fn agent_context_for_step(ctx: &TaskLoopContext<'_>, step: &TaskStep) -> AgentCo
     let mut route = ctx.route.clone();
     let mut step_kind = step.kind.clone();
 
-    if step.kind == "supervisor_step" {
+    if step.kind == "supervisor_step"
+        || step.kind == "list_unread_emails"
+        || step.kind == "integration"
+        || step.kind == "mcp_call"
+    {
         command = step.description.clone();
         route = route_subcommand(&command, ctx.config, ctx.db_path, ctx.app_data_dir);
         step_kind = step_kind_for_command(&command, &route);

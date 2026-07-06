@@ -92,6 +92,7 @@ impl Agent for CommandAgent {
                 }
                 "command.clipboard" => run_clipboard(ctx),
                 "command.desktop" => run_open_desktop(ctx),
+                "core.mission" => run_mission_control(ctx),
                 _ => Ok(StepResult::failed(format!(
                     "Command agent does not handle capability {} yet.",
                     ctx.route.capability_id
