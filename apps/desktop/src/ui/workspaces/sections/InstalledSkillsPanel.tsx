@@ -48,7 +48,7 @@ export default function InstalledSkillsPanel() {
           No global or active-profile skills found in <code>app_data/skills</code>.
         </p>
       ) : (
-        <ul className="memory-list">
+        <ul className="memory-list" data-testid="installed-skills-list">
           {skills.map((skill) => (
             <li key={skill.id}>
               <strong>{skill.label}</strong> v{skill.version} - {skill.keywords.join(", ")}{" "}
