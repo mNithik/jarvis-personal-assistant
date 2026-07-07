@@ -26,7 +26,8 @@ fn lookup_mock(method: &str, url: &str) -> Option<String> {
             return Some(body.clone());
         }
         map.iter()
-            .find(|(pattern, _)| url.contains(pattern.as_str()))
+            .filter(|(pattern, _)| url.contains(pattern.as_str()))
+            .max_by_key(|(pattern, _)| pattern.len())
             .map(|(_, body)| body.clone())
     })
 }
