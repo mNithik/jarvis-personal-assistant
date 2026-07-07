@@ -9,6 +9,7 @@ import {
   listUserGoals,
   pullRemoteSync,
   pushRemoteSync,
+  registerRemoteSync,
   remoteSyncStatus,
   saveUserGoal,
   type RemoteSyncStatus,
@@ -26,6 +27,7 @@ export default function SyncPanel() {
   const [deviceToken, setDeviceToken] = useState("");
   const [remoteStatus, setRemoteStatus] = useState<RemoteSyncStatus | null>(null);
   const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
+  const [conflictResolutions, setConflictResolutions] = useState<Record<string, string>>({});
 
   async function refreshRemote() {
     try {
@@ -130,6 +132,26 @@ export default function SyncPanel() {
       <div className="inline-actions">
         <button
           type="button"
+          className="ghost-button"
+          data-testid="remote-sync-register"
+          onClick={() => {
+            void (async () => {
+              setStatus(null);
+              try {
+                const account = await registerRemoteSync(remoteEndpoint, "jarvis-desktop");
+                setDeviceToken(account.deviceToken);
+                await refreshRemote();
+                setStatus(`Registered device ${account.deviceId} with hosted sync.`);
+              } catch (error) {
+                setStatus(error instanceof Error ? error.message : String(error));
+              }
+            })();
+          }}
+        >
+          Register device
+        </button>
+        <button
+          type="button"
           className="secondary-button"
           data-testid="remote-sync-connect"
           onClick={() => {
@@ -174,9 +196,18 @@ export default function SyncPanel() {
             void (async () => {
               setStatus(null);
               try {
-                const result = await pullRemoteSync(passphrase || "jarvis");
+                const resolutions =
+                  conflicts.length > 0
+                    ? conflicts.map(
+                        (conflict) =>
+                          conflictResolutions[`${conflict.kind}-${conflict.id}`] ??
+                          "newestWins",
+                      )
+                    : undefined;
+                const result = await pullRemoteSync(passphrase || "jarvis", resolutions);
                 setStatus(result.summary);
                 setConflicts(result.conflicts);
+                setConflictResolutions({});
                 await refreshGoals();
                 await refreshRemote();
               } catch (error) {
@@ -187,6 +218,34 @@ export default function SyncPanel() {
         >
           Pull now
         </button>
+        {conflicts.length > 0 ? (
+          <button
+            type="button"
+            className="secondary-button"
+            data-testid="remote-sync-apply-resolutions"
+            onClick={() => {
+              void (async () => {
+                setStatus(null);
+                try {
+                  const resolutions = conflicts.map(
+                    (conflict) =>
+                      conflictResolutions[`${conflict.kind}-${conflict.id}`] ?? "newestWins",
+                  );
+                  const result = await pullRemoteSync(passphrase || "jarvis", resolutions);
+                  setStatus(result.summary);
+                  setConflicts(result.conflicts);
+                  setConflictResolutions({});
+                  await refreshGoals();
+                  await refreshRemote();
+                } catch (error) {
+                  setStatus(error instanceof Error ? error.message : String(error));
+                }
+              })();
+            }}
+          >
+            Apply conflict resolutions
+          </button>
+        ) : null}
       </div>
       {remoteStatus ? (
         <p className="result-meta" data-testid="remote-sync-status">
@@ -196,11 +255,32 @@ export default function SyncPanel() {
       ) : null}
       {conflicts.length > 0 ? (
         <ul className="memory-list" data-testid="remote-sync-conflicts">
-          {conflicts.map((conflict) => (
-            <li key={`${conflict.kind}-${conflict.id}`}>
-              {conflict.kind}: {conflict.localSummary} vs {conflict.remoteSummary}
-            </li>
-          ))}
+          {conflicts.map((conflict) => {
+            const key = `${conflict.kind}-${conflict.id}`;
+            return (
+              <li key={key}>
+                {conflict.kind}: {conflict.localSummary} vs {conflict.remoteSummary}
+                <div className="inline-actions">
+                  {(["keepLocal", "keepRemote", "newestWins"] as const).map((resolution) => (
+                    <button
+                      key={resolution}
+                      type="button"
+                      className="ghost-button"
+                      data-testid={`sync-resolve-${conflict.id}-${resolution}`}
+                      onClick={() =>
+                        setConflictResolutions((current) => ({
+                          ...current,
+                          [key]: resolution,
+                        }))
+                      }
+                    >
+                      {resolution === conflictResolutions[key] ? `✓ ${resolution}` : resolution}
+                    </button>
+                  ))}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
       <p className="section-kicker">Local bundle</p>

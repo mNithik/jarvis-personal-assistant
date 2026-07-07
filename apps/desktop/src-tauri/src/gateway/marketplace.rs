@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 
 use super::skills::{self, SkillManifest};
 
+const DEFAULT_REMOTE_CATALOG_URL: &str =
+    "https://raw.githubusercontent.com/mNithik/jarvis-personal-assistant/main/apps/desktop/src-tauri/marketplace/catalog.json";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MarketplaceCatalogEntry {
@@ -35,11 +38,88 @@ fn bundled_skill_root(relative: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join(relative)
 }
 
-pub fn list_marketplace_catalog() -> Result<Vec<MarketplaceCatalogEntry>, String> {
+fn bundled_catalog() -> Result<Vec<MarketplaceCatalogEntry>, String> {
     let path = catalog_path();
     let raw = fs::read_to_string(&path)
         .map_err(|error| format!("Failed to read marketplace catalog: {error}"))?;
     serde_json::from_str(&raw).map_err(|error| error.to_string())
+}
+
+fn remote_catalog_cache_path(app_data_dir: &Path) -> PathBuf {
+    app_data_dir.join("marketplace").join("remote-catalog.json")
+}
+
+fn remote_catalog_url() -> Option<String> {
+    std::env::var("JARVIS_MARKETPLACE_CATALOG_URL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| Some(DEFAULT_REMOTE_CATALOG_URL.to_string()))
+}
+
+pub fn refresh_remote_catalog_cache(app_data_dir: &Path) -> Result<Vec<MarketplaceCatalogEntry>, String> {
+    let url = remote_catalog_url().ok_or_else(|| "Remote catalog URL is not configured.".to_string())?;
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let response = client
+        .get(&url)
+        .send()
+        .map_err(|error| format!("Failed to fetch remote catalog: {error}"))?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "Remote catalog returned HTTP {}",
+            response.status()
+        ));
+    }
+    let raw = response.text().map_err(|error| error.to_string())?;
+    let entries: Vec<MarketplaceCatalogEntry> =
+        serde_json::from_str(&raw).map_err(|error| error.to_string())?;
+    for entry in &entries {
+        if entry.id.trim().is_empty() || entry.source_path.trim().is_empty() {
+            return Err("Remote catalog entry is missing id or sourcePath.".to_string());
+        }
+    }
+    let cache_dir = app_data_dir.join("marketplace");
+    fs::create_dir_all(&cache_dir).map_err(|error| error.to_string())?;
+    fs::write(remote_catalog_cache_path(app_data_dir), &raw)
+        .map_err(|error| error.to_string())?;
+    Ok(entries)
+}
+
+fn load_cached_remote_catalog(app_data_dir: &Path) -> Option<Vec<MarketplaceCatalogEntry>> {
+    let path = remote_catalog_cache_path(app_data_dir);
+    let raw = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+pub fn list_marketplace_catalog_for_app(
+    app_data_dir: &Path,
+) -> Result<Vec<MarketplaceCatalogEntry>, String> {
+    let mut merged = bundled_catalog()?;
+    if let Ok(remote) = refresh_remote_catalog_cache(app_data_dir) {
+        for entry in remote {
+            if let Some(existing) = merged.iter_mut().find(|item| item.id == entry.id) {
+                *existing = entry;
+            } else {
+                merged.push(entry);
+            }
+        }
+    } else if let Some(cached) = load_cached_remote_catalog(app_data_dir) {
+        for entry in cached {
+            if let Some(existing) = merged.iter_mut().find(|item| item.id == entry.id) {
+                *existing = entry;
+            } else {
+                merged.push(entry);
+            }
+        }
+    }
+    merged.sort_by(|left, right| left.id.cmp(&right.id));
+    Ok(merged)
+}
+
+pub fn list_marketplace_catalog() -> Result<Vec<MarketplaceCatalogEntry>, String> {
+    bundled_catalog()
 }
 
 fn copy_dir_recursive(source: &Path, target: &Path) -> Result<(), String> {
@@ -62,7 +142,7 @@ pub fn install_marketplace_skill(
     app_data_dir: &Path,
     skill_id: &str,
 ) -> Result<MarketplaceInstallResult, String> {
-    let entry = list_marketplace_catalog()?
+    let entry = list_marketplace_catalog_for_app(app_data_dir)?
         .into_iter()
         .find(|item| item.id == skill_id)
         .ok_or_else(|| format!("Marketplace skill \"{skill_id}\" was not found."))?;
@@ -102,8 +182,8 @@ pub fn install_marketplace_skill(
     })
 }
 
-pub fn operator_lane_summary(skill_id: &str) -> Result<String, String> {
-    let entry = list_marketplace_catalog()?
+pub fn operator_lane_summary(skill_id: &str, app_data_dir: &Path) -> Result<String, String> {
+    let entry = list_marketplace_catalog_for_app(app_data_dir)?
         .into_iter()
         .find(|item| item.id == skill_id)
         .ok_or_else(|| format!("Marketplace skill \"{skill_id}\" was not found."))?;

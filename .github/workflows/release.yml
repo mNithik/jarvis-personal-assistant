@@ -35,6 +35,6 @@ jobs:
           projectPath: apps/desktop
           tagName: ${{ github.ref_name }}
           releaseName: "JARVIS ${{ github.ref_name }}"
-          releaseBody: "Windows desktop preview. Gateway is optional (off by default). See README for install and .env setup."
+          releaseBody: "Windows desktop preview. Gateway is on for new installs (disable in Settings → Agent gateway or use dry-run easy mode). Profile migrations v8/v9, sync, marketplace, and topic graph ship in this build. See README and docs/MIGRATION_WAVE17.md."
           releaseDraft: false
           prerelease: true

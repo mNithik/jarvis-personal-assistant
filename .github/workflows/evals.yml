@@ -47,6 +47,23 @@ jobs:
           USERPROFILE: /home/runner
         run: 'cargo test --lib -j 1 --no-default-features --features custom-protocol gateway::evals::'
 
+  jarvis-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build jarvis-sync
+        working-directory: services/jarvis-sync
+        run: cargo build --release
+
+      - name: Run jarvis-sync integration tests
+        working-directory: services/jarvis-sync
+        run: cargo test
+
   playwright-ui:
     runs-on: ubuntu-latest
     steps:

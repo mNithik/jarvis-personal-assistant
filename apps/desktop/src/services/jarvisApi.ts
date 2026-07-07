@@ -1359,6 +1359,22 @@ export function inferTopicGraph() {
   return invoke<number>("infer_topic_graph_cmd");
 }
 
+export function linkTopicEntities(
+  subjectLabel: string,
+  predicate: string,
+  objectLabel: string,
+) {
+  return invoke<string>("link_topic_entities_cmd", {
+    subjectLabel,
+    predicate,
+    objectLabel,
+  });
+}
+
+export function unlinkTopicRelation(relationId: number) {
+  return invoke<string>("unlink_topic_relation_cmd", { relationId });
+}
+
 export function listUserGoals() {
   return invoke<UserGoalRecord[]>("list_user_goals_cmd");
 }
@@ -1456,6 +1472,14 @@ export function recordAmbientSignal(signal: string) {
   return invoke<AmbientSuggestionRecord | null>("record_ambient_signal_cmd", { signal });
 }
 
+export type RemoteSyncAccount = {
+  endpoint: string;
+  deviceToken: string;
+  deviceId: string;
+  lastSyncAt?: string | null;
+  lastRemoteVersion?: number | null;
+};
+
 export type RemoteSyncStatus = {
   connected: boolean;
   endpoint: string;
@@ -1497,6 +1521,10 @@ export function connectRemoteSync(endpoint: string, deviceToken: string) {
   return invoke("connect_remote_sync_cmd", { endpoint, deviceToken });
 }
 
+export function registerRemoteSync(endpoint: string, label?: string) {
+  return invoke<RemoteSyncAccount>("register_remote_sync_cmd", { endpoint, label });
+}
+
 export function pushRemoteSync(passphrase: string) {
   return invoke<RemoteSyncResult>("push_remote_sync_cmd", { passphrase });
 }
@@ -1513,6 +1541,10 @@ export function listMarketplaceCatalog() {
   return invoke<MarketplaceCatalogEntry[]>("list_marketplace_catalog_cmd");
 }
 
+export function refreshMarketplaceCatalog() {
+  return invoke<MarketplaceCatalogEntry[]>("refresh_marketplace_catalog_cmd");
+}
+
 export function installMarketplaceSkill(skillId: string) {
   return invoke<{ skillId: string; installedPath: string; message: string }>(
     "install_marketplace_skill_cmd",
@@ -1522,4 +1554,20 @@ export function installMarketplaceSkill(skillId: string) {
 
 export function marketplaceOperatorLane(skillId: string) {
   return invoke<string>("marketplace_operator_lane_cmd", { skillId });
+}
+
+export type ProactiveMetrics = {
+  shown: number;
+  dismissed: number;
+  accepted: number;
+  dismissRate: number;
+  acceptRate: number;
+};
+
+export function getProactiveMetrics() {
+  return invoke<ProactiveMetrics>("get_proactive_metrics_cmd");
+}
+
+export function exportProactiveMetrics() {
+  return invoke<string>("export_proactive_metrics_cmd");
 }

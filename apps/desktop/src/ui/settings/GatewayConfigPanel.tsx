@@ -22,6 +22,7 @@ import GatewayOnboardingBanner from "./GatewayOnboardingBanner";
 import TriggerRecipePanel from "./TriggerRecipePanel";
 import SyncPanel from "./SyncPanel";
 import ProfileSwitcherPanel from "./ProfileSwitcherPanel";
+import OperatorPanel from "./OperatorPanel";
 import InstalledSkillsPanel from "../workspaces/sections/InstalledSkillsPanel";
 
 export default function GatewayConfigPanel() {
@@ -571,6 +572,7 @@ export default function GatewayConfigPanel() {
       <SyncPanel />
       <ProfileSwitcherPanel />
       <InstalledSkillsPanel />
+      <OperatorPanel />
       <p className="result-meta">
         Headless API reference: <code>docs/HEADLESS_API.md</code>
       </p>

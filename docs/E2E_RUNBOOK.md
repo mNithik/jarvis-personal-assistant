@@ -130,7 +130,7 @@ Requires fabric green + cohort judgment before flipping lab defaults. **Lab defa
 ## Exit criteria (Sprint 0)
 
 - Linux CI: `cargo test --lib --no-default-features` green (`rust-evals` job)
-- Playwright: 16 UI specs green (`playwright-ui` job)
+- Playwright: 10 UI specs green (`playwright-ui` job)
 - tauri-driver: Windows CI launches a real WebDriver session and passes 4 desktop smoke checks in `scripts/e2e/run-desktop-smoke.mjs` (window title, command input, gateway preview update after routing a command, and gateway trace toggle)
 - HTTP smoke passes locally and the `e2e-api` CI job (`npm run e2e:api:service`) stays green
-- Manual matrix spot-checked for profiles, skills, ambient, sync, and lab graduation rows below
+- Manual matrix spot-checked for profiles, skills, ambient, sync, and lab graduation rows — use [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md)

@@ -4,7 +4,9 @@ import {
   getActiveProfile,
   getTopicGraph,
   inferTopicGraph,
+  linkTopicEntities,
   queryTopicNeighbors,
+  unlinkTopicRelation,
   type TopicGraphBundle,
   type TopicGraphNode,
 } from "../../../services/jarvisApi";
@@ -19,6 +21,9 @@ export function TopicGraphPanel() {
   const [selectedNode, setSelectedNode] = useState<TopicGraphNode | null>(null);
   const [neighborText, setNeighborText] = useState<string | null>(null);
   const [activeProfileName, setActiveProfileName] = useState<string | null>(null);
+  const [linkSubject, setLinkSubject] = useState("");
+  const [linkPredicate, setLinkPredicate] = useState("related_to");
+  const [linkObject, setLinkObject] = useState("");
 
   const refresh = useCallback(async (nextLimit = limit) => {
     try {
@@ -61,6 +66,46 @@ export function TopicGraphPanel() {
     await refresh(nextLimit);
   }
 
+  async function handleLink() {
+    if (!linkSubject.trim() || !linkObject.trim()) {
+      return;
+    }
+    try {
+      const message = await linkTopicEntities(
+        linkSubject.trim(),
+        linkPredicate.trim() || "related_to",
+        linkObject.trim(),
+      );
+      setStatus(message);
+      await refresh();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function handleUnlinkSelected() {
+    if (!selectedNode || !graph) {
+      return;
+    }
+    const edge = graph.edges.find(
+      (item) =>
+        item.subjectEntityId === selectedNode.entityId ||
+        item.objectEntityId === selectedNode.entityId,
+    );
+    if (!edge) {
+      setStatus("Select a node with at least one relation to unlink.");
+      return;
+    }
+    try {
+      const message = await unlinkTopicRelation(edge.id);
+      setStatus(message);
+      setNeighborText(null);
+      await refresh();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   const visibleEdges = graph?.edges ?? [];
 
   return (
@@ -79,6 +124,37 @@ export function TopicGraphPanel() {
         </button>
         <button type="button" className="ghost-button" onClick={() => void handleLoadMore()}>
           Load more
+        </button>
+        <button
+          type="button"
+          className="ghost-button"
+          data-testid="topic-graph-unlink"
+          onClick={() => void handleUnlinkSelected()}
+        >
+          Unlink selected
+        </button>
+      </div>
+      <div className="inline-actions" data-testid="topic-graph-link-form">
+        <input
+          type="text"
+          placeholder="Subject label"
+          value={linkSubject}
+          onChange={(event) => setLinkSubject(event.target.value)}
+        />
+        <input
+          type="text"
+          placeholder="Predicate"
+          value={linkPredicate}
+          onChange={(event) => setLinkPredicate(event.target.value)}
+        />
+        <input
+          type="text"
+          placeholder="Object label"
+          value={linkObject}
+          onChange={(event) => setLinkObject(event.target.value)}
+        />
+        <button type="button" className="ghost-button" onClick={() => void handleLink()}>
+          Link entities
         </button>
       </div>
       {status ? <p className="result-meta">{status}</p> : null}

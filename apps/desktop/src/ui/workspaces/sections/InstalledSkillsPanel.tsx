@@ -6,6 +6,7 @@ import {
   listInstalledSkills,
   listMarketplaceCatalog,
   marketplaceOperatorLane,
+  refreshMarketplaceCatalog,
   type InstalledSkillRecord,
   type MarketplaceCatalogEntry,
 } from "../../../services/jarvisApi";
@@ -68,6 +69,25 @@ export default function InstalledSkillsPanel() {
         skills with the same id.
       </p>
       <p className="section-kicker">Marketplace (T17-F)</p>
+      <div className="inline-actions">
+        <button
+          type="button"
+          className="ghost-button"
+          data-testid="marketplace-refresh-catalog"
+          onClick={() => {
+            void (async () => {
+              try {
+                setCatalog(await refreshMarketplaceCatalog());
+                setStatus("Refreshed remote marketplace catalog.");
+              } catch (error) {
+                setStatus(error instanceof Error ? error.message : String(error));
+              }
+            })();
+          }}
+        >
+          Refresh remote catalog
+        </button>
+      </div>
       {catalog.length === 0 ? (
         <p className="result-meta">No marketplace catalog entries are bundled yet.</p>
       ) : (

@@ -182,12 +182,20 @@ See [ARCHITECTURE_WAVE16.md](./ARCHITECTURE_WAVE16.md) and [E2E_RUNBOOK.md](./E2
 
 See [ARCHITECTURE_WAVE17.md](./ARCHITECTURE_WAVE17.md) for dependencies and sequencing.
 
+### Wave 18 — Platform hardening (in progress)
+
+- [x] T18-A: Jarvis sync server (`services/jarvis-sync`, [SYNC_SERVER.md](./SYNC_SERVER.md))
+- [x] T18-B: Remote marketplace catalog cache + refresh
+- [x] T18-C: Topic graph manual link/unlink
+- [x] T18-D: Quoted script argv parsing in skill executor
+- [x] T18-E: Project operator panel + proactive metrics export
+- [x] T18-F: Evals summary export + `run_task_execution_file` alias
+
+See [ARCHITECTURE_WAVE18.md](./ARCHITECTURE_WAVE18.md), [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md), [OPS_CHECKLIST.md](./OPS_CHECKLIST.md).
+
 ## Verify gate (every sprint)
 
 ```powershell
-cd apps/desktop/src-tauri; cargo test --lib -j 1 --no-default-features
-# On Windows, full default-feature tests may fail with STATUS_ENTRYPOINT_NOT_FOUND; use --no-default-features locally and rely on Linux CI for the full harness.
-npm run e2e:ui
-npm run e2e:api
-npm --workspace @jarvis/desktop run build
+npm run verify
+npm run verify:api   # optional; matches CI e2e-api
 ```

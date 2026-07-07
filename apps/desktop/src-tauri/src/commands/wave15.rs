@@ -28,6 +28,34 @@ pub fn infer_topic_graph_cmd(state: State<'_, crate::AppState>) -> Result<usize,
 }
 
 #[tauri::command]
+pub fn link_topic_entities_cmd(
+    state: State<'_, crate::AppState>,
+    subject_label: String,
+    predicate: String,
+    object_label: String,
+) -> Result<String, String> {
+    crate::memory::topic_graph::link_entities_by_label(
+        &state.db_path,
+        &subject_label,
+        &predicate,
+        &object_label,
+        "manual",
+    )?;
+    Ok(format!(
+        "Linked \"{subject_label}\" —{predicate}→ \"{object_label}\"."
+    ))
+}
+
+#[tauri::command]
+pub fn unlink_topic_relation_cmd(
+    state: State<'_, crate::AppState>,
+    relation_id: i64,
+) -> Result<String, String> {
+    crate::memory::topic_graph::unlink_relation(&state.db_path, relation_id)?;
+    Ok(format!("Removed relation {relation_id}."))
+}
+
+#[tauri::command]
 pub fn list_user_goals_cmd(
     state: State<'_, crate::AppState>,
 ) -> Result<Vec<UserGoalRecord>, String> {

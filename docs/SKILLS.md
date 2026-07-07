@@ -26,7 +26,7 @@ npm --workspace @jarvis/skill-sdk run validate -- apps/desktop/tests/fixtures/sk
 
 ## Marketplace install (T17-F)
 
-The desktop **Installed skills** panel lists catalog entries from `apps/desktop/src-tauri/marketplace/catalog.json`. Click **Install** to copy a validated skill into `app_data/skills/`.
+The desktop **Installed skills** panel lists catalog entries from the bundled catalog and optional remote cache (`JARVIS_MARKETPLACE_CATALOG_URL`). Use **Refresh remote catalog** to update the cache. Click **Install** to copy a validated skill into `app_data/skills/`.
 
 ## Authoring a new skill
 

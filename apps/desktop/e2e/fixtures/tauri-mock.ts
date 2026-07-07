@@ -139,6 +139,17 @@ export function buildInvokeHandlers(): Record<string, InvokeHandler> {
       },
     ],
   };
+  const marketplaceCatalog = () => [
+    {
+      id: "hello",
+      label: "Hello skill",
+      version: "1.0.0",
+      description: "Wave 16 fixture skill that routes to command.general.",
+      keywords: ["hello skill", "wave16 hello"],
+      sourcePath: "../tests/fixtures/skills/hello",
+      operatorLane: "command",
+    },
+  ];
   const goalsByProfile: Record<string, Array<{
     id: string;
     title: string;
@@ -336,6 +347,13 @@ export function buildInvokeHandlers(): Record<string, InvokeHandler> {
       lastSyncAt: null,
       lastRemoteVersion: null,
     }),
+    register_remote_sync_cmd: (args) => ({
+      endpoint: String(args?.endpoint ?? ""),
+      deviceToken: "tok_e2e_registered",
+      deviceId: "jarvis-e2e-device",
+      lastSyncAt: null,
+      lastRemoteVersion: null,
+    }),
     push_remote_sync_cmd: () => ({
       summary: "Pushed encrypted sync bundle to hosted store.",
       conflicts: [],
@@ -347,17 +365,7 @@ export function buildInvokeHandlers(): Record<string, InvokeHandler> {
       applied: true,
     }),
     list_pending_sync_conflicts_cmd: () => [],
-    list_marketplace_catalog_cmd: () => [
-      {
-        id: "hello",
-        label: "Hello skill",
-        version: "1.0.0",
-        description: "Wave 16 fixture skill that routes to command.general.",
-        keywords: ["hello skill", "wave16 hello"],
-        sourcePath: "../tests/fixtures/skills/hello",
-        operatorLane: "command",
-      },
-    ],
+    list_marketplace_catalog_cmd: () => marketplaceCatalog(),
     install_marketplace_skill_cmd: (args) => ({
       skillId: String(args?.skillId ?? "hello"),
       installedPath: "/tmp/skills/hello",
@@ -365,6 +373,41 @@ export function buildInvokeHandlers(): Record<string, InvokeHandler> {
     }),
     marketplace_operator_lane_cmd: () =>
       "Operator lane for Hello skill: command. Use project bundle pilot surfaces after manual lab sign-off.",
+    refresh_marketplace_catalog_cmd: () => marketplaceCatalog(),
+    link_topic_entities_cmd: (args) =>
+      `Linked "${String(args?.subjectLabel ?? "")}" —${String(args?.predicate ?? "")}→ "${String(args?.objectLabel ?? "")}".`,
+    unlink_topic_relation_cmd: (args) => `Removed relation ${String(args?.relationId ?? 0)}.`,
+    get_proactive_metrics_cmd: () => ({
+      shown: 2,
+      dismissed: 1,
+      accepted: 1,
+      dismissRate: 0.5,
+      acceptRate: 0.5,
+    }),
+    export_proactive_metrics_cmd: () => "Wrote proactive metrics to /tmp/metrics/proactive-summary.json",
+    list_gateway_task_runs: () => [
+      {
+        id: "task-1",
+        sessionId: "session-1",
+        command: "resume last task",
+        status: "running",
+        currentStepIndex: 0,
+        stepCount: 2,
+        failureCount: 0,
+        updatedAt: "2026-07-07T00:00:00Z",
+      },
+    ],
+    list_project_bundles: () => [
+      {
+        runId: "bundle-1",
+        command: "run meeting follow-up bundle",
+        createdAt: "2026-07-07T00:00:00Z",
+        steps: [
+          { label: "Fetch emails", status: "done" },
+          { label: "Draft follow-up", status: "pending" },
+        ],
+      },
+    ],
   };
 }
 

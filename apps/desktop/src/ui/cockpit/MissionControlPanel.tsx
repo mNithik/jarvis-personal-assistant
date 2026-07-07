@@ -129,6 +129,10 @@ export default function MissionControlPanel({
     <section className="gateway-followup-card mission-control-panel">
       <div className="gateway-trace-header">
         <p className="section-kicker">Mission control</p>
+        <p className="result-meta" data-testid="mission-control-pending-count">
+          {pendingApprovals.length} pending approval
+          {pendingApprovals.length === 1 ? "" : "s"}
+        </p>
         {onRefresh ? (
           <button className="secondary-button" type="button" onClick={() => void handleRefresh()}>
             Refresh

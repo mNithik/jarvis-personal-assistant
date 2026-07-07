@@ -76,6 +76,50 @@ pub fn link_entities_by_label(
     upsert_relation(path, subject_id, predicate, object_id, source)
 }
 
+pub fn unlink_relation(path: &Path, relation_id: i64) -> Result<(), String> {
+    ensure_topic_graph_schema(path)?;
+    let profile_id = crate::gateway::profiles::active_profile_id_or_default(path)?;
+    let conn = Connection::open(path).map_err(|error| error.to_string())?;
+    let deleted = conn
+        .execute(
+            "DELETE FROM memory_relations WHERE profile_id = ?1 AND id = ?2",
+            params![profile_id, relation_id],
+        )
+        .map_err(|error| error.to_string())?;
+    if deleted == 0 {
+        return Err(format!("No relation {relation_id} found for active profile."));
+    }
+    Ok(())
+}
+
+pub fn unlink_entities_by_label(
+    path: &Path,
+    subject_label: &str,
+    predicate: &str,
+    object_label: &str,
+) -> Result<(), String> {
+    let profile_id = crate::gateway::profiles::active_profile_id_or_default(path)?;
+    let subject_id = find_entity_id_by_label(path, subject_label)?;
+    let object_id = find_entity_id_by_label(path, object_label)?;
+    let conn = Connection::open(path).map_err(|error| error.to_string())?;
+    let deleted = conn
+        .execute(
+            "DELETE FROM memory_relations
+             WHERE profile_id = ?1
+               AND subject_entity_id = ?2
+               AND predicate = ?3
+               AND object_entity_id = ?4",
+            params![profile_id, subject_id, predicate, object_id],
+        )
+        .map_err(|error| error.to_string())?;
+    if deleted == 0 {
+        return Err(format!(
+            "No \"{predicate}\" relation between \"{subject_label}\" and \"{object_label}\"."
+        ));
+    }
+    Ok(())
+}
+
 fn find_entity_id_by_label(path: &Path, label: &str) -> Result<i64, String> {
     let profile_id = crate::gateway::profiles::active_profile_id_or_default(path)?;
     let conn = Connection::open(path).map_err(|error| error.to_string())?;

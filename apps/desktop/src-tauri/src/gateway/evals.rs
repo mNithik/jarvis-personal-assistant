@@ -481,7 +481,7 @@ mod tests {
                     run_policy_execution_file(&file);
                 }
                 "f_task_run_execution.json" => {
-                    run_mission_execution_file(&file);
+                    run_task_execution_file(&file);
                 }
                 "f_project_bundle_execution.json" => {
                     run_project_bundle_execution_file(&file);
@@ -955,6 +955,10 @@ mod tests {
             );
             let _ = std::fs::remove_file(db_path);
         }
+    }
+
+    fn run_task_execution_file(file_name: &str) {
+        run_mission_execution_file(file_name);
     }
 
     fn run_mission_execution_file(file_name: &str) {
@@ -2351,5 +2355,83 @@ mod tests {
     #[test]
     fn eval_golden_f_schedule_execution() {
         run_automation_execution_file("f_schedule_execution.json");
+    }
+
+    #[test]
+    fn eval_export_evals_summary_on_request() {
+        use crate::gateway::metrics::{write_evals_summary, EvalsSummary};
+
+        let app_data = std::env::temp_dir().join(format!(
+            "jarvis-eval-summary-app-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&app_data);
+        std::fs::create_dir_all(&app_data).expect("app dir");
+        std::env::set_var(
+            "JARVIS_EVALS_SUMMARY_PATH",
+            app_data.join("evals-summary.json"),
+        );
+        let path = write_evals_summary(
+            &app_data,
+            &EvalsSummary {
+                fabric_count: 70,
+                gateway_eval_tests: 76,
+                task_eval_pass_rate: Some(1.0),
+                timestamp: "2026-07-07T00:00:00Z".to_string(),
+            },
+        )
+        .expect("write summary");
+        assert!(path.exists());
+        let raw = std::fs::read_to_string(path).expect("read");
+        assert!(raw.contains("\"fabricCount\": 70"));
+        std::env::remove_var("JARVIS_EVALS_SUMMARY_PATH");
+        let _ = std::fs::remove_dir_all(app_data);
+    }
+
+    #[test]
+    fn eval_topic_graph_manual_link_unlink() {
+        use crate::db::init_database;
+        use crate::gateway::profiles::seed_default_profiles;
+        use crate::memory::entity_store::upsert_domain_entity;
+        use crate::memory::topic_graph::{
+            get_topic_graph, link_entities_by_label, unlink_entities_by_label,
+        };
+
+        let db_path = std::env::temp_dir().join(format!(
+            "jarvis-topic-link-{}",
+            std::process::id()
+        ));
+        let app_data = std::env::temp_dir().join(format!(
+            "jarvis-topic-link-app-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_dir_all(&app_data);
+        std::fs::create_dir_all(&app_data).expect("app dir");
+        init_database(&db_path).expect("init");
+        seed_default_profiles(&db_path, &app_data).expect("profiles");
+        upsert_domain_entity(&db_path, "people", "Alice", r#"{"title":"Alice"}"#, "", &[])
+            .expect("alice");
+        upsert_domain_entity(
+            &db_path,
+            "travel",
+            "Paris trip",
+            r#"{"title":"Paris trip"}"#,
+            "",
+            &[],
+        )
+        .expect("paris");
+
+        link_entities_by_label(&db_path, "Alice", "plans", "Paris trip", "manual")
+            .expect("link");
+        let graph = get_topic_graph(&db_path, 20).expect("graph");
+        assert!(!graph.edges.is_empty());
+
+        unlink_entities_by_label(&db_path, "Alice", "plans", "Paris trip").expect("unlink");
+        let graph = get_topic_graph(&db_path, 20).expect("graph after");
+        assert!(graph.edges.is_empty());
+
+        let _ = std::fs::remove_file(db_path);
+        let _ = std::fs::remove_dir_all(app_data);
     }
 }

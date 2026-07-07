@@ -81,6 +81,19 @@
       const approvalsEl = document.getElementById("approvals");
       const refreshBtn = document.getElementById("refreshBtn");
 
+      const savedBaseUrl = localStorage.getItem("jarvis.approve.baseUrl");
+      const savedToken = localStorage.getItem("jarvis.approve.token");
+      if (savedBaseUrl) baseUrlInput.value = savedBaseUrl;
+      if (savedToken) tokenInput.value = savedToken;
+
+      function persistSettings() {
+        localStorage.setItem("jarvis.approve.baseUrl", baseUrlInput.value.trim());
+        localStorage.setItem("jarvis.approve.token", tokenInput.value.trim());
+      }
+
+      baseUrlInput.addEventListener("change", persistSettings);
+      tokenInput.addEventListener("change", persistSettings);
+
       function authHeaders() {
         const token = tokenInput.value.trim();
         const headers = { Accept: "application/json" };
@@ -156,6 +169,7 @@
       }
 
       async function refresh() {
+        persistSettings();
         await loadBrief();
         await loadApprovals();
       }

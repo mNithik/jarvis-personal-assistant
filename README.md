@@ -22,7 +22,7 @@ npm run tauri dev
 - **Free disk on PC:** `npm run clean:build` removes Rust `target/` (~11 GB). One-time: `npm run setup:lean-dev`.
 - **Releases:** push tag `v0.1.x` → GitHub Actions builds the Windows installer in the cloud.
 
-See [docs/ROADMAP.md](docs/ROADMAP.md) for post-v0.1 sprints.
+See [docs/ROADMAP.md](docs/ROADMAP.md) for post-v0.1 sprints. Migration notes: [docs/MIGRATION_WAVE17.md](docs/MIGRATION_WAVE17.md).
 
 ## Stack
 

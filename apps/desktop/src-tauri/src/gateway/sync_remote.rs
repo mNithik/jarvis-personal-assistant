@@ -138,6 +138,49 @@ pub fn connect_remote_account(
     Ok(account)
 }
 
+/// Register a new device against a hosted sync server and persist credentials locally.
+pub fn register_remote_device(
+    app_data_dir: &Path,
+    endpoint: String,
+    label: Option<String>,
+) -> Result<RemoteSyncAccount, String> {
+    let endpoint = endpoint.trim().trim_end_matches('/').to_string();
+    if endpoint.is_empty() {
+        return Err("Sync server endpoint is required.".to_string());
+    }
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let response = client
+        .post(format!("{endpoint}/v1/devices/register"))
+        .json(&serde_json::json!({ "label": label }))
+        .send()
+        .map_err(|error| format!("Device registration failed: {error}"))?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "Device registration returned HTTP {}",
+            response.status()
+        ));
+    }
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct RegisterResponse {
+        device_id: String,
+        device_token: String,
+    }
+    let body: RegisterResponse = response.json().map_err(|error| error.to_string())?;
+    let account = RemoteSyncAccount {
+        endpoint,
+        device_token: body.device_token,
+        device_id: body.device_id,
+        last_sync_at: None,
+        last_remote_version: None,
+    };
+    save_remote_account(app_data_dir, &account)?;
+    Ok(account)
+}
+
 fn decode_bundle(encoded: &str, passphrase: &str) -> Result<SyncBundle, String> {
     let decoded = String::from_utf8(
         STANDARD
@@ -629,6 +672,45 @@ mod tests {
         let conflicts = detect_sync_conflicts(&local, &remote);
         assert_eq!(conflicts.len(), 1);
         assert_eq!(conflicts[0].kind, SyncConflictKind::Goal);
+    }
+
+    #[test]
+    fn push_and_pull_against_mock_http_server() {
+        let mut server = mockito::Server::new();
+        let encoded = "dGVzdC1wYXNzcGhyYXNlOjp7fQ==";
+        let upload = server
+            .mock("POST", "/v1/sync/bundles")
+            .with_status(204)
+            .create();
+        let download = server
+            .mock("GET", "/v1/sync/bundles/latest")
+            .with_status(200)
+            .with_body(encoded)
+            .create();
+
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0);
+        let app_data_dir = std::env::temp_dir().join(format!("jarvis-remote-http-{nanos}"));
+        let _ = std::fs::remove_dir_all(&app_data_dir);
+        std::fs::create_dir_all(&app_data_dir).expect("dir");
+
+        connect_remote_account(
+            &app_data_dir,
+            server.url(),
+            "tok_integration".into(),
+        )
+        .expect("connect");
+        let account = load_remote_account(&app_data_dir).expect("account");
+        post_remote_bundle(&account, encoded).expect("post");
+
+        let fetched = fetch_remote_bundle(&account).expect("fetch");
+        assert_eq!(fetched.as_deref(), Some(encoded));
+        upload.assert();
+        download.assert();
+
+        let _ = std::fs::remove_dir_all(app_data_dir);
     }
 
     #[test]

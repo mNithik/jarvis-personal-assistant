@@ -68,5 +68,10 @@
   { "id": "F67", "capabilityId": "labs.council", "eval": null, "status": "golden", "note": "L3 council runtime vote-log promotion gate" },
   { "id": "F68", "capabilityId": "labs.anomaly", "eval": null, "status": "golden", "note": "L4 proactive anomaly dismiss/accept cohort gate" },
   { "id": "F69", "capabilityId": "labs.worldmodel", "eval": null, "status": "golden", "executionEval": "f_world_model_execution.json", "note": "L5 world model query graduation gate" },
-  { "id": "F70", "capabilityId": "labs.ambient", "eval": "f_ambient_copilot_routes.json", "status": "golden", "note": "L6 ambient copilot graduation gate (zero auto-writes, dismiss rate)" }
+  { "id": "F70", "capabilityId": "labs.ambient", "eval": "f_ambient_copilot_routes.json", "status": "golden", "note": "L6 ambient copilot graduation gate (zero auto-writes, dismiss rate)" },
+  { "id": "F71", "capabilityId": "platform.sync", "eval": null, "status": "golden", "note": "Wave 18 hosted sync server contract (services/jarvis-sync)" },
+  { "id": "F72", "capabilityId": "platform.marketplace", "eval": null, "status": "golden", "note": "Wave 18 remote marketplace catalog cache + refresh" },
+  { "id": "F73", "capabilityId": "memory.graph", "eval": null, "status": "golden", "note": "Wave 18 topic graph manual link/unlink (eval_topic_graph_manual_link_unlink)" },
+  { "id": "F74", "capabilityId": "platform.skill", "eval": null, "status": "golden", "note": "Wave 18 quoted script argv parsing in skills_executor" },
+  { "id": "F75", "capabilityId": "platform.operator", "eval": null, "status": "golden", "note": "Wave 18 operator panel + proactive metrics export" }
 ]

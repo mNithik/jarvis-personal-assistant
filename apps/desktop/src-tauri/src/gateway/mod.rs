@@ -28,6 +28,7 @@ pub mod skills;
 pub mod skills_executor;
 pub mod state;
 pub mod marketplace;
+pub mod metrics;
 pub mod sync;
 pub mod sync_remote;
 pub mod task_loop;
