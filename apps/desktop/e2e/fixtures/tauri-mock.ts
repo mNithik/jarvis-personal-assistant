@@ -385,6 +385,34 @@ export function buildInvokeHandlers(): Record<string, InvokeHandler> {
       acceptRate: 0.5,
     }),
     export_proactive_metrics_cmd: () => "Wrote proactive metrics to /tmp/metrics/proactive-summary.json",
+    prepare_skill_publish_cmd: (args) => ({
+      skillId: String(args?.skillId ?? "hello"),
+      version: "1.0.0",
+      packagePath: "/tmp/publish/hello",
+      catalogEntryJson: '{"id":"hello","label":"Hello skill"}',
+      instructions: "Open a PR to update marketplace/catalog.json.",
+    }),
+    create_build_handoff_artifact: (args) => ({
+      markdownPath: "/tmp/jarvis-handoffs/hello-publish.md",
+      jsonPath: "/tmp/jarvis-handoffs/hello-publish.json",
+      createdAt: String(args?.request?.createdAt ?? "2026-07-08T00:00:00Z"),
+      message: "JARVIS created a coding handoff package. Manual execution is the next boundary.",
+    }),
+    search_audit_log_cmd: () => [
+      {
+        lineIndex: 1,
+        timestamp: "2026-07-08T00:00:00Z",
+        policyClass: "write",
+        agent: "memory",
+        capabilityId: "memory.planner",
+        sessionId: "session-1",
+        turnId: 1,
+        outcome: "success",
+        detail: "Saved day plan to Notion.",
+        rollbackRef: null,
+        rawLine: "audit-line",
+      },
+    ],
     list_gateway_task_runs: () => [
       {
         id: "task-1",

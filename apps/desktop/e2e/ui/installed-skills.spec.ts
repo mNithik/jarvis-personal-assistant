@@ -1,8 +1,14 @@
 import { test, expect } from "@playwright/test";
 
+import { installTauriMock } from "../fixtures/tauri-mock";
+
 function installedSkillsList(page: import("@playwright/test").Page) {
   return page.getByTestId("installed-skills-list");
 }
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(installTauriMock);
+});
 
 test("installed skills list renders", async ({ page }) => {
   await page.goto("/");
@@ -40,4 +46,11 @@ test("installed skills refresh when active profile overrides a global skill", as
   await expect(installed.getByText("Hello skill")).toBeVisible();
   await expect(installed.getByText("[global]")).toBeVisible();
   await expect(installed.getByText("Personal Hello skill")).toHaveCount(0);
+});
+
+test("installs skill from mock marketplace catalog", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("harness-nav").getByRole("button", { name: "Skills" }).click();
+  await page.getByTestId("marketplace-install-hello").click();
+  await expect(page.getByText(/Installed marketplace skill "Hello skill"/)).toBeVisible();
 });

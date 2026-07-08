@@ -17,4 +17,10 @@ test("refreshes remote marketplace catalog", async ({ page }) => {
 test("operator panel shows proactive metrics", async ({ page }) => {
   await expect(page.getByTestId("operator-panel")).toBeVisible();
   await expect(page.getByTestId("operator-proactive-metrics")).toContainText("dismiss rate");
+  await expect(page.getByTestId("operator-audit-tail")).toBeVisible();
+});
+
+test("operator builder handoff for publish", async ({ page }) => {
+  await page.getByTestId("operator-builder-handoff").click();
+  await expect(page.getByText(/coding handoff package/i)).toBeVisible();
 });

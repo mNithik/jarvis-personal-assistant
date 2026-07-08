@@ -131,28 +131,6 @@ fn execute_http_skill(
     }
 }
 
-fn parse_script_argv(command: &str) -> Vec<String> {
-    let mut args = Vec::new();
-    let mut current = String::new();
-    let mut in_quotes = false;
-    for ch in command.trim().chars() {
-        match ch {
-            '"' => in_quotes = !in_quotes,
-            ' ' | '\t' if !in_quotes => {
-                if !current.is_empty() {
-                    args.push(current.clone());
-                    current.clear();
-                }
-            }
-            _ => current.push(ch),
-        }
-    }
-    if !current.is_empty() {
-        args.push(current);
-    }
-    args
-}
-
 fn execute_script_skill(
     label: &str,
     version: &str,
@@ -174,7 +152,7 @@ fn execute_script_skill(
             label, version
         ));
     }
-    let parts = parse_script_argv(command);
+    let parts = super::skills::parse_script_argv(command);
     if parts.is_empty() {
         return StepResult::failed(format!(
             "Installed skill \"{}\" v{} script handler is empty.",
@@ -342,7 +320,7 @@ mod tests {
 
     #[test]
     fn script_handler_supports_quoted_shell_args() {
-        let parts = parse_script_argv("sh -c \"echo skill-script\"");
+        let parts = crate::gateway::skills::parse_script_argv("sh -c \"echo skill-script\"");
         assert_eq!(parts, vec!["sh", "-c", "echo skill-script"]);
     }
 

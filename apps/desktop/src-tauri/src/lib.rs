@@ -3979,6 +3979,7 @@ pub fn run() {
             crate::commands::wave17::marketplace_operator_lane_cmd,
             crate::commands::wave17::get_proactive_metrics_cmd,
             crate::commands::wave17::export_proactive_metrics_cmd,
+            crate::commands::wave17::prepare_skill_publish_cmd,
             save_gateway_config,
             apply_gateway_easy_preset,
             list_trigger_events,

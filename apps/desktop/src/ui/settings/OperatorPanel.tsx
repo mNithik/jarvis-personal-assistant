@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
+  createBuildHandoffArtifact,
   exportProactiveMetrics,
   getProactiveMetrics,
   listGatewayTaskRuns,
   listMarketplaceCatalog,
   listProjectBundles,
+  prepareSkillPublish,
+  searchAuditLog,
+  type AuditEntry,
   type GatewayTaskRunSummary,
   type MarketplaceCatalogEntry,
   type ProactiveMetrics,
@@ -17,6 +21,7 @@ export default function OperatorPanel() {
   const [bundles, setBundles] = useState<ProjectBundleRecord[]>([]);
   const [catalog, setCatalog] = useState<MarketplaceCatalogEntry[]>([]);
   const [metrics, setMetrics] = useState<ProactiveMetrics | null>(null);
+  const [auditTail, setAuditTail] = useState<AuditEntry[]>([]);
   const [status, setStatus] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -25,6 +30,7 @@ export default function OperatorPanel() {
       setBundles(await listProjectBundles(5));
       setCatalog(await listMarketplaceCatalog());
       setMetrics(await getProactiveMetrics());
+      setAuditTail(await searchAuditLog({ limit: 6 }));
       setStatus(null);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -58,6 +64,62 @@ export default function OperatorPanel() {
         >
           Export proactive metrics
         </button>
+        <button
+          type="button"
+          className="ghost-button"
+          data-testid="operator-prepare-publish"
+          onClick={() => {
+            void (async () => {
+              try {
+                const hello = catalog.find((entry) => entry.id === "hello");
+                const skillId = hello?.id ?? catalog[0]?.id;
+                if (!skillId) {
+                  setStatus("Install a skill before preparing a publish package.");
+                  return;
+                }
+                const pkg = await prepareSkillPublish(skillId);
+                setStatus(`${pkg.instructions}\n\nCatalog entry:\n${pkg.catalogEntryJson}`);
+              } catch (error) {
+                setStatus(error instanceof Error ? error.message : String(error));
+              }
+            })();
+          }}
+        >
+          Prepare skill publish
+        </button>
+        <button
+          type="button"
+          className="ghost-button"
+          data-testid="operator-builder-handoff"
+          onClick={() => {
+            void (async () => {
+              try {
+                const hello = catalog.find((entry) => entry.id === "hello");
+                const skillId = hello?.id ?? catalog[0]?.id;
+                if (!skillId) {
+                  setStatus("Install a skill before creating a builder handoff.");
+                  return;
+                }
+                const pkg = await prepareSkillPublish(skillId);
+                const artifact = await createBuildHandoffArtifact({
+                  skillName: pkg.skillId,
+                  title: `Publish ${pkg.skillId} v${pkg.version}`,
+                  prompt: `${pkg.instructions}\n\nCatalog entry:\n${pkg.catalogEntryJson}`,
+                  safetyChecks: [
+                    "Review catalog JSON before opening a PR",
+                    "Run marketplace skill evals locally",
+                  ],
+                  createdAt: new Date().toISOString(),
+                });
+                setStatus(`${artifact.message}\n\n${artifact.markdownPath}`);
+              } catch (error) {
+                setStatus(error instanceof Error ? error.message : String(error));
+              }
+            })();
+          }}
+        >
+          Builder handoff for publish
+        </button>
       </div>
       {metrics ? (
         <p className="result-meta" data-testid="operator-proactive-metrics">
@@ -87,6 +149,18 @@ export default function OperatorPanel() {
             <li key={bundle.runId}>
               {bundle.command} — {bundle.steps.filter((step) => step.status === "done").length}/
               {bundle.steps.length} steps
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="section-kicker">Audit tail</p>
+      {auditTail.length === 0 ? (
+        <p className="result-meta">No recent audit entries.</p>
+      ) : (
+        <ul className="memory-list" data-testid="operator-audit-tail">
+          {auditTail.map((entry) => (
+            <li key={entry.lineIndex}>
+              {entry.policyClass} — {entry.detail}
             </li>
           ))}
         </ul>

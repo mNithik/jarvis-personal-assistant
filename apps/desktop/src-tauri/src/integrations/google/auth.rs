@@ -40,7 +40,20 @@ pub fn get_session_token_from_keyring(kind: &str) -> Result<String, String> {
     let entry = Entry::new(KEYRING_SERVICE_NAME, &account)
         .map_err(|error| format!("Failed to open Windows Credential Manager entry: {error}"))?;
     entry.get_password().map_err(|error| {
-        format!("Failed to read Google session token from Windows Credential Manager: {error}")
+        let kind_label = match kind.trim().to_lowercase().as_str() {
+            "calendar" => "Google Calendar",
+            "gmail" => "Gmail",
+            _ => "Google",
+        };
+        let error_text = error.to_string();
+        if error_text.contains("not found") || error_text.contains("No matching") {
+            return format!(
+                "{kind_label} is not connected yet. Open Settings → Integrations, paste a session token, or re-run the browser OAuth flow."
+            );
+        }
+        format!(
+            "{kind_label} session expired or could not be read ({error_text}). Re-connect in Settings → Integrations."
+        )
     })
 }
 

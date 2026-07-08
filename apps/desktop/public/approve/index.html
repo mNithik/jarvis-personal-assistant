@@ -169,6 +169,10 @@
       }
 
       async function refresh() {
+        if (!navigator.onLine) {
+          briefContent.textContent = "Offline — reconnect to Wi‑Fi and tap Refresh.";
+          return;
+        }
         persistSettings();
         await loadBrief();
         await loadApprovals();

@@ -502,6 +502,27 @@ mod tests {
                 }
             }
         }
+
+        use crate::gateway::metrics::{write_evals_summary, EvalsSummary};
+        let app_data = std::env::temp_dir().join(format!("jarvis-fabric-summary-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&app_data);
+        if std::env::var("JARVIS_EVALS_SUMMARY_PATH").is_err() {
+            std::env::set_var(
+                "JARVIS_EVALS_SUMMARY_PATH",
+                app_data.join("evals-summary.json"),
+            );
+        }
+        let path = write_evals_summary(
+            &app_data,
+            &EvalsSummary {
+                fabric_count: entries.len(),
+                gateway_eval_tests: entries.len(),
+                task_eval_pass_rate: Some(1.0),
+                timestamp: chrono::Utc::now().to_rfc3339(),
+            },
+        )
+        .expect("fabric harness should write evals summary");
+        assert!(path.exists());
     }
 
     #[test]
@@ -2374,7 +2395,7 @@ mod tests {
         let path = write_evals_summary(
             &app_data,
             &EvalsSummary {
-                fabric_count: 70,
+                fabric_count: 79,
                 gateway_eval_tests: 76,
                 task_eval_pass_rate: Some(1.0),
                 timestamp: "2026-07-07T00:00:00Z".to_string(),
@@ -2383,7 +2404,7 @@ mod tests {
         .expect("write summary");
         assert!(path.exists());
         let raw = std::fs::read_to_string(path).expect("read");
-        assert!(raw.contains("\"fabricCount\": 70"));
+        assert!(raw.contains("\"fabricCount\": 79"));
         std::env::remove_var("JARVIS_EVALS_SUMMARY_PATH");
         let _ = std::fs::remove_dir_all(app_data);
     }

@@ -1571,3 +1571,15 @@ export function getProactiveMetrics() {
 export function exportProactiveMetrics() {
   return invoke<string>("export_proactive_metrics_cmd");
 }
+
+export type SkillPublishPackage = {
+  skillId: string;
+  version: string;
+  packagePath: string;
+  catalogEntryJson: string;
+  instructions: string;
+};
+
+export function prepareSkillPublish(skillId: string) {
+  return invoke<SkillPublishPackage>("prepare_skill_publish_cmd", { skillId });
+}

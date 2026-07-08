@@ -105,8 +105,8 @@ export default function InstalledSkillsPanel() {
                       try {
                         const result = await installMarketplaceSkill(entry.id);
                         const lane = await marketplaceOperatorLane(entry.id);
-                        setStatus(`${result.message} ${lane}`);
                         await refresh();
+                        setStatus(`${result.message} ${lane}`);
                       } catch (error) {
                         setStatus(error instanceof Error ? error.message : String(error));
                       }

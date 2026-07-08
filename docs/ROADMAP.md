@@ -193,6 +193,16 @@ See [ARCHITECTURE_WAVE17.md](./ARCHITECTURE_WAVE17.md) for dependencies and sequ
 
 See [ARCHITECTURE_WAVE18.md](./ARCHITECTURE_WAVE18.md), [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md), [OPS_CHECKLIST.md](./OPS_CHECKLIST.md).
 
+### Wave 19 — Local-first production (in progress)
+
+- [x] T19-A: Local sync deploy (`docker-compose.yml`, `tools/start-jarvis-sync-local.ps1`)
+- [x] T19-B: Signed remote catalog HMAC + `JARVIS_MARKETPLACE_CATALOG_SECRET`
+- [x] T19-C: Shared `parse_script_argv` in validator + executor
+- [x] T19-D: Operator audit tail + `prepare_skill_publish_cmd`
+- [x] T19-E: Fabric harness auto-writes `evals-summary.json` (F76–F79)
+
+Cloud sync deploy: **deferred** (optional self-host). See [ARCHITECTURE_WAVE19.md](./ARCHITECTURE_WAVE19.md).
+
 ## Verify gate (every sprint)
 
 ```powershell

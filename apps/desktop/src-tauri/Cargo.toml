@@ -52,6 +52,9 @@ chrono = "0.4"
 wasmparser = "0.244"
 wasmtime = { version = "25", default-features = false, features = ["cranelift", "runtime"] }
 
+hmac = "0.12"
+sha2 = "0.10"
+
 [dev-dependencies]
 mockito = "1.6"
 

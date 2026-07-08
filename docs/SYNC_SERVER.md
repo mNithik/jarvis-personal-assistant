@@ -2,6 +2,8 @@
 
 Hosted encrypted bundle store for T17-D. Implements the client contract in [`sync_remote.rs`](../apps/desktop/src-tauri/src/gateway/sync_remote.rs).
 
+**Local-first:** JARVIS does not require cloud. Run sync on your PC or LAN; cloud is optional.
+
 ## API
 
 | Method | Path | Auth | Body |
@@ -14,40 +16,68 @@ Headers: `X-Jarvis-Sync-Version: 1`
 
 The server stores **opaque encrypted blobs** only. Passphrase never leaves the desktop client.
 
-## Run locally
+## Quick start (local, recommended)
+
+### Option A — PowerShell script
+
+```powershell
+# From repo root — cargo run on 0.0.0.0:8787
+powershell -File tools/start-jarvis-sync-local.ps1
+
+# Or Docker with persistent volume
+powershell -File tools/start-jarvis-sync-local.ps1 -Docker
+```
+
+### Option B — docker compose
 
 ```powershell
 cd services/jarvis-sync
-cargo run
-# listens on http://127.0.0.1:8787
+docker compose up --build -d
 ```
 
-Register a device:
+### Option C — cargo run
 
 ```powershell
-curl -X POST http://127.0.0.1:8787/v1/devices/register -H "Content-Type: application/json" -d "{}"
+cd services/jarvis-sync
+$env:JARVIS_SYNC_BIND = "0.0.0.0:8787"
+cargo run --release
 ```
 
-In JARVIS Sync panel: endpoint `http://127.0.0.1:8787` → **Register device** (or paste an existing `deviceToken`) → Connect → Push/Pull.
+## Desktop setup
 
-## Deploy
+1. Gateway → Sync panel
+2. Endpoint: `http://127.0.0.1:8787` (same PC) or `http://<your-pc-lan-ip>:8787` (second device on Wi‑Fi)
+3. **Register device** → **Push** → **Pull** on another profile/machine
 
-```powershell
-docker build -t jarvis-sync services/jarvis-sync
-docker run -p 8787:8787 -e JARVIS_SYNC_BIND=0.0.0.0:8787 jarvis-sync
-```
+## LAN smoke checklist
 
-Set `DATABASE_URL` for persistent SQLite (default: `jarvis-sync.db` in working directory).
+| Step | Pass |
+|------|------|
+| `curl http://127.0.0.1:8787/health` returns ok | [ ] |
+| Register device from Sync panel | [ ] |
+| Push bundle with passphrase | [ ] |
+| Pull on second profile; goals/memory restored | [ ] |
+
+## Cloud deploy (optional, deferred)
+
+Cloud is **not required**. When you need sync across networks without VPN:
+
+- Deploy container to fly.io or Railway with TLS reverse proxy
+- Mount persistent volume for `DATABASE_URL`
+- Point desktop at `https://sync.yourdomain.com`
+
+No managed JARVIS cloud is shipped with this repo — you self-host.
 
 ## Environment
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `JARVIS_SYNC_BIND` | `127.0.0.1:8787` | Listen address |
+| `JARVIS_SYNC_BIND` | `127.0.0.1:8787` | Listen address (`0.0.0.0:8787` for LAN) |
 | `DATABASE_URL` | `sqlite:jarvis-sync.db` | Device + bundle storage |
 
 ## Security
 
-- Use TLS in production (reverse proxy)
+- LAN-only deploy has no TLS — use only on trusted networks
+- Use TLS in production cloud deploy
 - Rotate device tokens by re-registering
 - Bundles are client-encrypted; server cannot read profile/memory content

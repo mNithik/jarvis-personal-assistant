@@ -73,5 +73,9 @@
   { "id": "F72", "capabilityId": "platform.marketplace", "eval": null, "status": "golden", "note": "Wave 18 remote marketplace catalog cache + refresh" },
   { "id": "F73", "capabilityId": "memory.graph", "eval": null, "status": "golden", "note": "Wave 18 topic graph manual link/unlink (eval_topic_graph_manual_link_unlink)" },
   { "id": "F74", "capabilityId": "platform.skill", "eval": null, "status": "golden", "note": "Wave 18 quoted script argv parsing in skills_executor" },
-  { "id": "F75", "capabilityId": "platform.operator", "eval": null, "status": "golden", "note": "Wave 18 operator panel + proactive metrics export" }
+  { "id": "F75", "capabilityId": "platform.operator", "eval": null, "status": "golden", "note": "Wave 18 operator panel + proactive metrics export" },
+  { "id": "F76", "capabilityId": "platform.marketplace", "eval": null, "status": "golden", "note": "Wave 19 signed remote catalog HMAC verification" },
+  { "id": "F77", "capabilityId": "platform.operator", "eval": null, "status": "golden", "note": "Wave 19 skill publish package workflow" },
+  { "id": "F78", "capabilityId": "platform.skill", "eval": null, "status": "golden", "note": "Wave 19 parse_script_argv shared validator + executor" },
+  { "id": "F79", "capabilityId": "platform.sync", "eval": null, "status": "golden", "note": "Wave 19 local docker-compose jarvis-sync deploy path" }
 ]

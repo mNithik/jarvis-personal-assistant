@@ -21,6 +21,8 @@ npm run tauri dev
 - **Discord** uses Gateway WebSocket ingress (not long-poll).
 - **Free disk on PC:** `npm run clean:build` removes Rust `target/` (~11 GB). One-time: `npm run setup:lean-dev`.
 - **Releases:** push tag `v0.1.x` → GitHub Actions builds the Windows installer in the cloud.
+- **Pre-push gate:** `npm run verify` (and optional `npm run verify:api` for mobile API smoke).
+- **Sync (optional, local-first):** encrypted Push/Pull via [`docs/SYNC_SERVER.md`](docs/SYNC_SERVER.md) — start with `tools/start-jarvis-sync-local.ps1`.
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for post-v0.1 sprints. Migration notes: [docs/MIGRATION_WAVE17.md](docs/MIGRATION_WAVE17.md).
 

@@ -297,6 +297,14 @@ pub fn replan_day(
     let urgent_emails = load_urgent_unread_emails(config);
     let revised_top_three = build_top_three(&tasks, today_date, Some(&urgent_emails));
     let mut suggested_actions = build_suggested_actions(&tasks, today_date, Some(&urgent_emails));
+    if config.is_some_and(|value| value.features.gmail)
+        && google::get_session_token("gmail").is_err()
+    {
+        suggested_actions.push(
+            "Gmail is enabled but not connected — connect in Settings → Integrations to rank urgent email."
+                .to_string(),
+        );
+    }
     suggested_actions.insert(
         0,
         "Calendar or tasks changed — review the revised Top 3.".to_string(),

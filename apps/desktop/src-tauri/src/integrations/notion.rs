@@ -434,7 +434,10 @@ pub fn resolve_credentials(db_path: &Path) -> Result<(String, String), String> {
         })?;
     let db_id = database_id
         .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| "Notion database ID is missing.".to_string())?;
+        .ok_or_else(|| {
+            "Notion database ID is missing. Set it in Settings → Integrations or JARVIS_NOTION_DATABASE_ID in .env."
+                .to_string()
+        })?;
     Ok((token, db_id))
 }
 

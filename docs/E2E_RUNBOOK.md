@@ -134,3 +134,14 @@ Requires fabric green + cohort judgment before flipping lab defaults. **Lab defa
 - tauri-driver: Windows CI launches a real WebDriver session and passes 4 desktop smoke checks in `scripts/e2e/run-desktop-smoke.mjs` (window title, command input, gateway preview update after routing a command, and gateway trace toggle)
 - HTTP smoke passes locally and the `e2e-api` CI job (`npm run e2e:api:service`) stays green
 - Manual matrix spot-checked for profiles, skills, ambient, sync, and lab graduation rows — use [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md)
+
+## Troubleshooting (OAuth and integrations)
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Planner: "Notion access token is missing" | No Notion token/DB | System drawer → Integrations → Notion token + database ID |
+| Meeting prep: no calendar events | Google Calendar not connected | Integrations → Connect Google Calendar |
+| Gmail triage fails | Gmail scope missing | Re-connect Google with Gmail enabled in gateway features |
+| Mobile PWA cannot load brief | Wrong LAN IP or token | Gateway → Channels: enable local WS + mobile approve; copy `localWsToken`; phone uses `http://<pc-ip>:18789/approve/` |
+| Hosted sync push fails | Sync server not running | `powershell -File tools/start-jarvis-sync-local.ps1 -Docker` |
+| Marketplace refresh fails | Network or bad signature | Check `JARVIS_MARKETPLACE_CATALOG_URL`; if `JARVIS_MARKETPLACE_CATALOG_SECRET` is set, catalog must include valid `mac` |

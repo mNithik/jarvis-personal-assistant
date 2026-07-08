@@ -27,9 +27,11 @@ npm run e2e:api
 | Topic graph panel loads nodes | [ ] |
 | Mobile approve PWA loads on LAN (`http://<pc-ip>:18789/approve/`) | [ ] |
 
-## Hosted sync (when server deployed)
+## Hosted sync (local-first)
 
-1. Deploy `services/jarvis-sync` per [SYNC_SERVER.md](./SYNC_SERVER.md).
-2. Sync panel → enter endpoint → **Register device** → Push → Pull on second profile/machine.
+1. On PC: `powershell -File tools/start-jarvis-sync-local.ps1 -Docker`
+2. Sync panel → `http://127.0.0.1:8787` → Register device → Push → Pull
+
+See [SYNC_SERVER.md](./SYNC_SERVER.md).
 
 Record results in [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md).

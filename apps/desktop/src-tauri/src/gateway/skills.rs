@@ -3,6 +3,28 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
+pub fn parse_script_argv(command: &str) -> Vec<String> {
+    let mut args = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+    for ch in command.trim().chars() {
+        match ch {
+            '"' => in_quotes = !in_quotes,
+            ' ' | '\t' if !in_quotes => {
+                if !current.is_empty() {
+                    args.push(current.clone());
+                    current.clear();
+                }
+            }
+            _ => current.push(ch),
+        }
+    }
+    if !current.is_empty() {
+        args.push(current);
+    }
+    args
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillManifest {
@@ -180,7 +202,7 @@ fn validate_script_handler(manifest: &SkillManifest, command: &str) -> Result<()
             manifest.label, manifest.version
         ));
     }
-    let parts = command.split_whitespace().collect::<Vec<_>>();
+    let parts = parse_script_argv(command);
     if parts.is_empty() {
         return Err(format!(
             "Installed skill \"{}\" v{} script handler is empty.",
@@ -763,5 +785,11 @@ mod tests {
         let error = validate_manifest_at_root(&manifest, &dir).expect_err("entrypoint should fail");
         assert!(error.contains("entrypoint"));
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn parse_script_argv_supports_quoted_shell_args() {
+        let parts = parse_script_argv("sh -c \"echo hello skill\"");
+        assert_eq!(parts, vec!["sh", "-c", "echo hello skill"]);
     }
 }

@@ -2,7 +2,7 @@ use tauri::State;
 
 use crate::gateway::marketplace::{
     install_marketplace_skill, list_marketplace_catalog_for_app, operator_lane_summary,
-    refresh_remote_catalog_cache,
+    prepare_skill_publish, refresh_remote_catalog_cache, SkillPublishPackage,
 };
 use crate::gateway::metrics::{proactive_metrics, write_proactive_metrics_snapshot, ProactiveMetrics};
 use crate::gateway::sync_remote::{
@@ -116,4 +116,12 @@ pub fn export_proactive_metrics_cmd(
 ) -> Result<String, String> {
     let path = write_proactive_metrics_snapshot(gateway_state.app_data_dir(), &state.db_path)?;
     Ok(format!("Wrote proactive metrics to {}", path.display()))
+}
+
+#[tauri::command]
+pub fn prepare_skill_publish_cmd(
+    gateway_state: State<'_, crate::gateway::state::GatewayState>,
+    skill_id: String,
+) -> Result<SkillPublishPackage, String> {
+    prepare_skill_publish(gateway_state.app_data_dir(), &skill_id)
 }

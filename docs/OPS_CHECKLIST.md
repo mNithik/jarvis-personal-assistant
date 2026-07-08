@@ -14,6 +14,8 @@ npm run verify:api
 
 CI runs: `rust-evals`, `jarvis-sync`, `playwright-ui`, `e2e-api`, `e2e-desktop`.
 
+Local sync smoke: `powershell -File tools/start-jarvis-sync-local.ps1 -Docker`
+
 ## Every release candidate
 
 1. Complete [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md) manual matrix

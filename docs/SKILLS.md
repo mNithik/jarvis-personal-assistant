@@ -28,6 +28,19 @@ npm --workspace @jarvis/skill-sdk run validate -- apps/desktop/tests/fixtures/sk
 
 The desktop **Installed skills** panel lists catalog entries from the bundled catalog and optional remote cache (`JARVIS_MARKETPLACE_CATALOG_URL`). Use **Refresh remote catalog** to update the cache. Click **Install** to copy a validated skill into `app_data/skills/`.
 
+### Signed remote catalogs (Wave 19)
+
+When `JARVIS_MARKETPLACE_CATALOG_SECRET` is set, remote catalogs must use:
+
+```json
+{
+  "entries": [ { "id": "hello", "...": "..." } ],
+  "mac": "<base64-hmac-sha256-of-entries-json>"
+}
+```
+
+Operator panel **Prepare skill publish** copies an installed skill to `app_data/publish/{id}` and emits catalog JSON for a PR.
+
 ## Authoring a new skill
 
 1. Create `app_data/skills/<id>/skill.json` using the Skill SDK schema.
