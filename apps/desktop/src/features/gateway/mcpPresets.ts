@@ -9,6 +9,7 @@ export type McpHostPreset = {
   readOnly: boolean;
   external: boolean;
   obsidianWizard?: boolean;
+  cliAlternative?: string | null;
 };
 
 export const MCP_HOST_PRESETS: McpHostPreset[] = [
@@ -21,6 +22,7 @@ export const MCP_HOST_PRESETS: McpHostPreset[] = [
     readOnly: false,
     external: true,
     obsidianWizard: true,
+    cliAlternative: null,
   },
   {
     id: "obsidian-graph",
@@ -31,6 +33,7 @@ export const MCP_HOST_PRESETS: McpHostPreset[] = [
     readOnly: false,
     external: true,
     obsidianWizard: true,
+    cliAlternative: null,
   },
   {
     id: "github",
@@ -40,6 +43,7 @@ export const MCP_HOST_PRESETS: McpHostPreset[] = [
     command: "npx -y @modelcontextprotocol/server-github",
     readOnly: true,
     external: true,
+    cliAlternative: "gh",
   },
   {
     id: "jira",
@@ -49,6 +53,7 @@ export const MCP_HOST_PRESETS: McpHostPreset[] = [
     command: "npx -y @aashari/mcp-server-jira",
     readOnly: true,
     external: true,
+    cliAlternative: null,
   },
   {
     id: "huggingface",
@@ -58,6 +63,7 @@ export const MCP_HOST_PRESETS: McpHostPreset[] = [
     command: "npx -y @huggingface/mcp-server",
     readOnly: true,
     external: true,
+    cliAlternative: null,
   },
   {
     id: "zapier",
@@ -67,6 +73,7 @@ export const MCP_HOST_PRESETS: McpHostPreset[] = [
     command: "npx -y @zapier/mcp-server",
     readOnly: false,
     external: true,
+    cliAlternative: null,
   },
 ];
 
@@ -84,4 +91,11 @@ export function presetToHostEntry(preset: McpHostPreset): McpHostEntry {
 
 export function findMcpPreset(id: string) {
   return MCP_HOST_PRESETS.find((preset) => preset.id === id);
+}
+
+export function recommendedMcpExecutionMode(preset: McpHostPreset) {
+  if (preset.cliAlternative) {
+    return `CLI preferred for deterministic local ops (${preset.cliAlternative}); use MCP for delegated OAuth scopes.`;
+  }
+  return "MCP recommended for service integration and governed tool boundaries.";
 }

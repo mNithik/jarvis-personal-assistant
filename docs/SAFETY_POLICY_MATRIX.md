@@ -44,6 +44,8 @@ Integration handoffs inherit class from capability metadata in fabric index.
 | Delete | Red confirm button | “This cannot be undone — confirm?” |
 | Execute | Show command string | Read command aloud before run |
 
+Mission control requirement: approval cards surface risk class + lane (`send`, `schedule`, `write`) with compact preview text before user confirms.
+
 ## Audit ledger format
 
 Append to `app_data/audit.log`:

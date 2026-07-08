@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { MCP_HOST_PRESETS, presetToHostEntry } from "../../features/gateway/mcpPresets";
+import {
+  MCP_HOST_PRESETS,
+  presetToHostEntry,
+  recommendedMcpExecutionMode,
+} from "../../features/gateway/mcpPresets";
 import {
   GatewayCapabilityRecord,
   GatewayConfig,
@@ -1007,6 +1011,7 @@ export default function GatewayConfigPanel() {
             <h4>{preset.label}</h4>
             <p className="memory-meta">{preset.description}</p>
             <span className="memory-meta">{preset.capabilityFamily}</span>
+            <p className="memory-meta">{recommendedMcpExecutionMode(preset)}</p>
             <div className="workflow-actions">
               <button
                 className="secondary-button"

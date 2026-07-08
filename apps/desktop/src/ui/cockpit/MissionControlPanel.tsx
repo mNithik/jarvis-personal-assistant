@@ -21,6 +21,28 @@ type MissionControlPanelProps = {
   onResumeTask?: () => void;
 };
 
+function classifyApproval(detail: string) {
+  const normalized = detail.toLowerCase();
+  if (normalized.includes("email") || normalized.includes("send")) {
+    return { lane: "send", previewLabel: "Message preview" };
+  }
+  if (normalized.includes("calendar") || normalized.includes("schedule")) {
+    return { lane: "schedule", previewLabel: "Calendar preview" };
+  }
+  if (normalized.includes("notion") || normalized.includes("write")) {
+    return { lane: "write", previewLabel: "Write preview" };
+  }
+  return { lane: "general", previewLabel: "Action preview" };
+}
+
+function summarizeApprovalPreview(detail: string) {
+  const compact = detail.replace(/\s+/g, " ").trim();
+  if (compact.length <= 160) {
+    return compact;
+  }
+  return `${compact.slice(0, 157)}...`;
+}
+
 function formatRunStatus(status: string) {
   return status.split("_").join(" ");
 }
@@ -148,8 +170,15 @@ export default function MissionControlPanel({
           {pendingApprovals.length > 0 ? (
             pendingApprovals.map((approval) => (
               <article className="gateway-followup-card confirm" key={approval.id}>
+                <p className="result-meta">
+                  Risk: {approval.risk} · lane: {classifyApproval(approval.detail).lane}
+                </p>
                 <p className="result-meta">{approval.title}</p>
                 <p>{approval.detail}</p>
+                <p className="memory-meta">
+                  {classifyApproval(approval.detail).previewLabel}:{" "}
+                  {summarizeApprovalPreview(approval.detail)}
+                </p>
                 <div className="gateway-approval-actions">
                   <button
                     className="primary-button"

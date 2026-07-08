@@ -63,5 +63,47 @@ fn register_upload_and_fetch_bundle() {
     assert_eq!(latest.status(), reqwest::StatusCode::OK);
     assert_eq!(latest.text().expect("body"), bundle);
 
+    let second_bundle = "encrypted-test-bundle-v2";
+    let upload2 = client
+        .post(format!("{base}/v1/sync/bundles"))
+        .header("Authorization", format!("Bearer {}", register.device_token))
+        .header("X-Jarvis-Device-Id", &register.device_id)
+        .header("X-Jarvis-Sync-Version", "2")
+        .body(second_bundle.to_string())
+        .send()
+        .expect("upload2");
+    assert_eq!(upload2.status(), reqwest::StatusCode::NO_CONTENT);
+
+    let history = client
+        .get(format!("{base}/v1/sync/bundles/history?limit=5"))
+        .header("Authorization", format!("Bearer {}", register.device_token))
+        .header("X-Jarvis-Device-Id", &register.device_id)
+        .send()
+        .expect("history");
+    assert_eq!(history.status(), reqwest::StatusCode::OK);
+    let history_json: serde_json::Value = history.json().expect("history json");
+    let len = history_json
+        .as_array()
+        .map(|items| items.len())
+        .unwrap_or_default();
+    assert!(len >= 2, "expected at least two version rows, got {history_json}");
+
+    let revoke = client
+        .post(format!("{base}/v1/sync/tokens/revoke"))
+        .header("Authorization", format!("Bearer {}", register.device_token))
+        .header("X-Jarvis-Device-Id", &register.device_id)
+        .json(&serde_json::json!({ "reason": "rotation-test" }))
+        .send()
+        .expect("revoke token");
+    assert_eq!(revoke.status(), reqwest::StatusCode::NO_CONTENT);
+
+    let rejected_after_revoke = client
+        .get(format!("{base}/v1/sync/bundles/latest"))
+        .header("Authorization", format!("Bearer {}", register.device_token))
+        .header("X-Jarvis-Device-Id", &register.device_id)
+        .send()
+        .expect("latest after revoke");
+    assert_eq!(rejected_after_revoke.status(), reqwest::StatusCode::UNAUTHORIZED);
+
     let _ = std::fs::remove_file(db_path);
 }

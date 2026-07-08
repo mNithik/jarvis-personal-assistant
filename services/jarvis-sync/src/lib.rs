@@ -32,6 +32,25 @@ pub struct RegisterResponse {
     pub device_token: String,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BundleVersionRecord {
+    pub version_id: i64,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BundleHistoryQuery {
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RevokeTokenRequest {
+    pub reason: Option<String>,
+}
+
 pub fn open_db_from_env() -> Connection {
     let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:jarvis-sync.db".to_string());
     open_db_at_path(url.strip_prefix("sqlite:").unwrap_or(&url))
@@ -51,6 +70,19 @@ pub fn open_db_at_path(path: &str) -> Connection {
             payload TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             FOREIGN KEY(device_id) REFERENCES devices(device_id)
+        );
+        CREATE TABLE IF NOT EXISTS bundle_versions (
+            version_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(device_id) REFERENCES devices(device_id)
+        );
+        CREATE TABLE IF NOT EXISTS revoked_tokens (
+            device_id TEXT PRIMARY KEY,
+            revoked_at TEXT NOT NULL,
+            reason TEXT,
+            FOREIGN KEY(device_id) REFERENCES devices(device_id)
         );",
     )
     .expect("migrate");
@@ -63,6 +95,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/v1/devices/register", post(register_device))
         .route("/v1/sync/bundles", post(upload_bundle))
         .route("/v1/sync/bundles/latest", get(latest_bundle))
+        .route("/v1/sync/bundles/history", get(bundle_history))
+        .route("/v1/sync/tokens/revoke", post(revoke_token))
         .layer(CorsLayer::permissive())
         .with_state(state)
 }
@@ -94,6 +128,16 @@ fn auth_device(state: &AppState, headers: &HeaderMap) -> Result<String, (StatusC
         .unwrap_or(false);
     if !valid {
         return Err((StatusCode::UNAUTHORIZED, "Invalid device credentials".into()));
+    }
+    let revoked: bool = conn
+        .query_row(
+            "SELECT 1 FROM revoked_tokens WHERE device_id = ?1",
+            params![device_id],
+            |_| Ok(true),
+        )
+        .unwrap_or(false);
+    if revoked {
+        return Err((StatusCode::UNAUTHORIZED, "Device token was revoked".into()));
     }
     Ok(device_id.to_string())
 }
@@ -147,6 +191,11 @@ async fn upload_bundle(
         params![device_id, payload, now],
     )
     .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    conn.execute(
+        "INSERT INTO bundle_versions (device_id, payload, updated_at) VALUES (?1, ?2, ?3)",
+        params![device_id, payload, now],
+    )
+    .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -172,6 +221,62 @@ async fn latest_bundle(
         Some(blob) => Ok((StatusCode::OK, blob)),
         None => Err((StatusCode::NOT_FOUND, "No bundle stored for device".into())),
     }
+}
+
+async fn bundle_history(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Query(query): axum::extract::Query<BundleHistoryQuery>,
+) -> Result<Json<Vec<BundleVersionRecord>>, (StatusCode, String)> {
+    let device_id = auth_device(&state, &headers)?;
+    let limit = query.limit.unwrap_or(10).clamp(1, 100);
+    let conn = state.db.lock().map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Database lock poisoned".into(),
+        )
+    })?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT version_id, updated_at FROM bundle_versions
+             WHERE device_id = ?1 ORDER BY version_id DESC LIMIT ?2",
+        )
+        .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    let rows = stmt
+        .query_map(params![device_id, limit as i64], |row| {
+            Ok(BundleVersionRecord {
+                version_id: row.get(0)?,
+                updated_at: row.get(1)?,
+            })
+        })
+        .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    let mut versions = Vec::new();
+    for row in rows {
+        versions.push(row.map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?);
+    }
+    Ok(Json(versions))
+}
+
+async fn revoke_token(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<RevokeTokenRequest>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let device_id = auth_device(&state, &headers)?;
+    let now = chrono::Utc::now().to_rfc3339();
+    let conn = state.db.lock().map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Database lock poisoned".into(),
+        )
+    })?;
+    conn.execute(
+        "INSERT INTO revoked_tokens (device_id, revoked_at, reason) VALUES (?1, ?2, ?3)
+         ON CONFLICT(device_id) DO UPDATE SET revoked_at = excluded.revoked_at, reason = excluded.reason",
+        params![device_id, now, body.reason],
+    )
+    .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn serve(addr: SocketAddr, state: AppState) {

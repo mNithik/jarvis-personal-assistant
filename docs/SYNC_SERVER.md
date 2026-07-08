@@ -11,6 +11,8 @@ Hosted encrypted bundle store for T17-D. Implements the client contract in [`syn
 | POST | `/v1/devices/register` | — | `{ "label": "optional" }` → `{ deviceId, deviceToken }` |
 | POST | `/v1/sync/bundles` | Bearer + `X-Jarvis-Device-Id` | Raw base64 bundle blob |
 | GET | `/v1/sync/bundles/latest` | Bearer + `X-Jarvis-Device-Id` | Returns blob or 404 |
+| GET | `/v1/sync/bundles/history?limit=10` | Bearer + `X-Jarvis-Device-Id` | Returns version metadata for recent uploads |
+| POST | `/v1/sync/tokens/revoke` | Bearer + `X-Jarvis-Device-Id` | `{ "reason": "optional" }` revokes current token |
 
 Headers: `X-Jarvis-Sync-Version: 1`
 
@@ -79,5 +81,6 @@ No managed JARVIS cloud is shipped with this repo — you self-host.
 
 - LAN-only deploy has no TLS — use only on trusted networks
 - Use TLS in production cloud deploy
-- Rotate device tokens by re-registering
+- Rotate device tokens by re-registering or calling `/v1/sync/tokens/revoke`
 - Bundles are client-encrypted; server cannot read profile/memory content
+- Server stores latest blob plus upload history metadata for reliability/audit trails

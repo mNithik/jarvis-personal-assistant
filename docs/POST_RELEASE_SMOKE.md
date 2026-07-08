@@ -27,6 +27,11 @@ npm run e2e:api
 | Topic graph panel loads nodes | [ ] |
 | Mobile approve PWA loads on LAN (`http://<pc-ip>:18789/approve/`) | [ ] |
 
+## Automated evidence (2026-07-08)
+
+- `npm run e2e:ui` passed (20/20 specs)
+- `cargo test` in `services/jarvis-sync` passed (including register/upload/fetch integration)
+
 ## Hosted sync (local-first)
 
 1. On PC: `powershell -File tools/start-jarvis-sync-local.ps1 -Docker`

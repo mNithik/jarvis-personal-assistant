@@ -30,7 +30,7 @@ Local sync smoke: `powershell -File tools/start-jarvis-sync-local.ps1 -Docker`
 | E2E_RUNBOOK | Playwright spec count, CI jobs |
 | README | Gateway default, migration link |
 | SKILLS.md | Marketplace remote refresh |
-| SYNC_SERVER.md | `services/jarvis-sync` API |
+| SYNC_SERVER.md | `services/jarvis-sync` API (`latest`, `history`, `revoke`) |
 
 ## Sync server ops
 

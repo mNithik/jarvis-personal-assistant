@@ -118,3 +118,10 @@ flowchart LR
 ```
 
 Implement: **T13-B → T13-F → T13-A → T13-D → T13-C → T13-E**.
+
+## MCP/CLI hybrid policy (quarter update)
+
+- Prefer **CLI-first** for deterministic local developer operations (for example GitHub via `gh`) when available.
+- Use **MCP-first** for OAuth-scoped SaaS integrations and governed multi-tenant operations.
+- Surface recommendation text in MCP host presets to guide operators before enabling a host.
+- Keep all mutating actions inside existing approval + audit flow regardless of CLI or MCP transport.

@@ -182,7 +182,7 @@ See [ARCHITECTURE_WAVE16.md](./ARCHITECTURE_WAVE16.md) and [E2E_RUNBOOK.md](./E2
 
 See [ARCHITECTURE_WAVE17.md](./ARCHITECTURE_WAVE17.md) for dependencies and sequencing.
 
-### Wave 18 — Platform hardening (in progress)
+### Wave 18 — Platform hardening (complete)
 
 - [x] T18-A: Jarvis sync server (`services/jarvis-sync`, [SYNC_SERVER.md](./SYNC_SERVER.md))
 - [x] T18-B: Remote marketplace catalog cache + refresh
@@ -193,7 +193,7 @@ See [ARCHITECTURE_WAVE17.md](./ARCHITECTURE_WAVE17.md) for dependencies and sequ
 
 See [ARCHITECTURE_WAVE18.md](./ARCHITECTURE_WAVE18.md), [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md), [OPS_CHECKLIST.md](./OPS_CHECKLIST.md).
 
-### Wave 19 — Local-first production (in progress)
+### Wave 19 — Local-first production (complete)
 
 - [x] T19-A: Local sync deploy (`docker-compose.yml`, `tools/start-jarvis-sync-local.ps1`)
 - [x] T19-B: Signed remote catalog HMAC + `JARVIS_MARKETPLACE_CATALOG_SECRET`
@@ -202,6 +202,16 @@ See [ARCHITECTURE_WAVE18.md](./ARCHITECTURE_WAVE18.md), [RELEASE_CHECKLIST.md](.
 - [x] T19-E: Fabric harness auto-writes `evals-summary.json` (F76–F79)
 
 Cloud sync deploy: **deferred** (optional self-host). See [ARCHITECTURE_WAVE19.md](./ARCHITECTURE_WAVE19.md).
+
+### Wave 20 — Quarter execution (active)
+
+- [x] Q3 branch topology created (`q3/*` local branches)
+- [x] Trust lane evidence refresh in release docs (Playwright + sync tests)
+- [x] Mission control approval cards now include risk/lane preview context
+- [x] Email copilot card expanded (setup guidance + additional quick actions)
+- [x] Sync server v2 reliability: bundle history endpoint + token revocation endpoint
+- [x] Labs graduation log updated with quarter checkpoints and queue ordering
+- [x] MCP/CLI hybrid guidance surfaced in host presets + balanced plan
 
 ## Verify gate (every sprint)
 

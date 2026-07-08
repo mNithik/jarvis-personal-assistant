@@ -5,7 +5,16 @@ export function buildEmailCopilotCard({
   runCommand,
 }: EmailSectionProps) {
   if (!gmailAccessToken) {
-    return null;
+    return (
+      <div className="result-card" key="email-copilot">
+        <p className="section-kicker">Email Copilot</p>
+        <h3>Connect Gmail to enable triage + drafts</h3>
+        <p className="result-meta">
+          Open Settings → Integrations and connect Gmail. Then this panel enables one-click triage,
+          drafting, and Notion capture.
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -36,6 +45,20 @@ export function buildEmailCopilotCard({
           onClick={() => void runCommand?.("save this email to notion")}
         >
           Save to Notion
+        </button>
+        <button
+          type="button"
+          className="ghost-button"
+          onClick={() => void runCommand?.("read my email")}
+        >
+          Read unread
+        </button>
+        <button
+          type="button"
+          className="ghost-button"
+          onClick={() => void runCommand?.("search email for follow up")}
+        >
+          Search follow-up
         </button>
       </div>
     </div>
