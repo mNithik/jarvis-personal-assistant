@@ -11,6 +11,22 @@ npm run verify:api
 cd services/jarvis-sync && cargo test
 ```
 
+## Live sign-off (rows 5, 7, 12)
+
+After setting credentials in `.env`:
+
+```powershell
+# If no Notion database is shared with the integration yet:
+powershell -File tools/_create-notion-db.ps1
+# Add printed database id to .env as JARVIS_NOTION_DATABASE_ID
+
+# Add JARVIS_SLACK_BOT_TOKEN for row 12 (see SLACK_SETUP.md)
+
+powershell -File tools/sign-live-matrix-rows.ps1 -UpdateChecklist
+```
+
+This runs live planner, audit rollback, and Slack flows via `jarvis-service` + `/turn`, then updates [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md).
+
 Golden harness (Linux CI / Windows workaround): `cargo test --lib -j 1 --no-default-features` in `apps/desktop/src-tauri`.
 
 ## Row-by-row manual steps

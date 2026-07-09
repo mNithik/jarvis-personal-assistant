@@ -217,9 +217,10 @@ Cloud sync deploy: **deferred** (optional self-host). See [ARCHITECTURE_WAVE19.m
 
 ### Wave 21 — Release closure (active)
 
-- [ ] Merge `feature/slack-v1` PR #1 to `main`
-- [ ] Sign RELEASE_CHECKLIST rows 5, 7, 12 (live OAuth + Slack)
-- [ ] Tag **v0.1.3** when 12/12 matrix signed
+- [x] Merge `feature/slack-v1` PR #1 to `main` (CI 5/5 green after routing fix)
+- [x] Q4 trust runner + live sign-off tooling (`tools/sign-live-matrix-rows.ps1`)
+- [ ] Sign RELEASE_CHECKLIST rows 5, 7, 12 — run `tools/sign-live-matrix-rows.ps1 -UpdateChecklist`
+- [ ] Tag **v0.1.3** when 12/12 matrix signed (`tools/prepare-v013-release.ps1`)
 - [ ] POST_RELEASE_SMOKE on clean Windows VM
 
 ## Verify gate (every sprint)
