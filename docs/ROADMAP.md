@@ -212,6 +212,7 @@ Cloud sync deploy: **deferred** (optional self-host). See [ARCHITECTURE_WAVE19.m
 - [x] Sync server v2 reliability: bundle history endpoint + token revocation endpoint
 - [x] Labs graduation log updated with quarter checkpoints and queue ordering
 - [x] MCP/CLI hybrid guidance surfaced in host presets + balanced plan
+- [x] Slack v1 integration: read summaries, draft/send approval flow, eval + UI coverage
 
 ## Verify gate (every sprint)
 

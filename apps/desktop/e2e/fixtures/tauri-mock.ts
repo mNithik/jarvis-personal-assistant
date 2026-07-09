@@ -75,6 +75,23 @@ type TriggerRecipeMock = {
 
 export function buildInvokeHandlers(): Record<string, InvokeHandler> {
   let config = defaultGatewayConfig();
+  let pendingApprovals: Array<{
+    id: string;
+    sessionId: string;
+    title: string;
+    detail: string;
+    risk: "read" | "write" | "destructive";
+    createdAt: string;
+  }> = [];
+  let gatewayTrace: Array<{
+    id: string;
+    sessionId: string;
+    turnId: number | null;
+    kind: string;
+    message: string;
+    createdAt: string;
+    approval: null;
+  }> = [];
   const recipes: TriggerRecipeMock[] = [];
   const profiles = [
     { id: "work", name: "Work", kind: "work", createdAt: "2026-01-01" },
@@ -235,6 +252,149 @@ export function buildInvokeHandlers(): Record<string, InvokeHandler> {
             routeLevel: "l0",
             resolvedProvider: null,
           },
+        },
+      };
+    },
+    gateway_run_turn: (args) => {
+      const request =
+        args?.request && typeof args.request === "object"
+          ? (args.request as { command?: unknown })
+          : undefined;
+      const command = String(request?.command ?? "");
+      const sendSlack = command.toLowerCase().startsWith("send this to slack ");
+      if (sendSlack) {
+        const approval = {
+          id: "approval-slack-1",
+          sessionId: "session-1",
+          title: "Confirm send action: Slack send",
+          detail: `JARVIS classified "${command}" as send policy for Slack send (integrations.slack_send).`,
+          risk: "write" as const,
+          createdAt: "2026-07-08T00:00:00Z",
+        };
+        pendingApprovals = [approval];
+        gatewayTrace = [
+          {
+            id: "trace-approval-1",
+            sessionId: "session-1",
+            turnId: 1,
+            kind: "approval_required",
+            message: "Slack send requires approval.",
+            createdAt: "2026-07-08T00:00:00Z",
+            approval: null,
+          },
+          ...gatewayTrace,
+        ];
+        return {
+          correlationId: "corr-1",
+          events: [],
+          result: {
+            sessionId: "session-1",
+            turnId: 1,
+            legacy: false,
+            reply: "Pending approval for Slack send.",
+            route: {
+              capabilityId: "integrations.slack_send",
+              capabilityLabel: "Slack send",
+              agent: "integrations",
+              tier: "worker",
+              sensitivity: "public",
+              score: 3,
+              confidence: "high",
+              decisionPolicy: "execute",
+              decisionReason: "Matched Slack send command",
+              reason: "test",
+              routeLevel: "l0",
+              resolvedProvider: null,
+            },
+            integrationHandoff: null,
+          },
+          approval,
+          awaitingApproval: true,
+          talkerReply: null,
+        };
+      }
+      gatewayTrace = [
+        {
+          id: `trace-${gatewayTrace.length + 1}`,
+          sessionId: "session-1",
+          turnId: 1,
+          kind: "tool_end",
+          message: `Executed ${command}`,
+          createdAt: "2026-07-08T00:00:00Z",
+          approval: null,
+        },
+        ...gatewayTrace,
+      ];
+      return {
+        correlationId: "corr-1",
+        events: [],
+        result: {
+          sessionId: "session-1",
+          turnId: 1,
+          legacy: false,
+          reply: `Executed ${command}`,
+          route: {
+            capabilityId: "integrations.slack_read",
+            capabilityLabel: "Slack",
+            agent: "integrations",
+            tier: "worker",
+            sensitivity: "public",
+            score: 3,
+            confidence: "high",
+            decisionPolicy: "execute",
+            decisionReason: "Matched Slack read command",
+            reason: "test",
+            routeLevel: "l0",
+            resolvedProvider: null,
+          },
+          integrationHandoff: null,
+        },
+        approval: null,
+        awaitingApproval: false,
+        talkerReply: null,
+      };
+    },
+    list_pending_gateway_approvals: () => pendingApprovals,
+    get_gateway_trace: () => gatewayTrace,
+    gateway_approve: (args) => {
+      const approvalId = String(args?.approvalId ?? "");
+      pendingApprovals = pendingApprovals.filter((item) => item.id !== approvalId);
+      gatewayTrace = [
+        {
+          id: `trace-approve-${gatewayTrace.length + 1}`,
+          sessionId: "session-1",
+          turnId: 1,
+          kind: "reply",
+          message: "Sent Slack draft to #general. Message timestamp: 1711111111.777.",
+          createdAt: "2026-07-08T00:00:00Z",
+          approval: null,
+        },
+        ...gatewayTrace,
+      ];
+      return {
+        approved: true,
+        approvalId,
+        correlationId: "corr-1",
+        message: "Sent Slack draft to #general. Message timestamp: 1711111111.777.",
+        event: gatewayTrace[0],
+      };
+    },
+    gateway_deny: (args) => {
+      const approvalId = String(args?.approvalId ?? "");
+      pendingApprovals = pendingApprovals.filter((item) => item.id !== approvalId);
+      return {
+        approved: false,
+        approvalId,
+        correlationId: "corr-1",
+        message: "Denied Slack send.",
+        event: {
+          id: "trace-deny-1",
+          sessionId: "session-1",
+          turnId: 1,
+          kind: "reply",
+          message: "Denied Slack send.",
+          createdAt: "2026-07-08T00:00:00Z",
+          approval: null,
         },
       };
     },

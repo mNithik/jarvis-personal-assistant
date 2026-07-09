@@ -154,6 +154,28 @@ fn capability_registry() -> &'static [CapabilityRoute] {
             reason: "Matched the Spotify capability registry.",
         },
         CapabilityRoute {
+            id: "integrations.slack_send",
+            label: "Slack Send",
+            agent: GatewayAgentKind::Integrations,
+            tier: GatewayModelTier::Worker,
+            keywords: &["send this to slack", "send to slack", "post to slack", "slack send"],
+            reason: "Matched the Slack send capability registry.",
+        },
+        CapabilityRoute {
+            id: "integrations.slack_read",
+            label: "Slack",
+            agent: GatewayAgentKind::Integrations,
+            tier: GatewayModelTier::Worker,
+            keywords: &[
+                "summarize slack channel",
+                "summarize slack thread",
+                "what changed in #",
+                "draft a slack update",
+                "slack action items",
+            ],
+            reason: "Matched the Slack read capability registry.",
+        },
+        CapabilityRoute {
             id: "integrations.ocr_notion",
             label: "OCR to Notion",
             agent: GatewayAgentKind::Integrations,

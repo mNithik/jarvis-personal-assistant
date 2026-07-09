@@ -188,6 +188,11 @@ mod tests {
     }
 
     #[test]
+    fn eval_golden_f_slack_copilot_routes() {
+        run_golden_file("f_slack_copilot_routes.json");
+    }
+
+    #[test]
     fn eval_golden_f_planner_copilot_routes() {
         run_golden_file("f_planner_copilot_routes.json");
     }
@@ -474,7 +479,8 @@ mod tests {
             match file.as_str() {
                 "f10_gmail_execution.json"
                 | "f12_calendar_execution.json"
-                | "f_email_copilot_execution.json" => {
+                | "f_email_copilot_execution.json"
+                | "f_slack_copilot_execution.json" => {
                     run_execution_file(&file);
                 }
                 "f_policy_execution.json" => {
@@ -688,10 +694,13 @@ mod tests {
             clear_all_session_emails, store_session_emails, GmailMessageRecord,
         };
         use crate::integrations::google::{auth, client};
+        use crate::integrations::slack;
 
         clear_all_session_emails();
         client::clear_mock_responses();
         auth::clear_test_tokens();
+        slack::clear_mock_responses();
+        std::env::remove_var("JARVIS_SLACK_BOT_TOKEN");
 
         match fixture {
             "missing_token" => {}
@@ -760,6 +769,25 @@ mod tests {
                         .to_string(),
                 )]));
             }
+            "slack_channel_summary" => {
+                std::env::set_var("JARVIS_SLACK_BOT_TOKEN", "token");
+                slack::set_mock_responses(HashMap::from([(
+                    "conversations.history".to_string(),
+                    r#"{"ok":true,"messages":[{"user":"u1","text":"Roadmap shipped","ts":"1711111111.001"}]}"#
+                        .to_string(),
+                )]));
+            }
+            "slack_draft_send" => {
+                std::env::set_var("JARVIS_SLACK_BOT_TOKEN", "token");
+                slack::save_session_draft(
+                    "eval-session",
+                    "Draft for #general:\n\nTeam update on roadmap:\n- shipped".to_string(),
+                );
+                slack::set_mock_responses(HashMap::from([(
+                    "chat.postMessage".to_string(),
+                    r#"{"ok":true,"channel":"general","ts":"1711111111.777"}"#.to_string(),
+                )]));
+            }
             other => panic!("unknown google execution fixture: {other}"),
         }
     }
@@ -773,6 +801,7 @@ mod tests {
             GatewayRoute, GatewaySensitivity, RouteLevel,
         };
         use crate::integrations::google::{auth, client};
+        use crate::integrations::slack;
 
         let path = eval_path(file_name);
         let raw = fs::read_to_string(&path)
@@ -838,6 +867,8 @@ mod tests {
 
             client::clear_mock_responses();
             auth::clear_test_tokens();
+            slack::clear_mock_responses();
+            std::env::remove_var("JARVIS_SLACK_BOT_TOKEN");
             clear_all_session_emails();
         }
     }
@@ -1730,6 +1761,11 @@ mod tests {
     #[test]
     fn eval_golden_f_email_copilot_execution() {
         run_execution_file("f_email_copilot_execution.json");
+    }
+
+    #[test]
+    fn eval_golden_f_slack_copilot_execution() {
+        run_execution_file("f_slack_copilot_execution.json");
     }
 
     #[test]

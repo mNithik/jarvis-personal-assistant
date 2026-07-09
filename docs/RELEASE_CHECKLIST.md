@@ -15,6 +15,7 @@ Sign off each row before tagging a release candidate. Automated signals are list
 | 9 | L1 bundle | `f_project_bundle_execution.json` | Enable `projectBundlePilot`; 4 steps + audit | eval | [ ] | | |
 | 10 | L2 verifier | `f_council_verifier_execution.json` | Enable `councilVerifier`; deny bad send | eval | [ ] | | |
 | 11 | L6 ambient | `eval_fabric_f64`, `ambient-copilot.spec.ts` | Consent session; read-only; profile scoped | CI | [x] | 2026-07-08 | Ambient copilot UI spec green |
+| 12 | Slack v1 | `f_slack_copilot_*`, `slack-copilot.spec.ts` | Summary read, approval-required send, approved send appears in audit | CI partial | [ ] | | Live workspace sign-off pending |
 
 **Auto column:** CI = Playwright/evals green on `main`; eval = golden harness only; manual rows still need human sign-off.
 

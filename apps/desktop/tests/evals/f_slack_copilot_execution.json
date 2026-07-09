@@ -1,0 +1,23 @@
+[
+  {
+    "command": "summarize slack channel #general",
+    "capabilityId": "integrations.slack_read",
+    "fixture": "slack_channel_summary",
+    "expectSuccess": true,
+    "expectReplyContains": "Recent updates in #general"
+  },
+  {
+    "command": "send this to slack #general",
+    "capabilityId": "integrations.slack_send",
+    "fixture": "slack_draft_send",
+    "expectSuccess": true,
+    "expectReplyContains": "Sent Slack draft"
+  },
+  {
+    "command": "summarize slack channel #general",
+    "capabilityId": "integrations.slack_read",
+    "fixture": "missing_token",
+    "expectSuccess": false,
+    "expectReplyContains": "Slack is not connected"
+  }
+]

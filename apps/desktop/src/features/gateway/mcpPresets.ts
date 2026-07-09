@@ -75,6 +75,16 @@ export const MCP_HOST_PRESETS: McpHostPreset[] = [
     external: true,
     cliAlternative: null,
   },
+  {
+    id: "slack",
+    label: "Slack MCP",
+    description: "Channel and thread operations. Keep send flows behind gateway approval.",
+    capabilityFamily: "integrations.slack_read",
+    command: "npx -y @modelcontextprotocol/server-slack",
+    readOnly: false,
+    external: true,
+    cliAlternative: null,
+  },
 ];
 
 export function presetToHostEntry(preset: McpHostPreset): McpHostEntry {

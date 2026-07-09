@@ -30,7 +30,7 @@ fn try_l2_route(command: &str, base_url: &str, model_name: &str) -> Option<Gatew
     let prompt = format!(
         "Classify this desktop assistant command into one capability id. \
 Return only JSON with keys capabilityId and reason. \
-Allowed capabilityId values: command.study, vision.ocr, integrations.spotify, integrations.notion, integrations.google, integrations.calendar, integrations.ocr_notion, integrations.email_notion, memory.life, builder.code, command.desktop, command.search, command.general. \
+Allowed capabilityId values: command.study, vision.ocr, integrations.spotify, integrations.notion, integrations.google, integrations.calendar, integrations.slack_read, integrations.slack_send, integrations.ocr_notion, integrations.email_notion, memory.life, builder.code, command.desktop, command.search, command.general. \
 Command: {normalized}"
     );
 
@@ -136,6 +136,22 @@ fn map_capability_id(id: &str) -> Option<CapabilityRoute> {
             tier: GatewayModelTier::Worker,
             keywords: &[],
             reason: "L2 classified Google Calendar.",
+        },
+        "integrations.slack_read" => CapabilityRoute {
+            id: "integrations.slack_read",
+            label: "Slack",
+            agent: GatewayAgentKind::Integrations,
+            tier: GatewayModelTier::Worker,
+            keywords: &[],
+            reason: "L2 classified Slack read.",
+        },
+        "integrations.slack_send" => CapabilityRoute {
+            id: "integrations.slack_send",
+            label: "Slack send",
+            agent: GatewayAgentKind::Integrations,
+            tier: GatewayModelTier::Worker,
+            keywords: &[],
+            reason: "L2 classified Slack send.",
         },
         "integrations.ocr_notion" => CapabilityRoute {
             id: "integrations.ocr_notion",

@@ -16,8 +16,8 @@ use crate::gateway::types::GatewayRoute;
 use crate::gateway::types::TurnRequest;
 use crate::integrations::{
     parse_calendar_command, parse_gmail_command, parse_notion_command, parse_ocr_notion_command,
-    parse_ocr_watch_command, parse_spotify_command, CalendarAction, GmailAction, NotionAction,
-    OcrNotionAction, OcrWatchAction, SpotifyAction,
+    parse_ocr_watch_command, parse_slack_command, parse_spotify_command, CalendarAction,
+    GmailAction, NotionAction, OcrNotionAction, OcrWatchAction, SlackAction, SpotifyAction,
 };
 use crate::providers::escalation::{EscalationContext, EscalationTracker};
 
@@ -478,6 +478,28 @@ pub fn plan_steps(command: &str, route: &GatewayRoute) -> Vec<TaskStep> {
                         "Create calendar event from current email",
                         "create_calendar_event_from_current_email",
                     ),
+                };
+                return vec![task_step("step-1", description, kind)];
+            }
+        }
+        if route.capability_id == "integrations.slack_read"
+            || route.capability_id == "integrations.slack_send"
+        {
+            if let Some(action) = parse_slack_command(command) {
+                let (description, kind) = match action {
+                    SlackAction::SummarizeChannel { .. } | SlackAction::WhatsChanged { .. } => {
+                        ("Summarize Slack channel", "slack_summarize_channel")
+                    }
+                    SlackAction::SummarizeThread { .. } => {
+                        ("Summarize Slack thread", "slack_summarize_thread")
+                    }
+                    SlackAction::DraftUpdate { .. } => {
+                        ("Draft Slack channel message", "slack_draft_message")
+                    }
+                    SlackAction::SendDraft { .. } => ("Send drafted Slack message", "slack_send_draft"),
+                    SlackAction::SaveActionItems => {
+                        ("Extract Slack action items", "slack_extract_action_items")
+                    }
                 };
                 return vec![task_step("step-1", description, kind)];
             }

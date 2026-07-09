@@ -242,6 +242,20 @@ export function isCalendarGatewayCommand(command: string) {
   );
 }
 
+export function isSlackGatewayCommand(command: string) {
+  const normalized = command.trim().toLowerCase();
+  return (
+    normalized.startsWith("summarize slack channel ") ||
+    normalized.startsWith("summarise slack channel ") ||
+    normalized.startsWith("summarize slack thread ") ||
+    normalized.startsWith("summarise slack thread ") ||
+    normalized.startsWith("draft a slack update for ") ||
+    normalized.startsWith("send this to slack ") ||
+    normalized === "save slack action items to planner" ||
+    (normalized.startsWith("what changed in #") && normalized.endsWith(" today"))
+  );
+}
+
 export function isOcrWatchGatewayCommand(command: string) {
   const normalized = command.trim().toLowerCase();
   if (
@@ -782,6 +796,9 @@ export function shouldDelegateToGateway(command: string, config: GatewayConfig) 
     return true;
   }
   if (isCalendarGatewayCommand(command) && config.features.calendar) {
+    return true;
+  }
+  if (isSlackGatewayCommand(command)) {
     return true;
   }
   if (isOcrNotionGatewayCommand(command) && config.features.ocrNotion) {
