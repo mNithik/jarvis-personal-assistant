@@ -585,6 +585,9 @@ fn score_capability(command: &str, capability: &CapabilityRoute) -> u32 {
     if capability.id == "supervisor.delegate" && command.contains(" then ") {
         return 10;
     }
+    if capability.id == "writer.draft" && command.contains("slack") {
+        return 0;
+    }
     capability
         .keywords
         .iter()
