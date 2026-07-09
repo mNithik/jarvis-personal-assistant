@@ -149,9 +149,13 @@ Requires fabric green + cohort judgment before flipping lab defaults. **Lab defa
 
 ## Slack v1 manual check
 
+Run after setting `JARVIS_SLACK_BOT_TOKEN` (see scope above).
+
 - [ ] `summarize slack channel #general` returns channel summary
 - [ ] `draft a slack update for #general about roadmap` stages a draft
 - [ ] `send this to slack #general` creates Mission Control approval card
 - [ ] Approve send and verify audit log row includes Slack send policy metadata
+
+**Automated pre-check (2026-07-09):** `slack-copilot.spec.ts` green in `npm run e2e:ui` (21/21). Live workspace sign-off = RELEASE_CHECKLIST row 12.
 
 See [SLACK_SETUP.md](./SLACK_SETUP.md) for scope and token details.

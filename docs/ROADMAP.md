@@ -203,9 +203,9 @@ See [ARCHITECTURE_WAVE18.md](./ARCHITECTURE_WAVE18.md), [RELEASE_CHECKLIST.md](.
 
 Cloud sync deploy: **deferred** (optional self-host). See [ARCHITECTURE_WAVE19.md](./ARCHITECTURE_WAVE19.md).
 
-### Wave 20 — Quarter execution (active)
+### Wave 20 — Quarter execution (complete)
 
-- [x] Q3 branch topology created (`q3/*` local branches)
+- [x] Q3 branch topology created (`q3/*` local branches; retired → `q4/*`)
 - [x] Trust lane evidence refresh in release docs (Playwright + sync tests)
 - [x] Mission control approval cards now include risk/lane preview context
 - [x] Email copilot card expanded (setup guidance + additional quick actions)
@@ -213,6 +213,14 @@ Cloud sync deploy: **deferred** (optional self-host). See [ARCHITECTURE_WAVE19.m
 - [x] Labs graduation log updated with quarter checkpoints and queue ordering
 - [x] MCP/CLI hybrid guidance surfaced in host presets + balanced plan
 - [x] Slack v1 integration: read summaries, draft/send approval flow, eval + UI coverage
+- [x] Q4 trust matrix runner (`tools/run-q4-trust-matrix.ps1`) + [Q4_TRUST_MATRIX_RUNBOOK.md](./Q4_TRUST_MATRIX_RUNBOOK.md)
+
+### Wave 21 — Release closure (active)
+
+- [ ] Merge `feature/slack-v1` PR #1 to `main`
+- [ ] Sign RELEASE_CHECKLIST rows 5, 7, 12 (live OAuth + Slack)
+- [ ] Tag **v0.1.3** when 12/12 matrix signed
+- [ ] POST_RELEASE_SMOKE on clean Windows VM
 
 ## Verify gate (every sprint)
 
