@@ -145,3 +145,17 @@ Requires fabric green + cohort judgment before flipping lab defaults. **Lab defa
 | Mobile PWA cannot load brief | Wrong LAN IP or token | Gateway → Channels: enable local WS + mobile approve; copy `localWsToken`; phone uses `http://<pc-ip>:18789/approve/` |
 | Hosted sync push fails | Sync server not running | `powershell -File tools/start-jarvis-sync-local.ps1 -Docker` |
 | Marketplace refresh fails | Network or bad signature | Check `JARVIS_MARKETPLACE_CATALOG_URL`; if `JARVIS_MARKETPLACE_CATALOG_SECRET` is set, catalog must include valid `mac` |
+| Slack summary/send fails | Slack token/scope missing | Set `JARVIS_SLACK_BOT_TOKEN` with `conversations:history`, `conversations:replies`, `chat:write` |
+
+## Slack v1 manual check
+
+Run after setting `JARVIS_SLACK_BOT_TOKEN` (see scope above).
+
+- [ ] `summarize slack channel #general` returns channel summary
+- [ ] `draft a slack update for #general about roadmap` stages a draft
+- [ ] `send this to slack #general` creates Mission Control approval card
+- [ ] Approve send and verify audit log row includes Slack send policy metadata
+
+**Automated pre-check (2026-07-09):** `slack-copilot.spec.ts` green in `npm run e2e:ui` (21/21). Live workspace sign-off = RELEASE_CHECKLIST row 12.
+
+See [SLACK_SETUP.md](./SLACK_SETUP.md) for scope and token details.

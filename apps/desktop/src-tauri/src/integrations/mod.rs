@@ -1,5 +1,6 @@
 pub mod google;
 pub mod notion;
+pub mod slack;
 
 use serde::{Deserialize, Serialize};
 
@@ -234,6 +235,90 @@ pub fn is_spotify_command(command: &str) -> bool {
 
 pub fn is_gmail_command(command: &str) -> bool {
     parse_gmail_command(command).is_some()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SlackAction {
+    SummarizeChannel { channel: String },
+    SummarizeThread { ref_id: String },
+    WhatsChanged { channel: String },
+    DraftUpdate { channel: String, topic: String },
+    SendDraft { channel: String },
+    SaveActionItems,
+}
+
+fn extract_channel_token(command: &str) -> Option<String> {
+    for token in command.split_whitespace() {
+        if token.starts_with('#') && token.len() > 1 {
+            return Some(token.to_string());
+        }
+    }
+    None
+}
+
+pub fn parse_slack_command(command: &str) -> Option<SlackAction> {
+    let trimmed = command.trim();
+    let normalized = trimmed.to_lowercase();
+
+    if normalized.starts_with("summarize slack channel ")
+        || normalized.starts_with("summarise slack channel ")
+    {
+        return extract_channel_token(trimmed)
+            .or_else(|| {
+                trimmed
+                    .split_whitespace()
+                    .last()
+                    .map(|value| value.to_string())
+            })
+            .map(|channel| SlackAction::SummarizeChannel { channel });
+    }
+
+    if normalized.starts_with("summarize slack thread ")
+        || normalized.starts_with("summarise slack thread ")
+    {
+        let ref_id = trimmed["summarize slack thread ".len()..].trim().to_string();
+        if !ref_id.is_empty() {
+            return Some(SlackAction::SummarizeThread { ref_id });
+        }
+    }
+
+    if normalized.starts_with("what changed in ") && normalized.contains(" today") {
+        if let Some(channel) = extract_channel_token(trimmed) {
+            return Some(SlackAction::WhatsChanged { channel });
+        }
+    }
+
+    if normalized.starts_with("draft a slack update for ") {
+        let rest = trimmed["draft a slack update for ".len()..].trim();
+        if let Some(channel) = extract_channel_token(rest) {
+            let topic = rest
+                .split_once(" about ")
+                .map(|(_, value)| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .unwrap_or_else(|| "team update".to_string());
+            return Some(SlackAction::DraftUpdate { channel, topic });
+        }
+    }
+
+    if normalized.starts_with("send this to slack ") {
+        if let Some(channel) = extract_channel_token(trimmed) {
+            return Some(SlackAction::SendDraft { channel });
+        }
+    }
+
+    if normalized == "save slack action items to planner" {
+        return Some(SlackAction::SaveActionItems);
+    }
+
+    None
+}
+
+pub fn is_slack_command(command: &str) -> bool {
+    parse_slack_command(command).is_some() || {
+        let normalized = command.trim().to_lowercase();
+        normalized.contains("slack")
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

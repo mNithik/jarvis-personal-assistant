@@ -9,7 +9,7 @@ use crate::agents::{
 use crate::builder::is_builder_command;
 use crate::integrations::{
     is_calendar_command, is_email_notion_command, is_gmail_command, is_notion_command,
-    is_ocr_notion_command, is_spotify_command,
+    is_ocr_notion_command, is_slack_command, is_spotify_command,
 };
 use crate::memory::is_memory_command;
 use crate::memory::knowledge_router::parse_vault_search_query;
@@ -161,6 +161,7 @@ fn command_guard_passes(guard: Option<&str>, command: &str) -> bool {
         Some("calendar") => is_calendar_command(command),
         Some("ocr_notion") => is_ocr_notion_command(command),
         Some("email_notion") => is_email_notion_command(command),
+        Some("slack") => is_slack_command(command),
         Some("memory") => is_memory_command(command),
         Some("builder") => is_builder_command(command),
         Some("supervisor") => parse_then_steps(command).is_some(),
@@ -203,6 +204,8 @@ mod tests {
             "integrations.spotify",
             "integrations.google",
             "integrations.calendar",
+            "integrations.slack_read",
+            "integrations.slack_send",
             "integrations.ocr_notion",
             "integrations.email_notion",
             "memory.life",

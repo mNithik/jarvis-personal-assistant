@@ -109,9 +109,10 @@ export default function GatewayConfigPanel() {
       <p className="section-kicker">Agent gateway</p>
       <p className="memory-meta">
         Enable the gateway to route study setup, screen reading, file search, and integrations
-        through the Ralph task loop. Notion runs in Rust; Spotify, Gmail, Calendar, and email→Notion
-        chains use a hybrid handoff (OAuth tokens stay in the browser). Set JARVIS_NOTION_TOKEN in
-        .env for local Notion keys. Defaults stay off for legacy App routing.
+        through the Ralph task loop. Notion runs in Rust; Spotify, Gmail, Calendar, email→Notion,
+        and Slack copilot flows use a hybrid handoff (OAuth tokens stay in the browser). Set
+        JARVIS_NOTION_TOKEN and JARVIS_SLACK_BOT_TOKEN in .env for local keys. Defaults stay off
+        for legacy App routing.
       </p>
       {error ? <span className="gateway-preview-reason warning">{error}</span> : null}
       <GatewayOnboardingBanner onApplied={(next) => setConfig(next)} />

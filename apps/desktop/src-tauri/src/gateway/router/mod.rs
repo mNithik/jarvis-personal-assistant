@@ -212,6 +212,27 @@ mod tests {
     }
 
     #[test]
+    fn routes_slack_summary_l0() {
+        let route = route_turn(&request("summarize slack channel #general"), &context());
+        assert_eq!(route.capability_id, "integrations.slack_read");
+    }
+
+    #[test]
+    fn routes_slack_draft_l0() {
+        let route = route_turn(
+            &request("draft a slack update for #general about roadmap"),
+            &context(),
+        );
+        assert_eq!(route.capability_id, "integrations.slack_read");
+    }
+
+    #[test]
+    fn routes_slack_send_l0() {
+        let route = route_turn(&request("send this to slack #general"), &context());
+        assert_eq!(route.capability_id, "integrations.slack_send");
+    }
+
+    #[test]
     fn routes_recent_files_to_file_capability_l0() {
         let route = route_turn(&request("show recent files"), &context());
 

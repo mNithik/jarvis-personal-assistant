@@ -91,6 +91,18 @@ capabilities:
     tier: local
     feature_flag: spotify
     command_guard: spotify
+  - id: integrations.slack_read
+    label: Slack read
+    agent: integrations
+    tier: local
+    always_enabled: true
+    command_guard: slack
+  - id: integrations.slack_send
+    label: Slack send
+    agent: integrations
+    tier: local
+    always_enabled: true
+    command_guard: slack
   - id: integrations.ocr_notion
     label: OCR to Notion
     agent: integrations

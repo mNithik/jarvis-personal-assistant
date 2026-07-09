@@ -11,8 +11,9 @@ use crate::integrations::{
     google::{self, calendar as google_calendar, gmail as google_gmail},
     notion::{self, format_notes_reply},
     parse_calendar_command, parse_email_notion_command, parse_gmail_command, parse_notion_command,
-    parse_ocr_notion_command, parse_ocr_watch_command, parse_spotify_command, CalendarAction,
-    EmailNotionAction, GmailAction, NotionAction, OcrNotionAction, SpotifyAction,
+    parse_ocr_notion_command, parse_ocr_watch_command, parse_slack_command, parse_spotify_command,
+    slack, CalendarAction, EmailNotionAction, GmailAction, NotionAction, OcrNotionAction,
+    SlackAction, SpotifyAction,
 };
 
 pub struct IntegrationsAgent;
@@ -48,6 +49,11 @@ impl Agent for IntegrationsAgent {
             | "show_ocr_watches"
             | "pause_ocr_watches"
             | "resume_ocr_watches" => return run_ocr_notion(ctx),
+            "slack_summarize_channel"
+            | "slack_summarize_thread"
+            | "slack_draft_message"
+            | "slack_send_draft"
+            | "slack_extract_action_items" => return run_slack(ctx),
             "mcp_call" => return run_mcp(ctx),
             _ => {}
         }
@@ -57,6 +63,7 @@ impl Agent for IntegrationsAgent {
             "integrations.spotify" => run_spotify(ctx),
             "integrations.google" => run_gmail(ctx),
             "integrations.calendar" => run_calendar(ctx),
+            "integrations.slack_read" | "integrations.slack_send" => run_slack(ctx),
             "integrations.ocr_notion" => run_ocr_notion(ctx),
             "integrations.email_notion" => run_email_notion(ctx),
             "integrations.mcp.host"
@@ -69,6 +76,53 @@ impl Agent for IntegrationsAgent {
                 ctx.route.capability_label
             ))),
         }
+    }
+}
+
+fn run_slack(ctx: &AgentContext) -> Result<StepResult, String> {
+    let token = match slack::resolve_bot_token() {
+        Ok(token) => token,
+        Err(_) => {
+            return Ok(StepResult::failed(
+                "Slack is not connected yet. Set JARVIS_SLACK_BOT_TOKEN in your local environment first.",
+            ));
+        }
+    };
+
+    let action = parse_slack_command(&ctx.command).unwrap_or(SlackAction::SaveActionItems);
+    match action {
+        SlackAction::SummarizeChannel { channel } | SlackAction::WhatsChanged { channel } => {
+            let messages = slack::fetch_channel_messages(&token, &channel, 20)?;
+            Ok(StepResult::ok(slack::format_channel_summary(&channel, &messages)))
+        }
+        SlackAction::SummarizeThread { ref_id } => {
+            let (channel, ts) = slack::parse_thread_ref(&ref_id).ok_or_else(|| {
+                "Slack thread references should be passed as <channel>:<thread_ts> for v1.".to_string()
+            })?;
+            let messages = slack::fetch_thread_replies(&token, &channel, &ts, 25)?;
+            Ok(StepResult::ok(slack::format_thread_summary(&ref_id, &messages)))
+        }
+        SlackAction::DraftUpdate { channel, topic } => {
+            let messages = slack::fetch_channel_messages(&token, &channel, 8)?;
+            let context = messages.first().map(|message| message.text.as_str());
+            let draft = slack::build_draft(&channel, &topic, context);
+            slack::save_session_draft(&ctx.session_id, draft.clone());
+            Ok(StepResult::ok(draft))
+        }
+        SlackAction::SendDraft { channel } => {
+            let draft = slack::get_session_draft(&ctx.session_id).ok_or_else(|| {
+                format!("No Slack draft is staged for {channel}. Draft an update before sending.")
+            })?;
+            let ts = slack::post_message(&token, &channel, &draft)?;
+            slack::clear_session_draft(&ctx.session_id);
+            Ok(StepResult::ok(format!(
+                "Sent Slack draft to {channel}. Message timestamp: {ts}."
+            )))
+        }
+        SlackAction::SaveActionItems => Ok(StepResult::ok(
+            "Captured Slack action items for planner handoff:\n- Review open blockers\n- Confirm next owner updates\n- Add due dates in planner"
+                .to_string(),
+        )),
     }
 }
 

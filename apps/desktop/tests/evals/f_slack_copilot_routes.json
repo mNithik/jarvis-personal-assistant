@@ -1,0 +1,7 @@
+[
+  { "phrase": "summarize slack channel #general", "capabilityId": "integrations.slack_read" },
+  { "phrase": "draft a slack update for #general about roadmap", "capabilityId": "integrations.slack_read" },
+  { "phrase": "send this to slack #general", "capabilityId": "integrations.slack_send" },
+  { "phrase": "save slack action items to planner", "capabilityId": "integrations.slack_read" },
+  { "phrase": "what changed in #general today", "capabilityId": "integrations.slack_read" }
+]

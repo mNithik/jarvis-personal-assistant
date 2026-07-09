@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Main window core capability","local":true,"windows":["main"],"permissions":["core:default"]}}
+{"default":{"identifier":"default","description":"Main window core capability","local":true,"windows":["main"],"permissions":["core:default"]},"embedded-terminal":{"identifier":"embedded-terminal","description":"PTY access for the Builder embedded terminal","local":true,"windows":["main"],"permissions":["pty:default"]}}

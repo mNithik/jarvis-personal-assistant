@@ -64,3 +64,49 @@ export function buildEmailCopilotCard({
     </div>
   );
 }
+
+export function buildSlackCopilotCard({ runCommand }: Pick<EmailSectionProps, "runCommand">) {
+  return (
+    <div className="result-card" key="slack-copilot">
+      <p className="section-kicker">Slack Copilot</p>
+      <h3>Summaries, drafts, and approvals</h3>
+      <p className="result-meta">
+        Read channels and threads automatically. Sends are approval-gated in Mission Control.
+      </p>
+      <p className="result-meta">
+        Setup: add `JARVIS_SLACK_BOT_TOKEN` (with conversations:history, conversations:replies,
+        chat:write).
+      </p>
+      <div className="inline-actions">
+        <button
+          type="button"
+          className="ghost-button"
+          onClick={() => void runCommand?.("summarize slack channel #general")}
+        >
+          Summarize #general
+        </button>
+        <button
+          type="button"
+          className="ghost-button"
+          onClick={() => void runCommand?.("summarize slack thread #general:1711111111.000100")}
+        >
+          Summarize thread
+        </button>
+        <button
+          type="button"
+          className="ghost-button"
+          onClick={() => void runCommand?.("draft a slack update for #general about roadmap")}
+        >
+          Draft update
+        </button>
+        <button
+          type="button"
+          className="ghost-button"
+          onClick={() => void runCommand?.("send this to slack #general")}
+        >
+          Send drafted
+        </button>
+      </div>
+    </div>
+  );
+}

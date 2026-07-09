@@ -27,7 +27,16 @@ npm run e2e:api
 | Topic graph panel loads nodes | [ ] |
 | Mobile approve PWA loads on LAN (`http://<pc-ip>:18789/approve/`) | [ ] |
 
-## Automated evidence (2026-07-08)
+## Automated evidence (2026-07-09)
+
+- `npm run e2e:ui` -> 21/21 passed (includes slack-copilot, ambient, sync, topic-graph)
+- `npm run e2e:api:service` -> strict HTTP smoke green
+- `tools/run-q4-trust-matrix.ps1` -> automated trust layer green
+
+## v0.1.3 gate
+
+Tag only after [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md) shows **12/12** signed. Current blocker: rows 5, 7, 12 (live OAuth / Slack).
+
 
 - `npm run e2e:ui` passed (20/20 specs)
 - `cargo test` in `services/jarvis-sync` passed (including register/upload/fetch integration)

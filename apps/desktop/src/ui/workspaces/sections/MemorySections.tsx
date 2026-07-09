@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import type { MemorySectionProps } from "./sectionTypes";
-import { buildEmailCopilotCard } from "./EmailSections";
+import { buildEmailCopilotCard, buildSlackCopilotCard } from "./EmailSections";
 import MemoryControlsPanel from "./MemoryControlsPanel";
 import { TopicGraphPanel } from "./TopicGraphPanel";
 
@@ -42,6 +42,7 @@ export function buildMemoryWorkspaceSections({
   return [
     <section className="grid-layout single-column" key="memory-main">
       {buildEmailCopilotCard({ gmailAccessToken, runCommand })}
+      {buildSlackCopilotCard({ runCommand })}
       {showMeetingCopilot ? (
         <div className="result-card">
           <p className="section-kicker">Meeting Copilot</p>

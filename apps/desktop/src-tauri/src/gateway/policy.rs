@@ -12,6 +12,9 @@ pub fn resolve_policy_class(capability_id: &str, agent: &GatewayAgentKind) -> Ga
     if id.starts_with("integrations.gmail") || id.starts_with("integrations.google") {
         return GatewayPolicyClass::Send;
     }
+    if id.starts_with("integrations.slack_send") {
+        return GatewayPolicyClass::Send;
+    }
     if id.starts_with("integrations.calendar") {
         return GatewayPolicyClass::Schedule;
     }
@@ -87,6 +90,14 @@ mod tests {
         );
         assert_eq!(
             resolve_policy_class("integrations.google", &GatewayAgentKind::Integrations),
+            GatewayPolicyClass::Send
+        );
+    }
+
+    #[test]
+    fn slack_send_maps_to_send() {
+        assert_eq!(
+            resolve_policy_class("integrations.slack_send", &GatewayAgentKind::Integrations),
             GatewayPolicyClass::Send
         );
     }
