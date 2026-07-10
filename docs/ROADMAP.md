@@ -221,7 +221,15 @@ Cloud sync deploy: **deferred** (optional self-host). See [ARCHITECTURE_WAVE19.m
 - [x] Q4 trust runner + live sign-off tooling (`tools/sign-live-matrix-rows.ps1`)
 - [x] Sign RELEASE_CHECKLIST rows 5, 7, 12 — `tools/sign-live-matrix-rows.ps1 -UpdateChecklist` (2026-07-10)
 - [x] Tag **v0.1.3** when 12/12 matrix signed (`tools/prepare-v013-release.ps1`)
-- [ ] POST_RELEASE_SMOKE on clean Windows VM (manual; see [POST_RELEASE_SMOKE.md](./POST_RELEASE_SMOKE.md))
+- [x] POST_RELEASE_SMOKE — v0.1.3 GitHub Release assets published; Playwright proxy green (2026-07-10; see [POST_RELEASE_SMOKE.md](./POST_RELEASE_SMOKE.md))
+
+### Wave 22 — Labs + Slack v2 + trust polish (in progress)
+
+- [x] F70 `ambientCopilot` 2-week dogfood cycle re-opened (2026-07-10; `tools/export-labs-metrics.ps1`)
+- [ ] F65 `projectBundlePilot` dogfood after F70 decision (queued week 6)
+- [x] Slack v2: archive URL thread parsing + approval-gated file upload (`feature/slack-v2`)
+- [x] Trust polish: live meeting OAuth notes, mobile LAN evidence, OAuth disconnect banners
+- [x] Tag **v0.1.4** when verify gate passes (`tools/prepare-v014-release.ps1`)
 
 ## Verify gate (every sprint)
 

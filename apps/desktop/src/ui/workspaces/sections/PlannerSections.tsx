@@ -120,7 +120,8 @@ function PlannerCopilotCardInner({
       </p>
       {!googleCalendarAccessToken ? (
         <p className="result-meta planner-calendar-banner">
-          Calendar is not connected — plans use Notion tasks and memory only.
+          Calendar is not connected — connect in Settings → Integrations. Plans still use Notion
+          tasks and memory.
         </p>
       ) : null}
       {dayPlan ? (

@@ -261,7 +261,11 @@ export function buildInvokeHandlers(): Record<string, InvokeHandler> {
           ? (args.request as { command?: unknown })
           : undefined;
       const command = String(request?.command ?? "");
-      const sendSlack = command.toLowerCase().startsWith("send this to slack ");
+      const normalized = command.toLowerCase();
+      const sendSlack =
+        normalized.startsWith("send this to slack ") ||
+        normalized.startsWith("upload file to slack ") ||
+        normalized.startsWith("send file to slack ");
       if (sendSlack) {
         const approval = {
           id: "approval-slack-1",

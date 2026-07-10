@@ -75,7 +75,10 @@ export function buildSlackCopilotCard({ runCommand }: Pick<EmailSectionProps, "r
       </p>
       <p className="result-meta">
         Setup: add `JARVIS_SLACK_BOT_TOKEN` (with conversations:history, conversations:replies,
-        chat:write).
+        chat:write, files:write).
+      </p>
+      <p className="result-meta">
+        Thread URLs like `https://workspace.slack.com/archives/C123/p...` are supported for summarize.
       </p>
       <div className="inline-actions">
         <button
@@ -88,9 +91,20 @@ export function buildSlackCopilotCard({ runCommand }: Pick<EmailSectionProps, "r
         <button
           type="button"
           className="ghost-button"
-          onClick={() => void runCommand?.("summarize slack thread #general:1711111111.000100")}
+          onClick={() =>
+            void runCommand?.(
+              "summarize slack thread https://workspace.slack.com/archives/C123/p1711111111000100",
+            )
+          }
         >
-          Summarize thread
+          Summarize URL thread
+        </button>
+        <button
+          type="button"
+          className="ghost-button"
+          onClick={() => void runCommand?.("upload file to slack #general from report.pdf")}
+        >
+          Upload file
         </button>
         <button
           type="button"

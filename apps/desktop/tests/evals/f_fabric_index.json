@@ -79,5 +79,7 @@
   { "id": "F78", "capabilityId": "platform.skill", "eval": null, "status": "golden", "note": "Wave 19 parse_script_argv shared validator + executor" },
   { "id": "F79", "capabilityId": "platform.sync", "eval": null, "status": "golden", "note": "Wave 19 local docker-compose jarvis-sync deploy path" },
   { "id": "F80", "capabilityId": "integrations.slack_read", "eval": "f_slack_copilot_routes.json", "status": "golden", "note": "Slack copilot read/draft routes" },
-  { "id": "F81", "capabilityId": "integrations.slack_send", "eval": "f_slack_copilot_routes.json", "status": "golden", "executionEval": "f_slack_copilot_execution.json", "note": "Slack send draft execution with mocked approvals" }
+  { "id": "F81", "capabilityId": "integrations.slack_send", "eval": "f_slack_copilot_routes.json", "status": "golden", "executionEval": "f_slack_copilot_execution.json", "note": "Slack send draft execution with mocked approvals" },
+  { "id": "F82", "capabilityId": "integrations.slack_read", "eval": "f_slack_v2_routes.json", "status": "golden", "executionEval": "f_slack_v2_execution.json", "note": "Slack v2 archive URL thread summarize" },
+  { "id": "F83", "capabilityId": "integrations.slack_send", "eval": "f_slack_v2_routes.json", "status": "golden", "executionEval": "f_slack_v2_execution.json", "note": "Slack v2 approval-gated file upload" }
 ]

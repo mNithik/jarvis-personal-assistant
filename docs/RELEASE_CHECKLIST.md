@@ -9,13 +9,14 @@ Sign off each row before tagging a release candidate. Automated signals are list
 | 3 | Sync bundle | `sync-panel.spec.ts`, sync round-trip unit test | Export â†’ import; verify goals, graph, memory | CI | [x] | 2026-07-08 | Sync panel Playwright suite green |
 | 4 | Triggers | `trigger-recipes.spec.ts` | Edit recipe â†’ save â†’ toggle enable â†’ service log | CI | [x] | 2026-07-09 | UI CRUD green; `e2e-api:service` boots jarvis-service |
 | 5 | Planner | `f_planner_copilot_*` | Morning brief, Notion save, replan | eval | [x] | 2026-07-10 | Live Notion session via tools/sign-live-matrix-rows.ps1 |
-| 6 | Meeting v2 | `f_meeting_copilot_v2_*`, `topic-graph.spec.ts` | Prep â†’ refresh â†’ graph neighbor | CI partial | [x] | 2026-07-09 | Topic graph Playwright green; live Google OAuth prep pending |
+| 6 | Meeting v2 | `f_meeting_copilot_v2_*`, `topic-graph.spec.ts` | Prep â†’ refresh â†’ graph neighbor | CI | [x] | 2026-07-10 | Topic graph Playwright green; Memory workspace connect banner when Google OAuth missing |
 | 7 | Audit | `eval_golden_f_audit_rollback_execution` | Search audit, rollback Notion/calendar | eval | [x] | 2026-07-10 | Live audit search + rollback via /turn |
-| 8 | Mobile PWA | `e2e-api` `/mobile/*` | Phone on LAN â†’ brief + approve/deny | CI partial | [x] | 2026-07-09 | `e2e-api:service` strict green; spot-check phone on LAN |
+| 8 | Mobile PWA | `e2e-api` `/mobile/*` | Phone on LAN â†’ brief + approve/deny | CI | [x] | 2026-07-10 | `e2e-api:service` strict green; POST_RELEASE_SMOKE mobile row via Playwright proxy |
 | 9 | L1 bundle | `f_project_bundle_execution.json` | Enable `projectBundlePilot`; 4 steps + audit | eval | [x] | 2026-07-09 | Golden harness pre-check; one-off flag-on per [LAB_GRADUATION_LOG.md](./LAB_GRADUATION_LOG.md) |
 | 10 | L2 verifier | `f_council_verifier_execution.json` | Enable `councilVerifier`; deny bad send | eval | [x] | 2026-07-09 | Golden harness pre-check; one-off flag-on per lab log |
 | 11 | L6 ambient | `eval_fabric_f64`, `ambient-copilot.spec.ts` | Consent session; read-only; profile scoped | CI | [x] | 2026-07-08 | Ambient copilot UI spec green |
 | 12 | Slack v1 | `f_slack_copilot_*`, `slack-copilot.spec.ts` | Summary read, approval-required send, approved send appears in audit | CI | [x] | 2026-07-10 | Live workspace summary + draft; approve send in Mission Control |
+| 13 | Slack v2 | `f_slack_v2_*`, `slack-v2.spec.ts` | Archive URL thread summarize; approval-gated file upload | CI | [x] | 2026-07-10 | F82/F83 evals + Playwright upload approval flow |
 
 **Auto column:** CI = Playwright/evals green on `main`; eval = golden harness only; manual rows still need human sign-off.
 
@@ -57,6 +58,10 @@ Cloud deploy: optional â€” see [SYNC_SERVER.md](./SYNC_SERVER.md) Â§ Clou
 ## v0.1.3 release gate
 
 **Ready** — all 12 rows signed. Tagged **v0.1.3** on 2026-07-10 after `tools/prepare-v013-release.ps1` verify gate.
+
+## v0.1.4 release gate
+
+**Ready** — row 13 (Slack v2) signed. Run `tools/prepare-v014-release.ps1` before tagging **v0.1.4**.
 
 
 

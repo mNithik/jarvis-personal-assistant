@@ -53,6 +53,7 @@ impl Agent for IntegrationsAgent {
             | "slack_summarize_thread"
             | "slack_draft_message"
             | "slack_send_draft"
+            | "slack_upload_file"
             | "slack_extract_action_items" => return run_slack(ctx),
             "mcp_call" => return run_mcp(ctx),
             _ => {}
@@ -97,7 +98,7 @@ fn run_slack(ctx: &AgentContext) -> Result<StepResult, String> {
         }
         SlackAction::SummarizeThread { ref_id } => {
             let (channel, ts) = slack::parse_thread_ref(&ref_id).ok_or_else(|| {
-                "Slack thread references should be passed as <channel>:<thread_ts> for v1.".to_string()
+                "Slack thread references should be passed as <channel>:<thread_ts> or a Slack archive URL.".to_string()
             })?;
             let messages = slack::fetch_thread_replies(&token, &channel, &ts, 25)?;
             Ok(StepResult::ok(slack::format_thread_summary(&ref_id, &messages)))
@@ -118,6 +119,10 @@ fn run_slack(ctx: &AgentContext) -> Result<StepResult, String> {
             Ok(StepResult::ok(format!(
                 "Sent Slack draft to {channel}. Message timestamp: {ts}."
             )))
+        }
+        SlackAction::UploadFile { channel, file_path } => {
+            let reply = slack::upload_file(&token, &channel, &file_path)?;
+            Ok(StepResult::ok(reply))
         }
         SlackAction::SaveActionItems => Ok(StepResult::ok(
             "Captured Slack action items for planner handoff:\n- Review open blockers\n- Confirm next owner updates\n- Add due dates in planner"

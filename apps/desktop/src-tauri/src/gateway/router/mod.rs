@@ -233,6 +233,24 @@ mod tests {
     }
 
     #[test]
+    fn routes_slack_upload_l0() {
+        let route = route_turn(
+            &request("upload file to slack #general from report.pdf"),
+            &context(),
+        );
+        assert_eq!(route.capability_id, "integrations.slack_send");
+    }
+
+    #[test]
+    fn routes_slack_thread_url_read_l0() {
+        let route = route_turn(
+            &request("summarize slack thread https://acme.slack.com/archives/C123/p1711111111000100"),
+            &context(),
+        );
+        assert_eq!(route.capability_id, "integrations.slack_read");
+    }
+
+    #[test]
     fn routes_recent_files_to_file_capability_l0() {
         let route = route_turn(&request("show recent files"), &context());
 

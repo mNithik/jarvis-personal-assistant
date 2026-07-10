@@ -11,22 +11,23 @@ Record evidence here before changing `GatewayLabsConfig::default()` for new inst
 | F67 | `councilRuntime` | council vote log evals | Vote log on ≥85% bundle replays | queued | 2026-07-08 | Awaiting F66 dogfood decision |
 | F68 | `proactiveAnomaly` | proactive routes + UI spec | dismiss &lt;40%; accept &gt;25% / 2 weeks | queued | 2026-07-08 | Awaiting F67 |
 | F69 | `worldModelQueries` | `f_world_model_execution.json` | ≥90% read-only queries; zero writes | queued | 2026-07-08 | Awaiting F68 |
-| F70 | `ambientCopilot` | F64 + ambient spec | dismiss &lt;40%; zero auto-writes / 2 weeks | **not ready** | 2026-07-09 | Automated pre-checks complete (21/21 Playwright, F64 fabric); 2-week dismiss cohort incomplete — default flip deferred |
+| F70 | `ambientCopilot` | F64 + ambient spec | dismiss &lt;40%; zero auto-writes / 2 weeks | **dogfood-active** | 2026-07-10 | Wave 22 cycle re-opened; weekly metrics via `tools/export-labs-metrics.ps1`; decision target week 4 |
 
-## F70 dogfood protocol — cycle closed (not ready for promotion)
+## F70 dogfood protocol — Wave 22 cycle (in progress)
 
-**Decision (2026-07-09):** Do **not** flip `GatewayLabsConfig::default()` for `ambientCopilot`.
+**Started (2026-07-10):** Re-opened 2-week `ambientCopilot` dogfood per Wave 22 plan.
 
-**Evidence:**
-- Playwright `ambient-copilot.spec.ts` green (read-only, consent, profile scoped)
-- Fabric F64 + F70 entries indexed; Linux CI `rust-evals` is source of truth for execution golden
-- 2-week dismiss-rate cohort not completed; proactive metrics export baseline only
+**Protocol:**
+1. Enable `labs.ambientCopilot` in Gateway → Labs
+2. Daily use with consent session; zero auto-writes
+3. Weekly: `powershell -File tools/export-labs-metrics.ps1`
+4. Week 4 decision: graduate or **not ready** with dismiss-rate evidence
 
-**Next:** Re-open dogfood when ready for another 2-week window; see quarter checkpoints below.
+**Prior cycle (2026-07-09):** **not ready** — dismiss cohort incomplete.
 
-## F65 dogfood protocol (scheduled)
+## F65 dogfood protocol (queued after F70)
 
-Start when F70 promotion is re-attempted or explicitly skipped for the quarter:
+Start after F70 graduation decision (target week 6):
 
 1. Enable `labs.projectBundlePilot` in Gateway → Labs
 2. Run a 4-step bundle; confirm audit refs under `app_data/bundles/`
@@ -37,7 +38,7 @@ Start when F70 promotion is re-attempted or explicitly skipped for the quarter:
 
 ## F66 harness pre-check (2026-07-09)
 
-**Harness pre-check:** `f_council_verifier_execution.json` indexed; RELEASE_CHECKLIST row 10 signed on fixture/harness basis. Full dogfood after F65 cycle.
+**Harness pre-check:** `f_council_verifier_execution.json` indexed; RELEASE_CHECKLIST row 10 signed on fixture/harness basis. Full dogfood queued after F65 cycle (target week 8).
 
 ## Quarter checkpoints (planned)
 

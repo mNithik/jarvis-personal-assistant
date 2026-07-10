@@ -1,0 +1,14 @@
+[
+  {
+    "phrase": "summarize slack thread https://acme.slack.com/archives/C12345/p1711111111000100",
+    "capabilityId": "integrations.slack_read"
+  },
+  {
+    "phrase": "upload file to slack #general from report.pdf",
+    "capabilityId": "integrations.slack_send"
+  },
+  {
+    "phrase": "send file to slack #general report.pdf",
+    "capabilityId": "integrations.slack_send"
+  }
+]
