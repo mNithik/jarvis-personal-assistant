@@ -35,7 +35,7 @@ npm run e2e:api
 
 ## v0.1.3 gate
 
-Tag only after [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md) shows **12/12** signed. Current blocker: rows 5, 7, 12 (live OAuth / Slack).
+Tagged **v0.1.3** on 2026-07-10 after [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md) reached **12/12** and `tools/prepare-v013-release.ps1` passed locally.
 
 
 - `npm run e2e:ui` passed (20/20 specs)
