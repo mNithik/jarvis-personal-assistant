@@ -12,6 +12,7 @@ use crate::integrations::{
     is_ocr_notion_command, is_slack_command, is_spotify_command,
 };
 use crate::memory::is_memory_command;
+use crate::memory::planner::{is_plan_command, is_replan_command, is_save_plan_command};
 use crate::memory::knowledge_router::parse_vault_search_query;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -162,7 +163,12 @@ fn command_guard_passes(guard: Option<&str>, command: &str) -> bool {
         Some("ocr_notion") => is_ocr_notion_command(command),
         Some("email_notion") => is_email_notion_command(command),
         Some("slack") => is_slack_command(command),
-        Some("memory") => is_memory_command(command),
+        Some("memory") => {
+            is_memory_command(command)
+                || is_plan_command(command)
+                || is_replan_command(command)
+                || is_save_plan_command(command)
+        }
         Some("builder") => is_builder_command(command),
         Some("supervisor") => parse_then_steps(command).is_some(),
         Some("automation") => is_automation_command(command),

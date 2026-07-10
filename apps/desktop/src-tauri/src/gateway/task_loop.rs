@@ -314,7 +314,7 @@ pub fn start_or_resume_turn(mut ctx: TaskLoopContext<'_>) -> Result<TaskLoopOutc
                     turn_id: ctx.turn_id,
                     outcome: AuditOutcome::Executed,
                     detail: &step_result.reply.chars().take(160).collect::<String>(),
-                    rollback_ref: None,
+                    rollback_ref: step_result.audit_rollback_ref.as_deref(),
                 },
             );
         }
@@ -566,7 +566,7 @@ pub fn plan_steps(command: &str, route: &GatewayRoute) -> Vec<TaskStep> {
         return vec![task_step("step-1", command, "mission_control")];
     }
 
-    if route.capability_id == "memory.life" {
+    if route.capability_id == "memory.life" || route.capability_id == "memory.planner" {
         return vec![task_step("step-1", command, "memory")];
     }
 
@@ -679,6 +679,7 @@ fn execute_step_with_recovery(
                 success: true,
                 integration_handoff: None,
                 failure_kind: None,
+                audit_rollback_ref: None,
             });
         }
     }

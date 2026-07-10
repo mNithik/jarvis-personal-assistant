@@ -35,10 +35,22 @@ impl Agent for MemoryAgent {
 
         if planner::is_save_plan_command(&ctx.command) {
             return match planner::save_day_plan_to_notion(&ctx.db_path) {
-                Ok(plan) => Ok(StepResult::ok(format!(
-                    "{knowledge_prefix}{}\n\nSaved to Notion.",
-                    planner::format_day_plan_reply(&plan)
-                ))),
+                Ok(plan) => {
+                    let rollback_ref = plan
+                        .notion_page_id
+                        .as_ref()
+                        .map(|page_id| format!(r#"{{"type":"notion","pageId":"{page_id}"}}"#));
+                    let reply = format!(
+                        "{knowledge_prefix}{}\n\nSaved to Notion.",
+                        planner::format_day_plan_reply(&plan)
+                    );
+                    Ok(match rollback_ref {
+                        Some(rollback_ref) => {
+                            StepResult::ok_with_audit_rollback(reply, rollback_ref)
+                        }
+                        None => StepResult::ok(reply),
+                    })
+                }
                 Err(error) => Ok(StepResult::failed(error)),
             };
         }

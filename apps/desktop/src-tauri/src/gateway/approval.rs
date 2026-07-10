@@ -22,6 +22,12 @@ impl ApprovalGate {
         turn_id: u64,
         command: &str,
     ) -> ApprovalOutcome {
+        if crate::gateway::audit::is_search_audit_command(command)
+            || crate::gateway::audit::is_rollback_notion_command(command)
+        {
+            return ApprovalOutcome::Allowed;
+        }
+
         let policy_class = route_policy_class(route);
         if requires_confirmation(policy_class) {
             return ApprovalOutcome::ApprovalRequired(build_request(

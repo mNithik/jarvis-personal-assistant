@@ -158,6 +158,17 @@ fn run_list_recent_files() -> Result<StepResult, String> {
 }
 
 fn run_mission_control(ctx: &AgentContext) -> Result<StepResult, String> {
+    if crate::gateway::audit::is_search_audit_command(&ctx.command)
+        || crate::gateway::audit::is_rollback_notion_command(&ctx.command)
+    {
+        let reply = crate::gateway::audit::handle_audit_command(
+            &ctx.app_data_dir,
+            &ctx.db_path,
+            &ctx.command,
+        )?;
+        return Ok(StepResult::ok(reply));
+    }
+
     if is_list_task_runs_command(&ctx.command) {
         let runs = list_recent_task_states(&ctx.db_path, 10)?;
         if runs.is_empty() {

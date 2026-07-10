@@ -255,6 +255,84 @@ pub fn rollback_audit_entry(
     Ok(summary)
 }
 
+pub fn is_search_audit_command(command: &str) -> bool {
+    let normalized = command.trim().to_lowercase();
+    normalized.starts_with("search audit")
+}
+
+pub fn is_rollback_notion_command(command: &str) -> bool {
+    let normalized = command.trim().to_lowercase();
+    normalized.contains("rollback") && normalized.contains("notion")
+}
+
+fn audit_search_query(command: &str) -> Option<String> {
+    let normalized = command.trim().to_lowercase();
+    if let Some(rest) = normalized.strip_prefix("search audit log for ") {
+        let query = rest.trim();
+        if !query.is_empty() {
+            return Some(query.to_string());
+        }
+    }
+    if let Some(rest) = normalized.strip_prefix("search audit log") {
+        let query = rest.trim().trim_start_matches("for ").trim();
+        if !query.is_empty() {
+            return Some(query.to_string());
+        }
+    }
+    None
+}
+
+pub fn handle_audit_command(
+    app_data_dir: &Path,
+    db_path: &Path,
+    command: &str,
+) -> Result<String, String> {
+    if is_search_audit_command(command) {
+        let results = search_audit_log(
+            app_data_dir,
+            audit_search_query(command).as_deref(),
+            None,
+            None,
+            10,
+        )?;
+        if results.is_empty() {
+            return Ok("No audit entries matched that search.".to_string());
+        }
+        let summary = results
+            .iter()
+            .enumerate()
+            .map(|(index, entry)| {
+                format!(
+                    "{}. [{}] {} — {} ({})",
+                    index + 1,
+                    entry.policy_class,
+                    entry.capability_id,
+                    entry.detail.chars().take(80).collect::<String>(),
+                    entry.outcome
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        return Ok(format!("Audit log matches:\n{summary}"));
+    }
+
+    if is_rollback_notion_command(command) {
+        let entries = search_audit_log(app_data_dir, None, None, None, 500)?;
+        let target = entries
+            .iter()
+            .rev()
+            .find(|entry| {
+                entry.rollback_ref.as_ref().is_some_and(|value| value.contains("notion"))
+            })
+            .ok_or_else(|| {
+                "No Notion write with rollback support found in the audit log.".to_string()
+            })?;
+        return rollback_audit_entry(app_data_dir, db_path, target.line_index);
+    }
+
+    Err("Unsupported audit command.".to_string())
+}
+
 fn sanitize_field(value: &str) -> String {
     value.replace('\n', " ").replace('\r', " ")
 }

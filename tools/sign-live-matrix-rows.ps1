@@ -24,14 +24,65 @@ function Load-DotEnv {
     }
 }
 
+function Parse-TurnResponse {
+    param([string]$Raw)
+    if (-not $Raw) { return $null }
+    if ($Raw -match '"error"\s*:\s*"((?:\\.|[^"\\])*)"') {
+        throw ($Matches[1] -replace '\\"', '"')
+    }
+    $tmp = [IO.Path]::GetTempFileName()
+    try {
+        $utf8 = New-Object System.Text.UTF8Encoding $false
+        [IO.File]::WriteAllText($tmp, $Raw, $utf8)
+        $reply = node -e "const fs=require('fs');const o=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));process.stdout.write((o.result&&o.result.reply)||'');" $tmp
+        $awaiting = ($Raw -match '"awaitingApproval"\s*:\s*true')
+        return [pscustomobject]@{
+            result = [pscustomobject]@{ reply = $reply }
+            awaitingApproval = $awaiting
+        }
+    } finally {
+        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Invoke-Turn {
     param([string]$Command, [string]$Token, [int]$Port = 18789)
-    $body = @{ command = $Command; channel = "live-matrix" } | ConvertTo-Json
-    $headers = @{
-        Authorization  = "Bearer $Token"
-        "Content-Type" = "application/json"
+    $bodyPath = Join-Path $env:TEMP "jarvis-turn-$([Guid]::NewGuid().ToString()).json"
+    $escaped = $Command -replace '\\', '\\\\' -replace '"', '\"'
+    Set-Content -LiteralPath $bodyPath -Value "{`"command`":`"$escaped`",`"channel`":`"live-matrix`"}" -Encoding ascii -NoNewline
+    try {
+        for ($attempt = 0; $attempt -lt 5; $attempt++) {
+            $raw = curl.exe -s -X POST "http://127.0.0.1:$Port/turn" `
+                -H "Authorization: Bearer $Token" `
+                -H "Content-Type: application/json" `
+                --data-binary "@$bodyPath"
+            if ($raw) {
+                Set-Content -LiteralPath (Join-Path $root ".tmp-live-matrix\last-turn.raw") -Value $raw -Encoding UTF8
+                return (Parse-TurnResponse $raw)
+            }
+            Start-Sleep -Milliseconds 750
+        }
+        throw "Empty /turn response after retries (last curl exit $LASTEXITCODE)"
+    } finally {
+        Remove-Item -LiteralPath $bodyPath -Force -ErrorAction SilentlyContinue
     }
-    return Invoke-RestMethod -Uri "http://127.0.0.1:$Port/turn" -Method Post -Headers $headers -Body $body
+}
+
+function Get-TurnReply {
+    param($Turn)
+    if ($Turn.result -and $Turn.result.reply) { return $Turn.result.reply }
+    if ($Turn.reply) { return $Turn.reply }
+    return ""
+}
+
+function Turn-Ok {
+    param($Turn, [string[]]$Patterns)
+    $reply = Get-TurnReply $Turn
+    if (-not $reply) { return $false }
+    foreach ($pattern in $Patterns) {
+        if ($reply -match $pattern) { return $true }
+    }
+    return $false
 }
 
 function Get-NotionDatabaseId {
@@ -53,12 +104,41 @@ function Get-NotionDatabaseId {
     throw "No Notion databases found. Run tools/_create-notion-db.ps1 or set JARVIS_NOTION_DATABASE_ID in .env."
 }
 
+function Stop-PortListener {
+    param([int]$Port = 18789)
+    Get-Process jarvis-service -ErrorAction SilentlyContinue |
+        ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
+    Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue |
+        ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
+    Start-Sleep -Milliseconds 500
+}
+
+function Stop-LiveService {
+    param($Proc)
+    if ($Proc) {
+        Start-Sleep -Seconds 2
+        Stop-Process -Id $Proc.Id -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 500
+    }
+}
+
 function Start-LiveService {
     param([string]$AppData, [string]$ServiceExe)
+    Stop-PortListener
     $gateway = @"
 {
   "enabled": true,
   "mode": "execute",
+  "features": {
+    "memory": true,
+    "notion": true,
+    "calendar": true,
+    "gmail": true
+  },
+  "proactive": {
+    "plannerCopilotEnabled": true,
+    "morningBriefEnabled": true
+  },
   "channels": {
     "localWsEnabled": true,
     "localWsPort": 18789,
@@ -70,11 +150,13 @@ function Start-LiveService {
     New-Item -ItemType Directory -Force -Path $AppData | Out-Null
     Set-Content -LiteralPath (Join-Path $AppData "gateway.json") -Value $gateway -Encoding utf8
 
-    $job = Start-Job -ScriptBlock {
-        param($exe, $dir)
-        $env:JARVIS_APP_DATA = $dir
-        & $exe --console 2>&1 | Out-Null
-    } -ArgumentList $ServiceExe, $AppData
+    $pinfo = New-Object System.Diagnostics.ProcessStartInfo
+    $pinfo.FileName = $ServiceExe
+    $pinfo.Arguments = "--console"
+    $pinfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+    $pinfo.UseShellExecute = $false
+    $pinfo.EnvironmentVariables["JARVIS_APP_DATA"] = $AppData
+    $proc = [System.Diagnostics.Process]::Start($pinfo)
 
     $ready = $false
     for ($i = 0; $i -lt 60; $i++) {
@@ -84,12 +166,17 @@ function Start-LiveService {
             if ($h.ok -eq $true) { $ready = $true; break }
         } catch { }
     }
-    if (-not $ready) { throw "jarvis-service did not become healthy" }
-    return $job
+    if (-not $ready) {
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+        throw "jarvis-service did not become healthy"
+    }
+    return $proc
 }
 
 function Seed-NotionConfig {
     param([string]$DbPath, [string]$Token, [string]$DatabaseId)
+    $escapedToken = $Token -replace "'", "''"
+    $escapedDb = $DatabaseId -replace "'", "''"
     $sql = @"
 CREATE TABLE IF NOT EXISTS notion_config (
     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -97,12 +184,20 @@ CREATE TABLE IF NOT EXISTS notion_config (
     database_id TEXT
 );
 INSERT INTO notion_config (id, access_token, database_id)
-VALUES (1, '$Token', '$DatabaseId')
+VALUES (1, '$escapedToken', '$escapedDb')
 ON CONFLICT(id) DO UPDATE SET
     access_token = excluded.access_token,
     database_id = excluded.database_id;
 "@
     $sql | sqlite3 $DbPath
+}
+
+function Seed-AppNotionConfig {
+    param([string]$Token, [string]$DatabaseId)
+    $appDb = Join-Path $env:APPDATA "com.nithi.jarvis\jarvis.db"
+    if (-not (Test-Path $appDb)) { return }
+    Seed-NotionConfig -DbPath $appDb -Token $Token -DatabaseId $DatabaseId
+    Write-Host "Seeded Notion config in app jarvis.db" -ForegroundColor DarkGray
 }
 
 Load-DotEnv (Join-Path $root ".env")
@@ -126,23 +221,43 @@ if (-not (Test-Path $serviceExe)) {
 $notionToken = $env:JARVIS_NOTION_TOKEN
 if (-not $notionToken) { throw "JARVIS_NOTION_TOKEN missing from .env" }
 
+$dbId = Get-NotionDatabaseId -Token $notionToken
+Seed-AppNotionConfig -Token $notionToken -DatabaseId $dbId
+
 Write-Host "=== Row 5: Planner (Notion live) ===" -ForegroundColor Cyan
 try {
-    $dbId = Get-NotionDatabaseId -Token $notionToken
     if (Test-Path $appData) { Remove-Item -Recurse -Force $appData }
     $job = Start-LiveService -AppData $appData -ServiceExe $serviceExe
-    Start-Sleep -Seconds 2
+    for ($i = 0; $i -lt 30; $i++) {
+        if (Test-Path $dbPath) { break }
+        Start-Sleep -Milliseconds 500
+    }
     Seed-NotionConfig -DbPath $dbPath -Token $notionToken -DatabaseId $dbId
+    Start-Sleep -Seconds 1
 
     $token = "live-matrix-token"
-    $brief = Invoke-Turn -Command "morning brief" -Token $token
+    $brief = Invoke-Turn -Command "plan my day" -Token $token
+    Start-Sleep -Seconds 1
     $save = Invoke-Turn -Command "save plan to notion" -Token $token
+    Start-Sleep -Seconds 1
     $replan = Invoke-Turn -Command "replan my day" -Token $token
 
-    $ok = ($brief.reply -match "priorit|brief|plan" -or $brief.success) -and
-          ($save.reply -match "notion|saved|plan" -or $save.success) -and
-          ($replan.reply -match "replan|plan" -or $replan.success)
+    $ok = (Turn-Ok $brief @('priorit', 'brief', 'plan', 'Top 3')) -and
+          (Turn-Ok $save @('notion', 'saved', 'plan', 'archived')) -and
+          (Turn-Ok $replan @('replan', 'plan', 'Top 3', 'priorit'))
     $results[5] = @{ Pass = $ok; Detail = "morning brief + save + replan via /turn" }
+    if (-not $ok) {
+        Write-Host "  brief: $(Get-TurnReply $brief)" -ForegroundColor DarkYellow
+        Write-Host "  save: $(Get-TurnReply $save)" -ForegroundColor DarkYellow
+        Write-Host "  replan: $(Get-TurnReply $replan)" -ForegroundColor DarkYellow
+        if (Test-Path (Join-Path $appData "last-turn.raw")) {
+            $rawDbg = (Get-Content (Join-Path $appData "last-turn.raw") -Raw)
+            if ($rawDbg) {
+                $len = [Math]::Min(200, $rawDbg.Length)
+                Write-Host "  raw: $($rawDbg.Substring(0, $len))" -ForegroundColor DarkGray
+            }
+        }
+    }
     Write-Host "Row 5: $(if ($ok) { 'PASS' } else { 'FAIL' })" -ForegroundColor $(if ($ok) { 'Green' } else { 'Red' })
 } catch {
     $results[5] = @{ Pass = $false; Detail = $_.Exception.Message }
@@ -155,9 +270,13 @@ try {
     if (-not $job) { throw "Planner session failed; cannot continue audit test" }
     $search = Invoke-Turn -Command "search audit log for planner" -Token "live-matrix-token"
     $rollback = Invoke-Turn -Command "rollback last notion write" -Token "live-matrix-token"
-    $ok = ($search.reply -match "audit" -or $search.success) -and
-          ($rollback.reply -match "archived|rollback|notion" -or $rollback.success)
+    $ok = (Turn-Ok $search @('audit', 'planner', 'notion')) -and
+          (Turn-Ok $rollback @('archived', 'rollback', 'notion', 'restored'))
     $results[7] = @{ Pass = $ok; Detail = "search audit + rollback last notion write" }
+    if (-not $ok) {
+        Write-Host "  search: $(Get-TurnReply $search)" -ForegroundColor DarkYellow
+        Write-Host "  rollback: $(Get-TurnReply $rollback)" -ForegroundColor DarkYellow
+    }
     Write-Host "Row 7: $(if ($ok) { 'PASS' } else { 'FAIL' })" -ForegroundColor $(if ($ok) { 'Green' } else { 'Red' })
 } catch {
     $results[7] = @{ Pass = $false; Detail = $_.Exception.Message }
@@ -165,8 +284,7 @@ try {
 }
 
 if ($job) {
-    Stop-Job $job -ErrorAction SilentlyContinue
-    Remove-Job $job -Force -ErrorAction SilentlyContinue
+    Stop-LiveService $job
 }
 
 Write-Host "`n=== Row 12: Slack live ===" -ForegroundColor Cyan
@@ -178,19 +296,47 @@ if (-not $slackToken) {
 } else {
     try {
         $auth = Invoke-RestMethod -Uri "https://slack.com/api/auth.test" -Method Post `
-            -Headers @{ Authorization = "Bearer $slackToken" } -ContentType "application/json"
+            -Headers @{ Authorization = "Bearer $slackToken" }
         if (-not $auth.ok) { throw "Slack auth.test failed: $($auth.error)" }
         $env:JARVIS_SLACK_BOT_TOKEN = $slackToken
         if (Test-Path $appData) { Remove-Item -Recurse -Force $appData }
         $job2 = Start-LiveService -AppData $appData -ServiceExe $serviceExe
-        Start-Sleep -Seconds 2
-        $summary = Invoke-Turn -Command "summarize slack channel #general" -Token "live-matrix-token"
-        $draft = Invoke-Turn -Command "draft a slack update for #general about roadmap" -Token "live-matrix-token"
-        $ok = ($summary.success -or $summary.reply) -and ($draft.success -or $draft.reply)
-        $results[12] = @{ Pass = $ok; Detail = "live Slack summary + draft (send requires Mission Control UI)" }
-        Write-Host "Row 12: $(if ($ok) { 'PASS (summary+draft)' } else { 'FAIL' })" -ForegroundColor $(if ($ok) { 'Green' } else { 'Red' })
-        Stop-Job $job2 -ErrorAction SilentlyContinue
-        Remove-Job $job2 -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 3
+        $apiToken = "live-matrix-token"
+        $summary = Invoke-Turn -Command "summarize slack channel #general" -Token $apiToken
+        $draft = Invoke-Turn -Command "draft a slack update for #general about roadmap" -Token $apiToken
+        $send = Invoke-Turn -Command "send this to slack #general" -Token $apiToken
+        $approved = $false
+        if ($send.awaitingApproval -or (Get-TurnReply $send) -match 'approval|Waiting') {
+            $approvals = Invoke-RestMethod -Uri "http://127.0.0.1:18789/mobile/approvals" -Headers @{ Authorization = "Bearer $apiToken" }
+            $approvalId = $null
+            if ($approvals.approvals -and $approvals.approvals.Count -gt 0) {
+                $approvalId = $approvals.approvals[0].id
+            } elseif ($approvals -is [array] -and $approvals.Count -gt 0) {
+                $approvalId = $approvals[0].id
+            }
+            if ($approvalId) {
+                Invoke-RestMethod -Uri "http://127.0.0.1:18789/mobile/approvals/$approvalId/approve" -Method Post -Headers @{ Authorization = "Bearer $apiToken" } | Out-Null
+                $approved = $true
+            }
+        } else {
+            $approved = (Get-TurnReply $send) -match 'sent|posted|slack'
+        }
+        $audit = Invoke-Turn -Command "search audit log for slack" -Token $apiToken
+        $ok = (Turn-Ok $summary @('slack', 'summary', 'channel', 'message', 'roadmap')) -and
+              (Turn-Ok $draft @('draft', 'slack', '#general', 'update')) -and
+              ($approved -or (Turn-Ok $send @('sent', 'posted', 'approval', 'slack'))) -and
+              (Turn-Ok $audit @('audit', 'slack'))
+        $results[12] = @{ Pass = $ok; Detail = "live Slack summary + draft + send/approve + audit" }
+        if (-not $ok) {
+            Write-Host "  summary: $(Get-TurnReply $summary)" -ForegroundColor DarkYellow
+            Write-Host "  draft: $(Get-TurnReply $draft)" -ForegroundColor DarkYellow
+            Write-Host "  send: $(Get-TurnReply $send)" -ForegroundColor DarkYellow
+            Write-Host "  audit: $(Get-TurnReply $audit)" -ForegroundColor DarkYellow
+            Write-Host "  approved: $approved" -ForegroundColor DarkYellow
+        }
+        Write-Host "Row 12: $(if ($ok) { 'PASS' } else { 'FAIL' })" -ForegroundColor $(if ($ok) { 'Green' } else { 'Red' })
+        Stop-LiveService $job2
     } catch {
         $results[12] = @{ Pass = $false; Detail = $_.Exception.Message }
         Write-Host "Row 12: FAIL - $($_.Exception.Message)" -ForegroundColor Red

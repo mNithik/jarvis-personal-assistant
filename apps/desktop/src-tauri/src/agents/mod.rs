@@ -40,6 +40,7 @@ pub struct StepResult {
     pub success: bool,
     pub integration_handoff: Option<IntegrationHandoff>,
     pub failure_kind: Option<crate::gateway::task_run::StepFailureKind>,
+    pub audit_rollback_ref: Option<String>,
 }
 
 impl StepResult {
@@ -50,6 +51,18 @@ impl StepResult {
             success: true,
             integration_handoff: None,
             failure_kind: None,
+            audit_rollback_ref: None,
+        }
+    }
+
+    pub fn ok_with_audit_rollback(reply: impl Into<String>, rollback_ref: impl Into<String>) -> Self {
+        Self {
+            reply: reply.into(),
+            done: true,
+            success: true,
+            integration_handoff: None,
+            failure_kind: None,
+            audit_rollback_ref: Some(rollback_ref.into()),
         }
     }
 
@@ -60,6 +73,7 @@ impl StepResult {
             success: false,
             integration_handoff: None,
             failure_kind: Some(crate::gateway::task_run::StepFailureKind::ToolError),
+            audit_rollback_ref: None,
         }
     }
 
@@ -79,6 +93,7 @@ impl StepResult {
                 payload,
             }),
             failure_kind: None,
+            audit_rollback_ref: None,
         }
     }
 }

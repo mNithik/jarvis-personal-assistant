@@ -113,7 +113,14 @@ fn spawn_listener(
                     return;
                 }
                 let request_text = String::from_utf8_lossy(&buffer[..read]).to_string();
-                let response = handle_http_request(&ctx, &request_text, token.as_deref());
+                let response = match tokio::task::spawn_blocking(move || {
+                    handle_http_request(&ctx, &request_text, token.as_deref())
+                })
+                .await
+                {
+                    Ok(response) => response,
+                    Err(_) => http_response(500, r#"{"error":"handler task failed"}"#),
+                };
                 let _ = stream.write_all(response.as_bytes()).await;
                 let _ = stream.flush().await;
                 touch_request_time();
