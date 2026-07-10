@@ -1,0 +1,22 @@
+[
+  {
+    "command": "summarize slack thread https://acme.slack.com/archives/C12345/p1711111111000100",
+    "capabilityId": "integrations.slack_read",
+    "fixture": "slack_v2_url_thread",
+    "expectSuccess": true,
+    "expectReplyContains": "Thread summary"
+  },
+  {
+    "command": "upload file to slack #general from report.pdf",
+    "capabilityId": "integrations.slack_send",
+    "fixture": "slack_v2_file_upload",
+    "expectSuccess": true,
+    "expectReplyContains": "Uploaded report.pdf"
+  {
+    "command": "upload file to slack #general from report.pdf",
+    "capabilityId": "integrations.slack_send",
+    "fixture": "missing_token",
+    "expectSuccess": false,
+    "expectReplyContains": "Slack is not connected"
+  }
+]

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
 use reqwest::blocking::Client;
@@ -164,6 +165,75 @@ pub fn post_message(token: &str, channel: &str, text: &str) -> Result<String, St
         .to_string())
 }
 
+pub fn upload_file(token: &str, channel: &str, file_path: &str) -> Result<String, String> {
+    let path = Path::new(file_path.trim().trim_matches('"'));
+    if !path.is_file() {
+        return Err(format!("Slack upload file not found: {}", path.display()));
+    }
+    let filename = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("upload.bin")
+        .to_string();
+    let bytes = std::fs::read(path).map_err(|error| format!("Could not read upload file: {error}"))?;
+    let preview = format_upload_preview(&filename, bytes.len());
+
+    let url = format!("{SLACK_API_BASE}/files.upload");
+    #[cfg(test)]
+    if let Some(body) = lookup_mock("POST", &url) {
+        let response: Value = serde_json::from_str(&body)
+            .map_err(|error| format!("Failed to parse mock Slack upload response: {error}"))?;
+        if !response.get("ok").and_then(|value| value.as_bool()).unwrap_or(false) {
+            return Err(normalize_slack_error(&response));
+        }
+        return Ok(format!(
+            "Uploaded {preview} to {channel}. File id: {}",
+            response
+                .get("file")
+                .and_then(|file| file.get("id"))
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown")
+        ));
+    }
+
+    let client = slack_client()?;
+    let form = reqwest::blocking::multipart::Form::new()
+        .text("channels", channel.trim_start_matches('#').to_string())
+        .text("filename", filename.clone())
+        .part(
+            "file",
+            reqwest::blocking::multipart::Part::bytes(bytes).file_name(filename),
+        );
+    let response = client
+        .post(&url)
+        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .multipart(form)
+        .send()
+        .map_err(|error| format!("Failed to reach Slack for file upload: {error}"))?;
+    let status = response.status();
+    let body = response.text().unwrap_or_default();
+    if !status.is_success() {
+        return Err(format!("Slack upload failed with {status}: {body}"));
+    }
+    let response: Value = serde_json::from_str(&body)
+        .map_err(|error| format!("Failed to parse Slack upload response: {error}"))?;
+    if !response.get("ok").and_then(|value| value.as_bool()).unwrap_or(false) {
+        return Err(normalize_slack_error(&response));
+    }
+    Ok(format!(
+        "Uploaded {preview} to {channel}. File id: {}",
+        response
+            .get("file")
+            .and_then(|file| file.get("id"))
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown")
+    ))
+}
+
+pub fn format_upload_preview(filename: &str, size_bytes: usize) -> String {
+    format!("{filename} ({size_bytes} bytes)")
+}
+
 fn map_messages(messages: Option<&Value>) -> Vec<SlackMessage> {
     messages
         .and_then(|value| value.as_array())
@@ -191,12 +261,49 @@ fn map_messages(messages: Option<&Value>) -> Vec<SlackMessage> {
         .unwrap_or_default()
 }
 
+fn slack_ts_from_message_id(message_id: &str) -> Option<String> {
+    let digits = message_id.trim_start_matches('p');
+    if digits.len() <= 6 {
+        return None;
+    }
+    let split_at = digits.len() - 6;
+    Some(format!("{}.{}", &digits[..split_at], &digits[split_at..]))
+}
+
+pub fn parse_slack_archive_url(input: &str) -> Option<(String, String)> {
+    let trimmed = input.trim();
+    if !trimmed.contains("slack.com/archives/") {
+        return None;
+    }
+    let after_archives = trimmed.split("/archives/").nth(1)?;
+    let channel = after_archives.split('/').next()?.trim().to_string();
+    if channel.is_empty() {
+        return None;
+    }
+
+    if let Some(query) = trimmed.split('?').nth(1) {
+        for pair in query.split('&') {
+            if let Some((key, value)) = pair.split_once('=') {
+                if key == "thread_ts" && !value.trim().is_empty() {
+                    return Some((channel, value.trim().to_string()));
+                }
+            }
+        }
+    }
+
+    let message_segment = after_archives.split('/').nth(1)?;
+    slack_ts_from_message_id(message_segment).map(|ts| (channel, ts))
+}
+
 pub fn parse_thread_ref(input: &str) -> Option<(String, String)> {
     let trimmed = input.trim();
+    if let Some(parsed) = parse_slack_archive_url(trimmed) {
+        return Some(parsed);
+    }
     if let Some((channel, ts)) = trimmed.split_once(':') {
         let channel = channel.trim().to_string();
         let ts = ts.trim().to_string();
-        if !channel.is_empty() && !ts.is_empty() {
+        if !channel.is_empty() && !ts.is_empty() && !channel.contains("slack.com") {
             return Some((channel, ts));
         }
     }
@@ -270,4 +377,48 @@ pub fn clear_mock_responses() {
     MOCK_RESPONSES.with(|cell| {
         *cell.borrow_mut() = None;
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_thread_ref_supports_channel_colon_ts() {
+        let parsed = parse_thread_ref("#general:1711111111.000100").expect("parsed");
+        assert_eq!(parsed.0, "#general");
+        assert_eq!(parsed.1, "1711111111.000100");
+    }
+
+    #[test]
+    fn parse_thread_ref_supports_archive_url() {
+        let url = "https://acme.slack.com/archives/C12345/p1711111111000100";
+        let parsed = parse_thread_ref(url).expect("parsed");
+        assert_eq!(parsed.0, "C12345");
+        assert_eq!(parsed.1, "1711111111.000100");
+    }
+
+    #[test]
+    fn parse_thread_ref_supports_thread_ts_query() {
+        let url = "https://acme.slack.com/archives/C12345/p1711111111000100?thread_ts=1711111111.000200&cid=C12345";
+        let parsed = parse_thread_ref(url).expect("parsed");
+        assert_eq!(parsed.0, "C12345");
+        assert_eq!(parsed.1, "1711111111.000200");
+    }
+
+    #[test]
+    fn upload_file_uses_mock_response() {
+        set_mock_responses(HashMap::from([(
+            "files.upload".to_string(),
+            r#"{"ok":true,"file":{"id":"F123"}}"#.to_string(),
+        )]));
+        std::env::set_var("JARVIS_SLACK_BOT_TOKEN", "token");
+        let temp = std::env::temp_dir().join("jarvis-slack-upload-test.txt");
+        std::fs::write(&temp, b"hello").expect("write temp file");
+        let reply = upload_file("token", "#general", temp.to_string_lossy().as_ref())
+            .expect("upload");
+        assert!(reply.contains("F123"));
+        clear_mock_responses();
+        let _ = std::fs::remove_file(temp);
+    }
 }

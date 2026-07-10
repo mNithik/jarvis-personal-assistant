@@ -193,6 +193,11 @@ mod tests {
     }
 
     #[test]
+    fn eval_golden_f_slack_v2_routes() {
+        run_golden_file("f_slack_v2_routes.json");
+    }
+
+    #[test]
     fn eval_golden_f_planner_copilot_routes() {
         run_golden_file("f_planner_copilot_routes.json");
     }
@@ -480,7 +485,8 @@ mod tests {
                 "f10_gmail_execution.json"
                 | "f12_calendar_execution.json"
                 | "f_email_copilot_execution.json"
-                | "f_slack_copilot_execution.json" => {
+                | "f_slack_copilot_execution.json"
+                | "f_slack_v2_execution.json" => {
                     run_execution_file(&file);
                 }
                 "f_policy_execution.json" => {
@@ -788,6 +794,22 @@ mod tests {
                     r#"{"ok":true,"channel":"general","ts":"1711111111.777"}"#.to_string(),
                 )]));
             }
+            "slack_v2_url_thread" => {
+                std::env::set_var("JARVIS_SLACK_BOT_TOKEN", "token");
+                slack::set_mock_responses(HashMap::from([(
+                    "conversations.replies".to_string(),
+                    r#"{"ok":true,"messages":[{"user":"u1","text":"URL thread reply","ts":"1711111111.000100"}]}"#
+                        .to_string(),
+                )]));
+            }
+            "slack_v2_file_upload" => {
+                std::env::set_var("JARVIS_SLACK_BOT_TOKEN", "token");
+                let _ = std::fs::write("report.pdf", b"hello report");
+                slack::set_mock_responses(HashMap::from([(
+                    "files.upload".to_string(),
+                    r#"{"ok":true,"file":{"id":"F999"}}"#.to_string(),
+                )]));
+            }
             other => panic!("unknown google execution fixture: {other}"),
         }
     }
@@ -869,6 +891,7 @@ mod tests {
             auth::clear_test_tokens();
             slack::clear_mock_responses();
             std::env::remove_var("JARVIS_SLACK_BOT_TOKEN");
+            let _ = std::fs::remove_file("report.pdf");
             clear_all_session_emails();
         }
     }
@@ -1766,6 +1789,11 @@ mod tests {
     #[test]
     fn eval_golden_f_slack_copilot_execution() {
         run_execution_file("f_slack_copilot_execution.json");
+    }
+
+    #[test]
+    fn eval_golden_f_slack_v2_execution() {
+        run_execution_file("f_slack_v2_execution.json");
     }
 
     #[test]

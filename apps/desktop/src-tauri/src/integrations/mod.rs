@@ -245,6 +245,7 @@ pub enum SlackAction {
     WhatsChanged { channel: String },
     DraftUpdate { channel: String, topic: String },
     SendDraft { channel: String },
+    UploadFile { channel: String, file_path: String },
     SaveActionItems,
 }
 
@@ -304,6 +305,30 @@ pub fn parse_slack_command(command: &str) -> Option<SlackAction> {
     if normalized.starts_with("send this to slack ") {
         if let Some(channel) = extract_channel_token(trimmed) {
             return Some(SlackAction::SendDraft { channel });
+        }
+    }
+
+    if normalized.starts_with("upload file to slack ") || normalized.starts_with("send file to slack ") {
+        let prefix = if normalized.starts_with("upload file to slack ") {
+            "upload file to slack "
+        } else {
+            "send file to slack "
+        };
+        let rest = trimmed[prefix.len()..].trim();
+        if let Some(channel) = extract_channel_token(rest) {
+            let file_path = rest
+                .split_once(" from ")
+                .map(|(_, path)| path.trim().to_string())
+                .or_else(|| {
+                    rest.split_whitespace()
+                        .skip_while(|token| token.starts_with('#'))
+                        .next()
+                        .map(|value| value.to_string())
+                })
+                .filter(|value| !value.is_empty());
+            if let Some(file_path) = file_path {
+                return Some(SlackAction::UploadFile { channel, file_path });
+            }
         }
     }
 

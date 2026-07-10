@@ -251,6 +251,8 @@ export function isSlackGatewayCommand(command: string) {
     normalized.startsWith("summarise slack thread ") ||
     normalized.startsWith("draft a slack update for ") ||
     normalized.startsWith("send this to slack ") ||
+    normalized.startsWith("upload file to slack ") ||
+    normalized.startsWith("send file to slack ") ||
     normalized === "save slack action items to planner" ||
     (normalized.startsWith("what changed in #") && normalized.endsWith(" today"))
   );

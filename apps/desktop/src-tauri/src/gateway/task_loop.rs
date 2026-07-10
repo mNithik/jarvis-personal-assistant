@@ -497,6 +497,7 @@ pub fn plan_steps(command: &str, route: &GatewayRoute) -> Vec<TaskStep> {
                         ("Draft Slack channel message", "slack_draft_message")
                     }
                     SlackAction::SendDraft { .. } => ("Send drafted Slack message", "slack_send_draft"),
+                    SlackAction::UploadFile { .. } => ("Upload file to Slack", "slack_upload_file"),
                     SlackAction::SaveActionItems => {
                         ("Extract Slack action items", "slack_extract_action_items")
                     }

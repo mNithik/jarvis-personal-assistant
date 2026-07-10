@@ -38,6 +38,7 @@ export function buildMemoryWorkspaceSections({
 }: MemorySectionProps): ReactNode[] {
   const prepCount = displayMeetingPrepMemory.length;
   const showMeetingCopilot = Boolean(googleCalendarAccessToken && nextMeetingEvent);
+  const showMeetingSetup = !googleCalendarAccessToken;
 
   return [
     <section className="grid-layout single-column" key="memory-main">
@@ -76,6 +77,24 @@ export function buildMemoryWorkspaceSections({
               onClick={() => void runCommand?.("Show meeting prep")}
             >
               Show prep
+            </button>
+          </div>
+        </div>
+      ) : showMeetingSetup ? (
+        <div className="result-card">
+          <p className="section-kicker">Meeting Copilot</p>
+          <h3>Connect Google Calendar</h3>
+          <p className="result-meta">
+            Google Calendar is not connected — connect in Settings → Integrations to prep for live
+            meetings and refresh topic graph neighbors.
+          </p>
+          <div className="inline-actions">
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => void runCommand?.("Prep me for my next meeting")}
+            >
+              Try prep anyway
             </button>
           </div>
         </div>

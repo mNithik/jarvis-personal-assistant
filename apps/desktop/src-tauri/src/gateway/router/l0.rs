@@ -162,7 +162,7 @@ fn capability_registry() -> &'static [CapabilityRoute] {
             label: "Slack Send",
             agent: GatewayAgentKind::Integrations,
             tier: GatewayModelTier::Worker,
-            keywords: &["send this to slack", "send to slack", "post to slack", "slack send"],
+            keywords: &["send this to slack", "send to slack", "post to slack", "slack send", "upload file to slack", "send file to slack"],
             reason: "Matched the Slack send capability registry.",
         },
         CapabilityRoute {
